@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Wadakatu\OpenApiContractTesting\Tests\Unit;
+namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Wadakatu\OpenApiContractTesting\OpenApiResponseValidator;
-use Wadakatu\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
 class OpenApiResponseValidatorTest extends TestCase
 {

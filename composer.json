@@ -1,5 +1,5 @@
 {
-    "name": "wadakatu/openapi-contract-testing",
+    "name": "studio-design/openapi-contract-testing",
     "description": "Framework-agnostic OpenAPI 3.0/3.1 contract testing for PHPUnit with endpoint coverage tracking",
     "keywords": ["openapi", "contract-testing", "phpunit", "api-testing", "coverage"],
     "license": "MIT",
@@ -19,12 +19,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Wadakatu\\OpenApiContractTesting\\": "src/"
+            "Studio\\OpenApiContractTesting\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Wadakatu\\OpenApiContractTesting\\Tests\\": "tests/"
+            "Studio\\OpenApiContractTesting\\Tests\\": "tests/"
         }
     },
     "config": {

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Wadakatu\OpenApiContractTesting\Tests\Unit;
+namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Wadakatu\OpenApiContractTesting\OpenApiSchemaConverter;
-use Wadakatu\OpenApiContractTesting\OpenApiVersion;
+use Studio\OpenApiContractTesting\OpenApiSchemaConverter;
+use Studio\OpenApiContractTesting\OpenApiVersion;
 
 class OpenApiSchemaConverterTest extends TestCase
 {

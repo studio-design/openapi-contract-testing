@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Wadakatu\OpenApiContractTesting\PHPUnit;
+namespace Studio\OpenApiContractTesting\PHPUnit;
 
 use function count;
 use function implode;

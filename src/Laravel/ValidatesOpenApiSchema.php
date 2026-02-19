@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Wadakatu\OpenApiContractTesting\Laravel;
+namespace Studio\OpenApiContractTesting\Laravel;
 
 use Illuminate\Testing\TestResponse;
-use Wadakatu\OpenApiContractTesting\HttpMethod;
-use Wadakatu\OpenApiContractTesting\OpenApiCoverageTracker;
-use Wadakatu\OpenApiContractTesting\OpenApiResponseValidator;
+use Studio\OpenApiContractTesting\HttpMethod;
+use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 
 trait ValidatesOpenApiSchema
 {
