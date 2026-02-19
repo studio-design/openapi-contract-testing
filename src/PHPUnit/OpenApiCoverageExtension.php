@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Wadakatu\OpenApiContractTesting\PHPUnit;
 
+use const FILE_APPEND;
+
 use PHPUnit\Event\TestRunner\ExecutionFinished;
 use PHPUnit\Event\TestRunner\ExecutionFinishedSubscriber;
 use PHPUnit\Runner\Extension\Extension;
@@ -16,7 +18,9 @@ use Wadakatu\OpenApiContractTesting\OpenApiSpecLoader;
 
 use function array_map;
 use function explode;
+use function file_put_contents;
 use function getcwd;
+use function getenv;
 use function round;
 use function str_repeat;
 use function str_starts_with;
@@ -45,42 +49,82 @@ final class OpenApiCoverageExtension implements Extension
             $specs = array_map('trim', explode(',', $parameters->get('specs')));
         }
 
-        $facade->registerSubscriber(new class ($specs) implements ExecutionFinishedSubscriber {
-            /** @param string[] $specs */
-            public function __construct(private readonly array $specs) {}
+        $outputFile = null;
+        if ($parameters->has('output_file')) {
+            $outputFile = $parameters->get('output_file');
+            if (!str_starts_with($outputFile, '/')) {
+                $outputFile = getcwd() . '/' . $outputFile;
+            }
+        }
+
+        $githubSummaryPath = getenv('GITHUB_STEP_SUMMARY') ?: null;
+
+        $facade->registerSubscriber(new class ($specs, $outputFile, $githubSummaryPath) implements ExecutionFinishedSubscriber {
+            /**
+             * @param string[] $specs
+             */
+            public function __construct(
+                private readonly array $specs,
+                private readonly ?string $outputFile,
+                private readonly ?string $githubSummaryPath,
+            ) {}
 
             /** @phpcsSuppress SlevomatCodingStandard.Functions.UnusedParameter.UnusedParameter */
             public function notify(ExecutionFinished $event): void
             {
-                $this->printReport();
-            }
+                $results = $this->computeAllResults();
 
-            private function printReport(): void
-            {
-                $hasCoverage = false;
-                foreach ($this->specs as $spec) {
-                    $covered = OpenApiCoverageTracker::getCovered();
-                    if (!isset($covered[$spec]) || empty($covered[$spec])) {
-                        continue;
-                    }
-                    $hasCoverage = true;
-                }
-
-                if (!$hasCoverage) {
+                if ($results === []) {
                     return;
                 }
 
+                $this->printReport($results);
+                $this->writeMarkdownReport($results);
+            }
+
+            /**
+             * @return array<string, array{covered: string[], uncovered: string[], total: int, coveredCount: int}>
+             */
+            private function computeAllResults(): array
+            {
+                $covered = OpenApiCoverageTracker::getCovered();
+                $hasCoverage = false;
+
+                foreach ($this->specs as $spec) {
+                    if (isset($covered[$spec]) && $covered[$spec] !== []) {
+                        $hasCoverage = true;
+
+                        break;
+                    }
+                }
+
+                if (!$hasCoverage) {
+                    return [];
+                }
+
+                $results = [];
+
+                foreach ($this->specs as $spec) {
+                    try {
+                        $results[$spec] = OpenApiCoverageTracker::computeCoverage($spec);
+                    } catch (RuntimeException) {
+                        continue;
+                    }
+                }
+
+                return $results;
+            }
+
+            /**
+             * @param array<string, array{covered: string[], uncovered: string[], total: int, coveredCount: int}> $results
+             */
+            private function printReport(array $results): void
+            {
                 echo "\n\n";
                 echo "OpenAPI Contract Test Coverage\n";
                 echo str_repeat('=', 50) . "\n";
 
-                foreach ($this->specs as $spec) {
-                    try {
-                        $result = OpenApiCoverageTracker::computeCoverage($spec);
-                    } catch (RuntimeException) {
-                        continue;
-                    }
-
+                foreach ($results as $spec => $result) {
                     $percentage = $result['total'] > 0
                         ? round($result['coveredCount'] / $result['total'] * 100, 1)
                         : 0;
@@ -88,20 +132,42 @@ final class OpenApiCoverageExtension implements Extension
                     echo "\n[{$spec}] {$result['coveredCount']}/{$result['total']} endpoints ({$percentage}%)\n";
                     echo str_repeat('-', 50) . "\n";
 
-                    if (!empty($result['covered'])) {
+                    if ($result['covered'] !== []) {
                         echo "Covered:\n";
+
                         foreach ($result['covered'] as $endpoint) {
                             echo "  ✓ {$endpoint}\n";
                         }
                     }
 
                     $uncoveredCount = $result['total'] - $result['coveredCount'];
+
                     if ($uncoveredCount > 0) {
                         echo "Uncovered: {$uncoveredCount} endpoints\n";
                     }
                 }
 
                 echo "\n";
+            }
+
+            /**
+             * @param array<string, array{covered: string[], uncovered: string[], total: int, coveredCount: int}> $results
+             */
+            private function writeMarkdownReport(array $results): void
+            {
+                $markdown = MarkdownCoverageRenderer::render($results);
+
+                if ($markdown === '') {
+                    return;
+                }
+
+                if ($this->outputFile !== null) {
+                    file_put_contents($this->outputFile, $markdown);
+                }
+
+                if ($this->githubSummaryPath !== null) {
+                    file_put_contents($this->githubSummaryPath, $markdown . "\n", FILE_APPEND);
+                }
             }
         });
     }
