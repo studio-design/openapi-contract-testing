@@ -20,7 +20,7 @@ Validate your API responses against your OpenAPI specification during testing, a
 ## Requirements
 
 - PHP 8.2+
-- PHPUnit 11 or 12
+- PHPUnit 11, 12, or 13
 - [Redocly CLI](https://redocly.com/docs/cli/) (recommended for `$ref` resolution / bundling)
 
 ## Installation
@@ -130,6 +130,8 @@ Uncovered: 41 endpoints
 ### GitHub Actions Step Summary
 
 When running in GitHub Actions, the extension **automatically** detects the `GITHUB_STEP_SUMMARY` environment variable and appends a Markdown coverage report to the job summary. No configuration needed.
+
+> **Note:** Both features are independent — when running in GitHub Actions with `output_file` configured, the Markdown report is written to both the file and the Step Summary.
 
 ### Markdown output file
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Wadakatu\OpenApiContractTesting\PHPUnit;
 
 use const FILE_APPEND;
+use const STDERR;
 
 use PHPUnit\Event\TestRunner\ExecutionFinished;
 use PHPUnit\Event\TestRunner\ExecutionFinishedSubscriber;
@@ -19,6 +20,7 @@ use Wadakatu\OpenApiContractTesting\OpenApiSpecLoader;
 use function array_map;
 use function explode;
 use function file_put_contents;
+use function fwrite;
 use function getcwd;
 use function getenv;
 use function round;
@@ -79,7 +81,10 @@ final class OpenApiCoverageExtension implements Extension
                 }
 
                 $this->printReport($results);
-                $this->writeMarkdownReport($results);
+
+                if ($this->outputFile !== null || $this->githubSummaryPath !== null) {
+                    $this->writeMarkdownReport($results);
+                }
             }
 
             /**
@@ -107,7 +112,9 @@ final class OpenApiCoverageExtension implements Extension
                 foreach ($this->specs as $spec) {
                     try {
                         $results[$spec] = OpenApiCoverageTracker::computeCoverage($spec);
-                    } catch (RuntimeException) {
+                    } catch (RuntimeException $e) {
+                        fwrite(STDERR, "[OpenAPI Coverage] WARNING: Skipping spec '{$spec}': {$e->getMessage()}\n");
+
                         continue;
                     }
                 }
@@ -125,9 +132,7 @@ final class OpenApiCoverageExtension implements Extension
                 echo str_repeat('=', 50) . "\n";
 
                 foreach ($results as $spec => $result) {
-                    $percentage = $result['total'] > 0
-                        ? round($result['coveredCount'] / $result['total'] * 100, 1)
-                        : 0;
+                    $percentage = self::percentage($result['coveredCount'], $result['total']);
 
                     echo "\n[{$spec}] {$result['coveredCount']}/{$result['total']} endpoints ({$percentage}%)\n";
                     echo str_repeat('-', 50) . "\n";
@@ -157,17 +162,26 @@ final class OpenApiCoverageExtension implements Extension
             {
                 $markdown = MarkdownCoverageRenderer::render($results);
 
-                if ($markdown === '') {
-                    return;
-                }
-
                 if ($this->outputFile !== null) {
-                    file_put_contents($this->outputFile, $markdown);
+                    $written = file_put_contents($this->outputFile, $markdown);
+
+                    if ($written === false) {
+                        fwrite(STDERR, "[OpenAPI Coverage] WARNING: Failed to write Markdown report to {$this->outputFile}\n");
+                    }
                 }
 
                 if ($this->githubSummaryPath !== null) {
-                    file_put_contents($this->githubSummaryPath, $markdown . "\n", FILE_APPEND);
+                    $written = file_put_contents($this->githubSummaryPath, $markdown . "\n", FILE_APPEND);
+
+                    if ($written === false) {
+                        fwrite(STDERR, "[OpenAPI Coverage] WARNING: Failed to append Markdown report to GITHUB_STEP_SUMMARY ({$this->githubSummaryPath})\n");
+                    }
                 }
+            }
+
+            private static function percentage(int $covered, int $total): float|int
+            {
+                return $total > 0 ? round($covered / $total * 100, 1) : 0;
             }
         });
     }

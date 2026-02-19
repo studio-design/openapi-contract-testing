@@ -8,10 +8,13 @@ use function count;
 use function implode;
 use function round;
 
+/**
+ * @phpstan-type CoverageResult array{covered: string[], uncovered: string[], total: int, coveredCount: int}
+ */
 final class MarkdownCoverageRenderer
 {
     /**
-     * @param array<string, array{covered: string[], uncovered: string[], total: int, coveredCount: int}> $results
+     * @param array<string, CoverageResult> $results
      */
     public static function render(array $results): string
     {
