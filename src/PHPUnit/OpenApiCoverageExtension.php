@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Wadakatu\OpenApiContractTesting\PHPUnit;
+namespace Studio\OpenApiContractTesting\PHPUnit;
 
 use const FILE_APPEND;
 use const STDERR;
@@ -14,8 +14,8 @@ use PHPUnit\Runner\Extension\Facade;
 use PHPUnit\Runner\Extension\ParameterCollection;
 use PHPUnit\TextUI\Configuration\Configuration;
 use RuntimeException;
-use Wadakatu\OpenApiContractTesting\OpenApiCoverageTracker;
-use Wadakatu\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
 use function array_map;
 use function explode;

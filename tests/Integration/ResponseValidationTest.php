@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Wadakatu\OpenApiContractTesting\Tests\Integration;
+namespace Studio\OpenApiContractTesting\Tests\Integration;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Wadakatu\OpenApiContractTesting\OpenApiCoverageTracker;
-use Wadakatu\OpenApiContractTesting\OpenApiResponseValidator;
-use Wadakatu\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
 class ResponseValidationTest extends TestCase
 {

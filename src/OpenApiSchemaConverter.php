@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Wadakatu\OpenApiContractTesting;
+namespace Studio\OpenApiContractTesting;
 
 use function array_is_list;
 use function array_map;

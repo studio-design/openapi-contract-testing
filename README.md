@@ -1,8 +1,8 @@
 # OpenAPI Contract Testing for PHPUnit
 
-[![CI](https://github.com/wadakatu/openapi-contract-testing/actions/workflows/ci.yml/badge.svg)](https://github.com/wadakatu/openapi-contract-testing/actions/workflows/ci.yml)
-[![Latest Stable Version](https://poser.pugx.org/wadakatu/openapi-contract-testing/v)](https://packagist.org/packages/wadakatu/openapi-contract-testing)
-[![License](https://poser.pugx.org/wadakatu/openapi-contract-testing/license)](https://packagist.org/packages/wadakatu/openapi-contract-testing)
+[![CI](https://github.com/studio-design/openapi-contract-testing/actions/workflows/ci.yml/badge.svg)](https://github.com/studio-design/openapi-contract-testing/actions/workflows/ci.yml)
+[![Latest Stable Version](https://poser.pugx.org/studio-design/openapi-contract-testing/v)](https://packagist.org/packages/studio-design/openapi-contract-testing)
+[![License](https://poser.pugx.org/studio-design/openapi-contract-testing/license)](https://packagist.org/packages/studio-design/openapi-contract-testing)
 
 Framework-agnostic OpenAPI 3.0/3.1 contract testing for PHPUnit **with endpoint coverage tracking**.
 
@@ -26,7 +26,7 @@ Validate your API responses against your OpenAPI specification during testing, a
 ## Installation
 
 ```bash
-composer require --dev wadakatu/openapi-contract-testing
+composer require --dev studio-design/openapi-contract-testing
 ```
 
 ## Setup
@@ -45,7 +45,7 @@ Add the coverage extension to your `phpunit.xml`:
 
 ```xml
 <extensions>
-    <bootstrap class="Wadakatu\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+    <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
         <parameter name="spec_base_path" value="openapi/bundled"/>
         <parameter name="strip_prefixes" value="/api"/>
         <parameter name="specs" value="front,admin"/>
@@ -67,7 +67,7 @@ Add the coverage extension to your `phpunit.xml`:
 #### With Laravel (recommended)
 
 ```php
-use Wadakatu\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
+use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 
 class GetPetsTest extends TestCase
 {
@@ -88,8 +88,8 @@ class GetPetsTest extends TestCase
 #### Framework-agnostic
 
 ```php
-use Wadakatu\OpenApiContractTesting\OpenApiResponseValidator;
-use Wadakatu\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
 // Configure once (e.g., in bootstrap)
 OpenApiSpecLoader::configure(__DIR__ . '/openapi/bundled', ['/api']);
@@ -139,7 +139,7 @@ Use the `output_file` parameter to write a Markdown report to a file. This is us
 
 ```xml
 <extensions>
-    <bootstrap class="Wadakatu\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+    <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
         <parameter name="spec_base_path" value="openapi/bundled"/>
         <parameter name="specs" value="front,admin"/>
         <parameter name="output_file" value="coverage-report.md"/>

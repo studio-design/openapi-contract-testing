@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Wadakatu\OpenApiContractTesting;
+namespace Studio\OpenApiContractTesting;
 
 use function is_string;
 use function str_starts_with;

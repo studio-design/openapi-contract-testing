@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Wadakatu\OpenApiContractTesting\Tests\Unit;
+namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Wadakatu\OpenApiContractTesting\PHPUnit\MarkdownCoverageRenderer;
+use Studio\OpenApiContractTesting\PHPUnit\MarkdownCoverageRenderer;
 
 class MarkdownCoverageRendererTest extends TestCase
 {

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Wadakatu\OpenApiContractTesting\Tests\Unit;
+namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Wadakatu\OpenApiContractTesting\OpenApiPathMatcher;
+use Studio\OpenApiContractTesting\OpenApiPathMatcher;
 
 class OpenApiPathMatcherTest extends TestCase
 {

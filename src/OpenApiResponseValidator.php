@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Wadakatu\OpenApiContractTesting;
+namespace Studio\OpenApiContractTesting;
 
 use const JSON_THROW_ON_ERROR;
 

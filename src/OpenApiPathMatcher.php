@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Wadakatu\OpenApiContractTesting;
+namespace Studio\OpenApiContractTesting;
 
 use function explode;
 use function implode;
