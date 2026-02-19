@@ -58,9 +58,15 @@ final class OpenApiResponseValidator
 
         $responseSpec = $responses[$statusCodeStr];
 
-        // Some responses (e.g., 204 No Content) may not have a content definition
+        // If no JSON content schema is defined for this response, skip body validation
         if (!isset($responseSpec['content']['application/json']['schema'])) {
             return OpenApiValidationResult::success($matchedPath);
+        }
+
+        if ($responseBody === null) {
+            return OpenApiValidationResult::failure([
+                "Response body is empty but {$method} {$matchedPath} (status {$statusCode}) defines a JSON schema in '{$specName}' spec.",
+            ]);
         }
 
         /** @var array<string, mixed> $schema */

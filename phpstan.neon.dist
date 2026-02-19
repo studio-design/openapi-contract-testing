@@ -5,5 +5,17 @@ parameters:
         - tests
     tmpDir: .phpstan.cache
     ignoreErrors:
-        - message: '#Trait .+ is used zero times and is not analysed#'
-          path: src/Laravel/ValidatesOpenApiSchema.php
+        -
+            message: '#Function app not found#'
+            path: src/Laravel/ValidatesOpenApiSchema.php
+        -
+            message: '#Call to an undefined method Illuminate\\Testing\\TestResponse::#'
+            path: src/Laravel/ValidatesOpenApiSchema.php
+        -
+            message: '#does not specify its types: TResponse#'
+            paths:
+                - src/Laravel/ValidatesOpenApiSchema.php
+                - tests/Unit/ValidatesOpenApiSchemaTest.php
+        -
+            message: '#expects TResponse of Symfony\\Component\\HttpFoundation\\Response#'
+            path: tests/Unit/ValidatesOpenApiSchemaTest.php

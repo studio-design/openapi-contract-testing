@@ -80,6 +80,17 @@
                 }
             }
         },
+        "/v1/health": {
+            "get": {
+                "summary": "Health check",
+                "operationId": "healthCheck",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
         "/v1/pets/{petId}": {
             "get": {
                 "summary": "Info for a specific pet",
