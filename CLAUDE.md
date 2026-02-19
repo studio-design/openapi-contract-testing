@@ -49,7 +49,7 @@ This is a PHP library (`studio-design/openapi-contract-testing`) that validates 
 
 ### Laravel Integration
 
-- **`ValidatesOpenApiSchema`** trait — Used in Laravel test cases. Provides `assertResponseMatchesOpenApiSchema()` which auto-resolves method/path from the current request and records coverage.
+- **`ValidatesOpenApiSchema`** trait — Used in Laravel test cases. Provides `assertResponseMatchesOpenApiSchema()` which auto-resolves method/path from the current request and records coverage. Requires implementing `openApiSpec(): string` to specify which spec to validate against.
 
 ### Key Enums
 

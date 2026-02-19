@@ -11,13 +11,18 @@ use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 
 trait ValidatesOpenApiSchema
 {
-    protected string $openApiSpec = 'front';
+    abstract protected function openApiSpec(): string;
 
     protected function assertResponseMatchesOpenApiSchema(
         TestResponse $response,
         ?HttpMethod $method = null,
         ?string $path = null,
     ): void {
+        $specName = $this->openApiSpec();
+        if ($specName === '') {
+            $this->fail('openApiSpec() must return a non-empty spec name, but an empty string was returned.');
+        }
+
         $resolvedMethod = $method !== null ? $method->value : app('request')->getMethod();
         $resolvedPath = $path ?? app('request')->getPathInfo();
 
@@ -28,7 +33,7 @@ trait ValidatesOpenApiSchema
 
         $validator = new OpenApiResponseValidator();
         $result = $validator->validate(
-            $this->openApiSpec,
+            $specName,
             $resolvedMethod,
             $resolvedPath,
             $response->getStatusCode(),
@@ -37,7 +42,7 @@ trait ValidatesOpenApiSchema
 
         if ($result->matchedPath() !== null) {
             OpenApiCoverageTracker::record(
-                $this->openApiSpec,
+                $specName,
                 $resolvedMethod,
                 $result->matchedPath(),
             );
@@ -45,7 +50,7 @@ trait ValidatesOpenApiSchema
 
         $this->assertTrue(
             $result->isValid(),
-            "OpenAPI schema validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$this->openApiSpec}):\n"
+            "OpenAPI schema validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"
             . $result->errorMessage(),
         );
     }

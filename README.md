@@ -73,8 +73,10 @@ class GetPetsTest extends TestCase
 {
     use ValidatesOpenApiSchema;
 
-    // Override if your spec name differs from 'front'
-    protected string $openApiSpec = 'front';
+    protected function openApiSpec(): string
+    {
+        return 'front';
+    }
 
     public function test_list_pets(): void
     {
