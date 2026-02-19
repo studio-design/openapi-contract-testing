@@ -36,8 +36,10 @@ composer require --dev studio-design/openapi-contract-testing
 This package expects a **bundled** (all `$ref`s resolved) JSON spec file. Use [Redocly CLI](https://redocly.com/docs/cli/commands/bundle/) to bundle:
 
 ```bash
-npx @redocly/cli bundle openapi/root.yaml -o openapi/bundled/front.json
+npx @redocly/cli bundle openapi/root.yaml --dereferenced -o openapi/bundled/front.json
 ```
+
+> **Important:** The `--dereferenced` flag is required. Without it, `$ref` pointers (e.g., `#/components/schemas/...`) are preserved in the output, causing `UnresolvedReferenceException` at validation time. The underlying JSON Schema validator (`opis/json-schema`) does not resolve OpenAPI `$ref` references.
 
 ### 2. Configure PHPUnit extension
 
