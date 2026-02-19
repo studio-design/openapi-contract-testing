@@ -43,8 +43,9 @@ This is a PHP library (`wadakatu/openapi-contract-testing`) that validates API r
 
 ### PHPUnit Extension & Coverage
 
-- **`OpenApiCoverageExtension`** — PHPUnit extension configured in `phpunit.xml`. Reads `spec_base_path`, `strip_prefixes`, and `specs` parameters. Registers an `ExecutionFinishedSubscriber` that prints a coverage report.
+- **`OpenApiCoverageExtension`** — PHPUnit extension configured in `phpunit.xml`. Reads `spec_base_path`, `strip_prefixes`, `specs`, and `output_file` parameters. Registers an `ExecutionFinishedSubscriber` that prints a coverage report to stdout and optionally writes Markdown to a file and/or GitHub Step Summary.
 - **`OpenApiCoverageTracker`** — Static tracker that records validated endpoints during test runs and computes coverage against the full spec.
+- **`MarkdownCoverageRenderer`** — Pure function class that generates a Markdown coverage report from computed results. Used by the extension for `output_file` and `GITHUB_STEP_SUMMARY` output.
 
 ### Laravel Integration
 

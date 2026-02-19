@@ -20,7 +20,7 @@ Validate your API responses against your OpenAPI specification during testing, a
 ## Requirements
 
 - PHP 8.2+
-- PHPUnit 11 or 12
+- PHPUnit 11, 12, or 13
 - [Redocly CLI](https://redocly.com/docs/cli/) (recommended for `$ref` resolution / bundling)
 
 ## Installation
@@ -58,6 +58,7 @@ Add the coverage extension to your `phpunit.xml`:
 | `spec_base_path` | Yes* | — | Path to bundled spec directory (relative paths resolve from `getcwd()`) |
 | `strip_prefixes` | No | `[]` | Comma-separated prefixes to strip from request paths (e.g., `/api`) |
 | `specs` | No | `front` | Comma-separated spec names for coverage tracking |
+| `output_file` | No | — | File path to write Markdown coverage report (relative paths resolve from `getcwd()`) |
 
 *Not required if you call `OpenApiSpecLoader::configure()` manually.
 
@@ -122,6 +123,41 @@ Covered:
   ✓ GET /v1/pets/{petId}
   ✓ DELETE /v1/pets/{petId}
 Uncovered: 41 endpoints
+```
+
+## CI Integration
+
+### GitHub Actions Step Summary
+
+When running in GitHub Actions, the extension **automatically** detects the `GITHUB_STEP_SUMMARY` environment variable and appends a Markdown coverage report to the job summary. No configuration needed.
+
+> **Note:** Both features are independent — when running in GitHub Actions with `output_file` configured, the Markdown report is written to both the file and the Step Summary.
+
+### Markdown output file
+
+Use the `output_file` parameter to write a Markdown report to a file. This is useful for posting coverage as a PR comment:
+
+```xml
+<extensions>
+    <bootstrap class="Wadakatu\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+        <parameter name="spec_base_path" value="openapi/bundled"/>
+        <parameter name="specs" value="front,admin"/>
+        <parameter name="output_file" value="coverage-report.md"/>
+    </bootstrap>
+</extensions>
+```
+
+Example GitHub Actions workflow step to post the report as a PR comment:
+
+```yaml
+- name: Run tests
+  run: vendor/bin/phpunit
+
+- name: Post coverage comment
+  if: github.event_name == 'pull_request' && hashFiles('coverage-report.md') != ''
+  uses: marocchino/sticky-pull-request-comment@v2
+  with:
+    path: coverage-report.md
 ```
 
 ## OpenAPI 3.0 vs 3.1
