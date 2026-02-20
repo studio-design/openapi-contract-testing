@@ -68,6 +68,22 @@ Add the coverage extension to your `phpunit.xml`:
 
 #### With Laravel (recommended)
 
+Publish the config file:
+
+```bash
+php artisan vendor:publish --tag=openapi-contract-testing
+```
+
+This creates `config/openapi-contract-testing.php`:
+
+```php
+return [
+    'default_spec' => '', // e.g., 'front'
+];
+```
+
+Set `default_spec` to your spec name, then use the trait — no per-class override needed:
+
 ```php
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 
@@ -75,17 +91,28 @@ class GetPetsTest extends TestCase
 {
     use ValidatesOpenApiSchema;
 
-    protected function openApiSpec(): string
-    {
-        return 'front';
-    }
-
     public function test_list_pets(): void
     {
         $response = $this->get('/api/v1/pets');
         $response->assertOk();
         $this->assertResponseMatchesOpenApiSchema($response);
     }
+}
+```
+
+To use a different spec for a specific test class, override `openApiSpec()`:
+
+```php
+class AdminGetUsersTest extends TestCase
+{
+    use ValidatesOpenApiSchema;
+
+    protected function openApiSpec(): string
+    {
+        return 'admin';
+    }
+
+    // ...
 }
 ```
 
