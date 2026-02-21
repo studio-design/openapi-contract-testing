@@ -10,8 +10,10 @@ use Opis\JsonSchema\Errors\ErrorFormatter;
 use Opis\JsonSchema\Validator;
 
 use function array_keys;
+use function implode;
 use function json_decode;
 use function json_encode;
+use function str_ends_with;
 use function strtolower;
 
 final class OpenApiResponseValidator
@@ -58,19 +60,35 @@ final class OpenApiResponseValidator
 
         $responseSpec = $responses[$statusCodeStr];
 
-        // If no JSON content schema is defined for this response, skip body validation
-        if (!isset($responseSpec['content']['application/json']['schema'])) {
+        // If no content is defined for this response, skip body validation (e.g. 204 No Content)
+        if (!isset($responseSpec['content'])) {
+            return OpenApiValidationResult::success($matchedPath);
+        }
+
+        /** @var array<string, array<string, mixed>> $content */
+        $content = $responseSpec['content'];
+        $jsonContentType = $this->findJsonContentType($content);
+
+        if ($jsonContentType === null) {
+            $definedTypes = array_keys($content);
+
+            return OpenApiValidationResult::failure([
+                "No JSON-compatible content type found for {$method} {$matchedPath} (status {$statusCode}) in '{$specName}' spec. Defined content types: " . implode(', ', $definedTypes),
+            ]);
+        }
+
+        if (!isset($content[$jsonContentType]['schema'])) {
             return OpenApiValidationResult::success($matchedPath);
         }
 
         if ($responseBody === null) {
             return OpenApiValidationResult::failure([
-                "Response body is empty but {$method} {$matchedPath} (status {$statusCode}) defines a JSON schema in '{$specName}' spec.",
+                "Response body is empty but {$method} {$matchedPath} (status {$statusCode}) defines a JSON-compatible response schema in '{$specName}' spec.",
             ]);
         }
 
         /** @var array<string, mixed> $schema */
-        $schema = $responseSpec['content']['application/json']['schema'];
+        $schema = $content[$jsonContentType]['schema'];
         $jsonSchema = OpenApiSchemaConverter::convert($schema, $version);
 
         // opis/json-schema requires an object, so encode then decode
@@ -106,5 +124,27 @@ final class OpenApiResponseValidator
         }
 
         return OpenApiValidationResult::failure($errors);
+    }
+
+    /**
+     * Find the first JSON-compatible content type from the response spec.
+     *
+     * Matches "application/json" exactly and any type with a "+json" structured
+     * syntax suffix (RFC 6838), such as "application/problem+json" and
+     * "application/vnd.api+json". Matching is case-insensitive.
+     *
+     * @param array<string, array<string, mixed>> $content
+     */
+    private function findJsonContentType(array $content): ?string
+    {
+        foreach ($content as $contentType => $mediaType) {
+            $lower = strtolower($contentType);
+
+            if ($lower === 'application/json' || str_ends_with($lower, '+json')) {
+                return $contentType;
+            }
+        }
+
+        return null;
     }
 }
