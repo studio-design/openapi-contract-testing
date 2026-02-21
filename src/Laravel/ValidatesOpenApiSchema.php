@@ -8,8 +8,11 @@ use Illuminate\Testing\TestResponse;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+use Throwable;
 
 use function is_string;
+use function str_contains;
+use function strtolower;
 
 trait ValidatesOpenApiSchema
 {
@@ -46,13 +49,16 @@ trait ValidatesOpenApiSchema
             $this->fail('OpenAPI contract testing requires buffered responses, but getContent() returned false (streamed response?).');
         }
 
+        $contentType = $response->headers->get('Content-Type', '');
+        $hasNonJsonContentType = $content !== '' && $contentType !== '' && !str_contains(strtolower($contentType), 'json');
+
         $validator = new OpenApiResponseValidator();
         $result = $validator->validate(
             $specName,
             $resolvedMethod,
             $resolvedPath,
             $response->getStatusCode(),
-            $content !== '' ? $response->json() : null,
+            $this->extractJsonBody($response, $content, $contentType),
         );
 
         if ($result->matchedPath() !== null) {
@@ -63,10 +69,40 @@ trait ValidatesOpenApiSchema
             );
         }
 
+        if (!$result->isValid() && $hasNonJsonContentType) {
+            $this->fail(
+                "OpenAPI schema validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"
+                . "Response has Content-Type '{$contentType}' but the spec expects a JSON response.",
+            );
+        }
+
         $this->assertTrue(
             $result->isValid(),
             "OpenAPI schema validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"
             . $result->errorMessage(),
         );
+    }
+
+    /** @return null|array<string, mixed> */
+    private function extractJsonBody(TestResponse $response, string $content, string $contentType): ?array
+    {
+        if ($content === '') {
+            return null;
+        }
+
+        // Non-JSON Content-Type: return null so the validator can decide
+        // whether the spec requires a JSON body for this endpoint.
+        if ($contentType !== '' && !str_contains(strtolower($contentType), 'json')) {
+            return null;
+        }
+
+        try {
+            return $response->json();
+        } catch (Throwable $e) {
+            $this->fail(
+                'Response body could not be parsed as JSON: ' . $e->getMessage()
+                . ($contentType === '' ? ' (no Content-Type header was present on the response)' : ''),
+            );
+        }
     }
 }

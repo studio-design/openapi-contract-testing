@@ -12,6 +12,9 @@ parameters:
             message: '#Call to an undefined method Illuminate\\Testing\\TestResponse::#'
             path: src/Laravel/ValidatesOpenApiSchema.php
         -
+            message: '#Access to an undefined property Illuminate\\Testing\\TestResponse::\$headers#'
+            path: src/Laravel/ValidatesOpenApiSchema.php
+        -
             message: '#Function config_path not found#'
             path: src/Laravel/OpenApiContractTestingServiceProvider.php
         -
@@ -22,6 +25,11 @@ parameters:
                 - tests/Unit/ValidatesOpenApiSchemaDefaultSpecTest.php
         -
             message: '#expects TResponse of Symfony\\Component\\HttpFoundation\\Response#'
+            paths:
+                - tests/Unit/ValidatesOpenApiSchemaTest.php
+                - tests/Unit/ValidatesOpenApiSchemaDefaultSpecTest.php
+        -
+            message: '#class@anonymous/tests/Helpers/CreatesTestResponse\.php.*no value type specified in iterable type array#'
             paths:
                 - tests/Unit/ValidatesOpenApiSchemaTest.php
                 - tests/Unit/ValidatesOpenApiSchemaDefaultSpecTest.php
