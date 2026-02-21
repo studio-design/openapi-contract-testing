@@ -64,11 +64,12 @@ class ResponseValidationTest extends TestCase
 
         // Check coverage
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
-        $this->assertSame(5, $coverage['total']);
+        $this->assertSame(6, $coverage['total']);
         $this->assertSame(2, $coverage['coveredCount']);
         $this->assertContains('GET /v1/pets', $coverage['covered']);
         $this->assertContains('POST /v1/pets', $coverage['covered']);
         $this->assertContains('GET /v1/health', $coverage['uncovered']);
+        $this->assertContains('GET /v1/logout', $coverage['uncovered']);
         $this->assertContains('DELETE /v1/pets/{petId}', $coverage['uncovered']);
         $this->assertContains('GET /v1/pets/{petId}', $coverage['uncovered']);
     }
@@ -92,6 +93,27 @@ class ResponseValidationTest extends TestCase
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.1');
         $this->assertSame(4, $coverage['total']);
         $this->assertSame(1, $coverage['coveredCount']);
+    }
+
+    #[Test]
+    public function non_json_endpoint_skips_validation_and_records_coverage(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/logout',
+            200,
+            '<html><body>Logged out</body></html>',
+        );
+        $this->assertTrue($result->isValid());
+
+        if ($result->matchedPath() !== null) {
+            OpenApiCoverageTracker::record('petstore-3.0', 'GET', $result->matchedPath());
+        }
+
+        $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+        $this->assertSame(1, $coverage['coveredCount']);
+        $this->assertContains('GET /v1/logout', $coverage['covered']);
     }
 
     #[Test]

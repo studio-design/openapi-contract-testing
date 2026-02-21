@@ -10,7 +10,6 @@ use Opis\JsonSchema\Errors\ErrorFormatter;
 use Opis\JsonSchema\Validator;
 
 use function array_keys;
-use function implode;
 use function json_decode;
 use function json_encode;
 use function str_ends_with;
@@ -69,12 +68,11 @@ final class OpenApiResponseValidator
         $content = $responseSpec['content'];
         $jsonContentType = $this->findJsonContentType($content);
 
+        // If no JSON-compatible content type is defined, skip body validation.
+        // This validator only handles JSON schemas; non-JSON types (e.g. text/html,
+        // application/xml) are outside its scope.
         if ($jsonContentType === null) {
-            $definedTypes = array_keys($content);
-
-            return OpenApiValidationResult::failure([
-                "No JSON-compatible content type found for {$method} {$matchedPath} (status {$statusCode}) in '{$specName}' spec. Defined content types: " . implode(', ', $definedTypes),
-            ]);
+            return OpenApiValidationResult::success($matchedPath);
         }
 
         if (!isset($content[$jsonContentType]['schema'])) {

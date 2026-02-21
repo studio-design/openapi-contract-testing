@@ -130,10 +130,49 @@
                             }
                         }
                     },
+                    "409": {
+                        "description": "Conflict",
+                        "content": {
+                            "text/html": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            },
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["error"],
+                                    "properties": {
+                                        "error": {
+                                            "type": "string"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     "415": {
                         "description": "Unsupported media type",
                         "content": {
                             "application/xml": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/logout": {
+            "get": {
+                "summary": "Logout page",
+                "operationId": "logout",
+                "responses": {
+                    "200": {
+                        "description": "Logout confirmation page",
+                        "content": {
+                            "text/html": {
                                 "schema": {
                                     "type": "string"
                                 }

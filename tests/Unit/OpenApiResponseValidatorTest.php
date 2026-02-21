@@ -211,7 +211,7 @@ class OpenApiResponseValidatorTest extends TestCase
     }
 
     #[Test]
-    public function v30_content_without_json_compatible_type_fails(): void
+    public function v30_non_json_content_type_skips_validation(): void
     {
         $result = $this->validator->validate(
             'petstore-3.0',
@@ -221,9 +221,8 @@ class OpenApiResponseValidatorTest extends TestCase
             '<error>Unsupported</error>',
         );
 
-        $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('No JSON-compatible content type found', $result->errors()[0]);
-        $this->assertStringContainsString('application/xml', $result->errors()[0]);
+        $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/pets', $result->matchedPath());
     }
 
     #[Test]
@@ -258,6 +257,51 @@ class OpenApiResponseValidatorTest extends TestCase
 
         $this->assertTrue($result->isValid());
         $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function v30_text_html_only_content_type_skips_validation(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/logout',
+            200,
+            '<html><body>Logged out</body></html>',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/logout', $result->matchedPath());
+    }
+
+    #[Test]
+    public function v30_mixed_json_and_non_json_content_types_validates_json_schema(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            ['error' => 'Pet already exists'],
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function v30_mixed_content_types_with_invalid_json_body_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            ['wrong_key' => 'value'],
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertNotEmpty($result->errors());
     }
 
     // ========================================
@@ -324,7 +368,7 @@ class OpenApiResponseValidatorTest extends TestCase
     }
 
     #[Test]
-    public function v31_content_without_json_compatible_type_fails(): void
+    public function v31_non_json_content_type_skips_validation(): void
     {
         $result = $this->validator->validate(
             'petstore-3.1',
@@ -334,9 +378,8 @@ class OpenApiResponseValidatorTest extends TestCase
             '<error>Unsupported</error>',
         );
 
-        $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('No JSON-compatible content type found', $result->errors()[0]);
-        $this->assertStringContainsString('application/xml', $result->errors()[0]);
+        $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/pets', $result->matchedPath());
     }
 
     #[Test]
