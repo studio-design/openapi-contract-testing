@@ -12,6 +12,7 @@ Validate your API responses against your OpenAPI specification during testing, a
 
 - **OpenAPI 3.0 & 3.1 support** — Automatic version detection from the `openapi` field
 - **Response validation** — Validates response bodies against JSON Schema (Draft 07 via opis/json-schema). Supports `application/json` and any `+json` content type (e.g., `application/problem+json`)
+- **Content negotiation** — Accepts the actual response `Content-Type` to handle mixed-content specs. Non-JSON responses (e.g., `text/html`, `application/xml`) are verified for spec presence without body validation; JSON-compatible responses are fully schema-validated
 - **Endpoint coverage tracking** — Unique PHPUnit extension that reports which spec endpoints are covered by tests
 - **Path matching** — Handles parameterized paths (`/pets/{petId}`) with configurable prefix stripping
 - **Laravel adapter** — Optional trait for seamless integration with Laravel's `TestResponse`
@@ -133,6 +134,7 @@ $result = $validator->validate(
     requestPath: '/api/v1/pets',
     statusCode: 200,
     responseBody: $decodedJsonBody,
+    responseContentType: 'application/json', // optional: enables content negotiation
 );
 
 $this->assertTrue($result->isValid(), $result->errorMessage());
@@ -209,6 +211,8 @@ The package auto-detects the OAS version from the `openapi` field and handles sc
 
 Main validator class. Validates a response body against the spec.
 
+The optional `responseContentType` parameter enables content negotiation: when provided, non-JSON content types (e.g., `text/html`) are checked for spec presence only, while JSON-compatible types proceed to full schema validation.
+
 ```php
 $result = $validator->validate(
     specName: 'front',
@@ -216,6 +220,7 @@ $result = $validator->validate(
     requestPath: '/api/v1/pets/123',
     statusCode: 200,
     responseBody: ['id' => 123, 'name' => 'Fido'],
+    responseContentType: 'application/json',
 );
 
 $result->isValid();      // bool
