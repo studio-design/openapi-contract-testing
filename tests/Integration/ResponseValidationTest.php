@@ -117,6 +117,28 @@ class ResponseValidationTest extends TestCase
     }
 
     #[Test]
+    public function content_negotiation_non_json_response_succeeds_and_records_coverage(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            null,
+            'text/html',
+        );
+        $this->assertTrue($result->isValid());
+
+        if ($result->matchedPath() !== null) {
+            OpenApiCoverageTracker::record('petstore-3.0', 'POST', $result->matchedPath());
+        }
+
+        $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+        $this->assertSame(1, $coverage['coveredCount']);
+        $this->assertContains('POST /v1/pets', $coverage['covered']);
+    }
+
+    #[Test]
     public function invalid_response_produces_descriptive_errors(): void
     {
         $result = $this->validator->validate(

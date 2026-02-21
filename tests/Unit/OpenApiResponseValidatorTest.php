@@ -305,6 +305,194 @@ class OpenApiResponseValidatorTest extends TestCase
     }
 
     // ========================================
+    // OAS 3.0 content negotiation tests (responseContentType parameter)
+    // ========================================
+
+    #[Test]
+    public function v30_mixed_content_type_with_non_json_response_content_type_succeeds(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            null,
+            'text/html',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function v30_mixed_content_type_with_json_response_content_type_validates_schema(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            ['error' => 'Pet already exists'],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function v30_mixed_content_type_with_json_response_content_type_and_invalid_body_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            ['wrong_key' => 'value'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertNotEmpty($result->errors());
+    }
+
+    #[Test]
+    public function v30_response_content_type_not_in_spec_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            null,
+            'text/plain',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString("Response Content-Type 'text/plain' is not defined for", $result->errors()[0]);
+        $this->assertStringContainsString('text/html', $result->errors()[0]);
+        $this->assertStringContainsString('application/json', $result->errors()[0]);
+        $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function v30_response_content_type_with_charset_matches_spec(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            null,
+            'text/html; charset=utf-8',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function v30_json_response_content_type_with_charset_validates_schema(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            ['error' => 'Pet already exists'],
+            'application/json; charset=utf-8',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function v30_json_response_content_type_with_charset_and_invalid_body_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            ['wrong_key' => 'value'],
+            'application/json; charset=utf-8',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertNotEmpty($result->errors());
+    }
+
+    #[Test]
+    public function v30_vendor_json_response_content_type_validates_schema(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            400,
+            [
+                'type' => 'https://example.com/bad-request',
+                'title' => 'Bad Request',
+                'status' => 400,
+                'detail' => 'Invalid query parameter',
+            ],
+            'application/problem+json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function v30_case_insensitive_response_content_type_matches_spec(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            null,
+            'Text/HTML',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function v30_null_response_content_type_preserves_existing_behavior(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('Response body is empty', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function v30_non_json_only_spec_with_matching_response_content_type_succeeds(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/logout',
+            200,
+            null,
+            'text/html',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/logout', $result->matchedPath());
+    }
+
+    // ========================================
     // OAS 3.1 tests
     // ========================================
 

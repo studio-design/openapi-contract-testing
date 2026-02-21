@@ -169,7 +169,7 @@ class ValidatesOpenApiSchemaTest extends TestCase
         );
 
         $this->expectException(AssertionFailedError::class);
-        $this->expectExceptionMessage("Response has Content-Type 'text/html' but the spec expects a JSON response");
+        $this->expectExceptionMessage("Response Content-Type 'text/html' is not defined for");
 
         $this->assertResponseMatchesOpenApiSchema(
             $response,
@@ -238,6 +238,35 @@ class ValidatesOpenApiSchemaTest extends TestCase
         $this->assertResponseMatchesOpenApiSchema(
             $response,
             HttpMethod::GET,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
+    public function json_content_type_in_spec_with_mixed_content_types_validates_schema(): void
+    {
+        $body = (string) json_encode(['error' => 'Pet already exists'], JSON_THROW_ON_ERROR);
+        $response = $this->makeTestResponse($body, 409, ['Content-Type' => 'application/json']);
+
+        $this->assertResponseMatchesOpenApiSchema(
+            $response,
+            HttpMethod::POST,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
+    public function non_json_content_type_in_spec_with_mixed_content_types_passes(): void
+    {
+        $response = $this->makeTestResponse(
+            '<html><body>Conflict</body></html>',
+            409,
+            ['Content-Type' => 'text/html'],
+        );
+
+        $this->assertResponseMatchesOpenApiSchema(
+            $response,
+            HttpMethod::POST,
             '/v1/pets',
         );
     }

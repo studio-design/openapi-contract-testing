@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Laravel;
 
 use Illuminate\Testing\TestResponse;
+use JsonException;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Throwable;
 
 use function is_string;
 use function str_contains;
@@ -50,7 +50,6 @@ trait ValidatesOpenApiSchema
         }
 
         $contentType = $response->headers->get('Content-Type', '');
-        $hasNonJsonContentType = $content !== '' && $contentType !== '' && !str_contains(strtolower($contentType), 'json');
 
         $validator = new OpenApiResponseValidator();
         $result = $validator->validate(
@@ -59,6 +58,7 @@ trait ValidatesOpenApiSchema
             $resolvedPath,
             $response->getStatusCode(),
             $this->extractJsonBody($response, $content, $contentType),
+            $contentType !== '' ? $contentType : null,
         );
 
         // Record coverage for any matched endpoint, including those where body
@@ -69,17 +69,6 @@ trait ValidatesOpenApiSchema
                 $specName,
                 $resolvedMethod,
                 $result->matchedPath(),
-            );
-        }
-
-        // This guard catches the case where the spec defines a JSON content type
-        // but the actual response has a non-JSON Content-Type header. The validator
-        // itself skips validation for specs that define *only* non-JSON content
-        // types (returning success), so this guard only fires for the mismatch case.
-        if (!$result->isValid() && $hasNonJsonContentType) {
-            $this->fail(
-                "OpenAPI schema validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"
-                . "Response has Content-Type '{$contentType}' but the spec expects a JSON response.",
             );
         }
 
@@ -105,7 +94,7 @@ trait ValidatesOpenApiSchema
 
         try {
             return $response->json();
-        } catch (Throwable $e) {
+        } catch (JsonException $e) {
             $this->fail(
                 'Response body could not be parsed as JSON: ' . $e->getMessage()
                 . ($contentType === '' ? ' (no Content-Type header was present on the response)' : ''),
