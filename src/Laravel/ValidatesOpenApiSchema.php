@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Laravel;
 
 use Illuminate\Testing\TestResponse;
+use JsonException;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Throwable;
 
 use function is_string;
 use function str_contains;
@@ -94,7 +94,7 @@ trait ValidatesOpenApiSchema
 
         try {
             return $response->json();
-        } catch (Throwable $e) {
+        } catch (JsonException $e) {
             $this->fail(
                 'Response body could not be parsed as JSON: ' . $e->getMessage()
                 . ($contentType === '' ? ' (no Content-Type header was present on the response)' : ''),

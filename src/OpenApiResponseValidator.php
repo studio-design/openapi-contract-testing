@@ -49,7 +49,7 @@ final class OpenApiResponseValidator
         if (!isset($pathSpec[$lowerMethod])) {
             return OpenApiValidationResult::failure([
                 "Method {$method} not defined for path {$matchedPath} in '{$specName}' spec.",
-            ]);
+            ], $matchedPath);
         }
 
         $statusCodeStr = (string) $statusCode;
@@ -58,7 +58,7 @@ final class OpenApiResponseValidator
         if (!isset($responses[$statusCodeStr])) {
             return OpenApiValidationResult::failure([
                 "Status code {$statusCode} not defined for {$method} {$matchedPath} in '{$specName}' spec.",
-            ]);
+            ], $matchedPath);
         }
 
         $responseSpec = $responses[$statusCodeStr];
@@ -71,8 +71,9 @@ final class OpenApiResponseValidator
         /** @var array<string, array<string, mixed>> $content */
         $content = $responseSpec['content'];
 
-        // When the actual response Content-Type is provided, use it to select
-        // the correct media type entry from the spec (content negotiation).
+        // When the actual response Content-Type is provided, handle content negotiation:
+        // non-JSON types are checked for spec presence only, while JSON-compatible types
+        // fall through to schema validation against the first JSON media type in the spec.
         if ($responseContentType !== null) {
             $normalizedType = $this->normalizeMediaType($responseContentType);
 
@@ -86,10 +87,13 @@ final class OpenApiResponseValidator
 
                 return OpenApiValidationResult::failure([
                     "Response Content-Type '{$normalizedType}' is not defined for {$method} {$matchedPath} (status {$statusCode}) in '{$specName}' spec. Defined content types: {$defined}",
-                ]);
+                ], $matchedPath);
             }
 
             // JSON-compatible response: fall through to existing JSON schema validation.
+            // JSON types are treated as interchangeable (e.g. application/vnd.api+json
+            // validates against an application/json spec entry) because the schema is
+            // the same regardless of the specific JSON media type.
         }
 
         $jsonContentType = $this->findJsonContentType($content);
@@ -108,7 +112,7 @@ final class OpenApiResponseValidator
         if ($responseBody === null) {
             return OpenApiValidationResult::failure([
                 "Response body is empty but {$method} {$matchedPath} (status {$statusCode}) defines a JSON-compatible response schema in '{$specName}' spec.",
-            ]);
+            ], $matchedPath);
         }
 
         /** @var array<string, mixed> $schema */
@@ -147,7 +151,7 @@ final class OpenApiResponseValidator
             }
         }
 
-        return OpenApiValidationResult::failure($errors);
+        return OpenApiValidationResult::failure($errors, $matchedPath);
     }
 
     /**
@@ -186,6 +190,10 @@ final class OpenApiResponseValidator
     }
 
     /**
+     * Check whether the given (already normalised, lower-cased) response content
+     * type matches any content type key defined in the spec. Spec keys are
+     * lower-cased before comparison.
+     *
      * @param array<string, array<string, mixed>> $content
      */
     private function isContentTypeInSpec(string $responseContentType, array $content): bool
@@ -199,6 +207,10 @@ final class OpenApiResponseValidator
         return false;
     }
 
+    /**
+     * True for "application/json" or any "+json" structured syntax suffix (RFC 6838).
+     * Expects a lower-cased media type without parameters.
+     */
     private function isJsonContentType(string $lowerContentType): bool
     {
         return $lowerContentType === 'application/json' || str_ends_with($lowerContentType, '+json');

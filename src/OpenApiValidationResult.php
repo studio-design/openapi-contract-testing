@@ -23,9 +23,9 @@ final class OpenApiValidationResult
     }
 
     /** @param string[] $errors */
-    public static function failure(array $errors): self
+    public static function failure(array $errors, ?string $matchedPath = null): self
     {
-        return new self(false, $errors);
+        return new self(false, $errors, $matchedPath);
     }
 
     public function isValid(): bool
