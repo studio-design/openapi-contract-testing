@@ -160,7 +160,7 @@ class ValidatesOpenApiSchemaTest extends TestCase
     }
 
     #[Test]
-    public function non_json_body_with_json_schema_required_fails_gracefully(): void
+    public function non_json_body_fails_with_content_type_mismatch(): void
     {
         $response = $this->makeTestResponse(
             '<html><body>OK</body></html>',
@@ -169,7 +169,7 @@ class ValidatesOpenApiSchemaTest extends TestCase
         );
 
         $this->expectException(AssertionFailedError::class);
-        $this->expectExceptionMessage('Response body is empty');
+        $this->expectExceptionMessage("Response has Content-Type 'text/html' but the spec expects a JSON response");
 
         $this->assertResponseMatchesOpenApiSchema(
             $response,
@@ -186,6 +186,54 @@ class ValidatesOpenApiSchemaTest extends TestCase
             JSON_THROW_ON_ERROR,
         );
         $response = $this->makeTestResponse($body, 200, ['Content-Type' => 'application/json']);
+
+        $this->assertResponseMatchesOpenApiSchema(
+            $response,
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
+    public function json_content_type_with_charset_validates(): void
+    {
+        $body = (string) json_encode(
+            ['data' => [['id' => 1, 'name' => 'Buddy', 'tag' => 'dog']]],
+            JSON_THROW_ON_ERROR,
+        );
+        $response = $this->makeTestResponse($body, 200, ['Content-Type' => 'application/json; charset=utf-8']);
+
+        $this->assertResponseMatchesOpenApiSchema(
+            $response,
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
+    public function vendor_json_content_type_validates(): void
+    {
+        $body = (string) json_encode(
+            ['data' => [['id' => 1, 'name' => 'Buddy', 'tag' => 'dog']]],
+            JSON_THROW_ON_ERROR,
+        );
+        $response = $this->makeTestResponse($body, 200, ['Content-Type' => 'application/vnd.api+json']);
+
+        $this->assertResponseMatchesOpenApiSchema(
+            $response,
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
+    public function missing_content_type_header_still_parses_json(): void
+    {
+        $body = (string) json_encode(
+            ['data' => [['id' => 1, 'name' => 'Rex', 'tag' => 'dog']]],
+            JSON_THROW_ON_ERROR,
+        );
+        $response = $this->makeTestResponse($body, 200);
 
         $this->assertResponseMatchesOpenApiSchema(
             $response,

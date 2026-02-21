@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Helpers;
 
+use const CASE_LOWER;
+
 use Illuminate\Testing\TestResponse;
 
+use function array_change_key_case;
 use function strtolower;
 
 trait CreatesTestResponse
@@ -17,15 +20,12 @@ trait CreatesTestResponse
     {
         $headerBag = new class ($headers) {
             /** @var array<string, string> */
-            private array $headers;
+            private readonly array $headers;
 
             /** @param array<string, string> $headers */
             public function __construct(array $headers)
             {
-                $this->headers = [];
-                foreach ($headers as $key => $value) {
-                    $this->headers[strtolower($key)] = $value;
-                }
+                $this->headers = array_change_key_case($headers, CASE_LOWER);
             }
 
             public function get(string $key, ?string $default = null): ?string
