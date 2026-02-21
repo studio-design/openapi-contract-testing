@@ -61,6 +61,9 @@ trait ValidatesOpenApiSchema
             $this->extractJsonBody($response, $content, $contentType),
         );
 
+        // Record coverage for any matched endpoint, including those where body
+        // validation was skipped (e.g. non-JSON content types). "Covered" means
+        // the endpoint was exercised in a test, not that its body was validated.
         if ($result->matchedPath() !== null) {
             OpenApiCoverageTracker::record(
                 $specName,
@@ -69,6 +72,10 @@ trait ValidatesOpenApiSchema
             );
         }
 
+        // This guard catches the case where the spec defines a JSON content type
+        // but the actual response has a non-JSON Content-Type header. The validator
+        // itself skips validation for specs that define *only* non-JSON content
+        // types (returning success), so this guard only fires for the mismatch case.
         if (!$result->isValid() && $hasNonJsonContentType) {
             $this->fail(
                 "OpenAPI schema validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"

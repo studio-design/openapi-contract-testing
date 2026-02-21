@@ -96,6 +96,27 @@ class ResponseValidationTest extends TestCase
     }
 
     #[Test]
+    public function non_json_endpoint_skips_validation_and_records_coverage(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/logout',
+            200,
+            '<html><body>Logged out</body></html>',
+        );
+        $this->assertTrue($result->isValid());
+
+        if ($result->matchedPath() !== null) {
+            OpenApiCoverageTracker::record('petstore-3.0', 'GET', $result->matchedPath());
+        }
+
+        $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+        $this->assertSame(1, $coverage['coveredCount']);
+        $this->assertContains('GET /v1/logout', $coverage['covered']);
+    }
+
+    #[Test]
     public function invalid_response_produces_descriptive_errors(): void
     {
         $result = $this->validator->validate(

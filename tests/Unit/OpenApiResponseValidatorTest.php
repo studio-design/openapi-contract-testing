@@ -274,6 +274,36 @@ class OpenApiResponseValidatorTest extends TestCase
         $this->assertSame('/v1/logout', $result->matchedPath());
     }
 
+    #[Test]
+    public function v30_mixed_json_and_non_json_content_types_validates_json_schema(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            ['error' => 'Pet already exists'],
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function v30_mixed_content_types_with_invalid_json_body_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            ['wrong_key' => 'value'],
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertNotEmpty($result->errors());
+    }
+
     // ========================================
     // OAS 3.1 tests
     // ========================================
