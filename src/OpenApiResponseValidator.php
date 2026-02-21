@@ -10,10 +10,13 @@ use Opis\JsonSchema\Errors\ErrorFormatter;
 use Opis\JsonSchema\Validator;
 
 use function array_keys;
+use function implode;
 use function json_decode;
 use function json_encode;
 use function str_ends_with;
+use function strstr;
 use function strtolower;
+use function trim;
 
 final class OpenApiResponseValidator
 {
@@ -23,6 +26,7 @@ final class OpenApiResponseValidator
         string $requestPath,
         int $statusCode,
         mixed $responseBody,
+        ?string $responseContentType = null,
     ): OpenApiValidationResult {
         $spec = OpenApiSpecLoader::load($specName);
 
@@ -66,6 +70,28 @@ final class OpenApiResponseValidator
 
         /** @var array<string, array<string, mixed>> $content */
         $content = $responseSpec['content'];
+
+        // When the actual response Content-Type is provided, use it to select
+        // the correct media type entry from the spec (content negotiation).
+        if ($responseContentType !== null) {
+            $normalizedType = $this->normalizeMediaType($responseContentType);
+
+            if (!$this->isJsonContentType($normalizedType)) {
+                // Non-JSON response: check if the content type is defined in the spec.
+                if ($this->isContentTypeInSpec($normalizedType, $content)) {
+                    return OpenApiValidationResult::success($matchedPath);
+                }
+
+                $defined = implode(', ', array_keys($content));
+
+                return OpenApiValidationResult::failure([
+                    "Response Content-Type '{$normalizedType}' is not defined for {$method} {$matchedPath} (status {$statusCode}) in '{$specName}' spec. Defined content types: {$defined}",
+                ]);
+            }
+
+            // JSON-compatible response: fall through to existing JSON schema validation.
+        }
+
         $jsonContentType = $this->findJsonContentType($content);
 
         // If no JSON-compatible content type is defined, skip body validation.
@@ -138,11 +164,43 @@ final class OpenApiResponseValidator
         foreach ($content as $contentType => $mediaType) {
             $lower = strtolower($contentType);
 
-            if ($lower === 'application/json' || str_ends_with($lower, '+json')) {
+            if ($this->isJsonContentType($lower)) {
                 return $contentType;
             }
         }
 
         return null;
+    }
+
+    /**
+     * Extract the media type portion before any parameters (e.g. charset),
+     * and return it lower-cased.
+     *
+     * Example: "text/html; charset=utf-8" → "text/html"
+     */
+    private function normalizeMediaType(string $contentType): string
+    {
+        $mediaType = strstr($contentType, ';', true);
+
+        return strtolower(trim($mediaType !== false ? $mediaType : $contentType));
+    }
+
+    /**
+     * @param array<string, array<string, mixed>> $content
+     */
+    private function isContentTypeInSpec(string $responseContentType, array $content): bool
+    {
+        foreach ($content as $specContentType => $mediaType) {
+            if (strtolower($specContentType) === $responseContentType) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isJsonContentType(string $lowerContentType): bool
+    {
+        return $lowerContentType === 'application/json' || str_ends_with($lowerContentType, '+json');
     }
 }
