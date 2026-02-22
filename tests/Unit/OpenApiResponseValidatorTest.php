@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
+use function array_map;
 use function count;
+use function range;
 
 class OpenApiResponseValidatorTest extends TestCase
 {
@@ -611,6 +614,40 @@ class OpenApiResponseValidatorTest extends TestCase
     }
 
     #[Test]
+    public function max_errors_caps_reported_errors_to_configured_limit(): void
+    {
+        $items = array_map(
+            static fn(int $i) => ['id' => 'str-' . $i, 'name' => $i],
+            range(1, 50),
+        );
+
+        $capped = new OpenApiResponseValidator(maxErrors: 5);
+        $cappedResult = $capped->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            200,
+            ['data' => $items],
+        );
+
+        $unlimited = new OpenApiResponseValidator(maxErrors: 0);
+        $unlimitedResult = $unlimited->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            200,
+            ['data' => $items],
+        );
+
+        $this->assertFalse($cappedResult->isValid());
+        $this->assertFalse($unlimitedResult->isValid());
+        $this->assertLessThan(
+            count($unlimitedResult->errors()),
+            count($cappedResult->errors()),
+        );
+    }
+
+    #[Test]
     public function max_errors_one_limits_to_single_error(): void
     {
         $validator = new OpenApiResponseValidator(maxErrors: 1);
@@ -632,24 +669,54 @@ class OpenApiResponseValidatorTest extends TestCase
     }
 
     #[Test]
+    public function max_errors_two_reports_more_than_one_error(): void
+    {
+        $items = array_map(
+            static fn(int $i) => ['id' => 'str-' . $i, 'name' => $i],
+            range(1, 50),
+        );
+
+        $validator = new OpenApiResponseValidator(maxErrors: 2);
+        $result = $validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            200,
+            ['data' => $items],
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertGreaterThan(1, count($result->errors()));
+    }
+
+    #[Test]
     public function max_errors_zero_reports_all_errors(): void
     {
+        $items = array_map(
+            static fn(int $i) => ['id' => 'str-' . $i, 'name' => $i],
+            range(1, 50),
+        );
+
         $validator = new OpenApiResponseValidator(maxErrors: 0);
         $result = $validator->validate(
             'petstore-3.0',
             'GET',
             '/v1/pets',
             200,
-            [
-                'data' => [
-                    ['id' => 'not-an-int', 'name' => 123],
-                    ['id' => 'also-not-an-int', 'name' => 456],
-                ],
-            ],
+            ['data' => $items],
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertGreaterThan(1, count($result->errors()));
+        $this->assertGreaterThan(20, count($result->errors()));
+    }
+
+    #[Test]
+    public function negative_max_errors_throws_exception(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('maxErrors must be 0 (unlimited) or a positive integer, got -1.');
+
+        new OpenApiResponseValidator(maxErrors: -1);
     }
 
     // ========================================

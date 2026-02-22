@@ -15,7 +15,12 @@ use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Tests\Helpers\CreatesTestResponse;
 
+use function array_filter;
+use function count;
+use function explode;
 use function json_encode;
+use function str_starts_with;
+use function trim;
 
 // Load namespace-level config() mock before the trait resolves the function call.
 require_once __DIR__ . '/../Helpers/LaravelConfigMock.php';
@@ -99,5 +104,90 @@ class ValidatesOpenApiSchemaDefaultSpecTest extends TestCase
             HttpMethod::GET,
             '/v1/pets',
         );
+    }
+
+    // ========================================
+    // max_errors config tests
+    // ========================================
+
+    #[Test]
+    public function max_errors_config_limits_reported_errors(): void
+    {
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = 'petstore-3.0';
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.max_errors'] = 1;
+
+        $body = (string) json_encode(
+            ['data' => [['id' => 'bad', 'name' => 123], ['id' => 'bad', 'name' => 456]]],
+            JSON_THROW_ON_ERROR,
+        );
+        $response = $this->makeTestResponse($body, 200);
+
+        try {
+            $this->assertResponseMatchesOpenApiSchema(
+                $response,
+                HttpMethod::GET,
+                '/v1/pets',
+            );
+            $this->fail('Expected AssertionFailedError was not thrown.');
+        } catch (AssertionFailedError $e) {
+            // With max_errors=1, the error message should contain exactly one schema error line.
+            // The error format is "[path] message", so count lines starting with "[".
+            $lines = explode("\n", $e->getMessage());
+            $errorLines = array_filter($lines, static fn(string $line) => str_starts_with(trim($line), '['));
+            $this->assertCount(1, $errorLines);
+        }
+    }
+
+    #[Test]
+    public function string_numeric_max_errors_config_is_cast_to_int(): void
+    {
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = 'petstore-3.0';
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.max_errors'] = '1';
+
+        $body = (string) json_encode(
+            ['data' => [['id' => 'bad', 'name' => 123], ['id' => 'bad', 'name' => 456]]],
+            JSON_THROW_ON_ERROR,
+        );
+        $response = $this->makeTestResponse($body, 200);
+
+        try {
+            $this->assertResponseMatchesOpenApiSchema(
+                $response,
+                HttpMethod::GET,
+                '/v1/pets',
+            );
+            $this->fail('Expected AssertionFailedError was not thrown.');
+        } catch (AssertionFailedError $e) {
+            $lines = explode("\n", $e->getMessage());
+            $errorLines = array_filter($lines, static fn(string $line) => str_starts_with(trim($line), '['));
+            $this->assertCount(1, $errorLines);
+        }
+    }
+
+    #[Test]
+    public function non_numeric_max_errors_config_falls_back_to_default(): void
+    {
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = 'petstore-3.0';
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.max_errors'] = 'not-a-number';
+
+        $body = (string) json_encode(
+            ['data' => [['id' => 'bad', 'name' => 123], ['id' => 'bad', 'name' => 456]]],
+            JSON_THROW_ON_ERROR,
+        );
+        $response = $this->makeTestResponse($body, 200);
+
+        try {
+            $this->assertResponseMatchesOpenApiSchema(
+                $response,
+                HttpMethod::GET,
+                '/v1/pets',
+            );
+            $this->fail('Expected AssertionFailedError was not thrown.');
+        } catch (AssertionFailedError $e) {
+            // Falls back to default of 20, so multiple errors should be reported
+            $lines = explode("\n", $e->getMessage());
+            $errorLines = array_filter($lines, static fn(string $line) => str_starts_with(trim($line), '['));
+            $this->assertGreaterThan(1, count($errorLines));
+        }
     }
 }
