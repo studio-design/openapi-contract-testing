@@ -155,7 +155,7 @@ $validator = new OpenApiResponseValidator(maxErrors: 5);
 // Report all errors (unlimited)
 $validator = new OpenApiResponseValidator(maxErrors: 0);
 
-// Stop at first error (original behavior)
+// Stop at first error (pre-v0.x default)
 $validator = new OpenApiResponseValidator(maxErrors: 1);
 ```
 
@@ -232,7 +232,7 @@ The package auto-detects the OAS version from the `openapi` field and handles sc
 
 Main validator class. Validates a response body against the spec.
 
-The constructor accepts a `maxErrors` parameter (default: `20`) controlling how many schema errors are collected before stopping. Use `0` for unlimited, `1` to stop at the first error.
+The constructor accepts a `maxErrors` parameter (default: `20`) that limits how many validation errors the underlying JSON Schema validator collects. Use `0` for unlimited, `1` to stop at the first error.
 
 The optional `responseContentType` parameter enables content negotiation: when provided, non-JSON content types (e.g., `text/html`) are checked for spec presence only, while JSON-compatible types proceed to full schema validation.
 
