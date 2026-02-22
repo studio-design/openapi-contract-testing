@@ -7,6 +7,7 @@ namespace Studio\OpenApiContractTesting;
 use const JSON_THROW_ON_ERROR;
 use const PHP_INT_MAX;
 
+use InvalidArgumentException;
 use Opis\JsonSchema\Errors\ErrorFormatter;
 use Opis\JsonSchema\Validator;
 
@@ -14,6 +15,7 @@ use function array_keys;
 use function implode;
 use function json_decode;
 use function json_encode;
+use function sprintf;
 use function str_ends_with;
 use function strstr;
 use function strtolower;
@@ -23,7 +25,13 @@ final class OpenApiResponseValidator
 {
     public function __construct(
         private readonly int $maxErrors = 20,
-    ) {}
+    ) {
+        if ($this->maxErrors < 0) {
+            throw new InvalidArgumentException(
+                sprintf('maxErrors must be 0 (unlimited) or a positive integer, got %d.', $this->maxErrors),
+            );
+        }
+    }
 
     public function validate(
         string $specName,
