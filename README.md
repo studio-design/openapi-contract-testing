@@ -80,6 +80,10 @@ This creates `config/openapi-contract-testing.php`:
 ```php
 return [
     'default_spec' => '', // e.g., 'front'
+
+    // Maximum number of validation errors to report per response.
+    // 0 = unlimited (reports all errors).
+    'max_errors' => 20,
 ];
 ```
 
@@ -139,6 +143,23 @@ $result = $validator->validate(
 
 $this->assertTrue($result->isValid(), $result->errorMessage());
 ```
+
+#### Controlling the number of validation errors
+
+By default, up to **20** validation errors are reported per response. You can change this via the constructor:
+
+```php
+// Report up to 5 errors
+$validator = new OpenApiResponseValidator(maxErrors: 5);
+
+// Report all errors (unlimited)
+$validator = new OpenApiResponseValidator(maxErrors: 0);
+
+// Stop at first error (original behavior)
+$validator = new OpenApiResponseValidator(maxErrors: 1);
+```
+
+For Laravel, set the `max_errors` key in `config/openapi-contract-testing.php`.
 
 ## Coverage Report
 
@@ -211,9 +232,12 @@ The package auto-detects the OAS version from the `openapi` field and handles sc
 
 Main validator class. Validates a response body against the spec.
 
+The constructor accepts a `maxErrors` parameter (default: `20`) controlling how many schema errors are collected before stopping. Use `0` for unlimited, `1` to stop at the first error.
+
 The optional `responseContentType` parameter enables content negotiation: when provided, non-JSON content types (e.g., `text/html`) are checked for spec presence only, while JSON-compatible types proceed to full schema validation.
 
 ```php
+$validator = new OpenApiResponseValidator(maxErrors: 20);
 $result = $validator->validate(
     specName: 'front',
     method: 'GET',
