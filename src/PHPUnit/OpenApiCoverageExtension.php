@@ -23,8 +23,6 @@ use function file_put_contents;
 use function fwrite;
 use function getcwd;
 use function getenv;
-use function round;
-use function str_repeat;
 use function str_starts_with;
 
 final class OpenApiCoverageExtension implements Extension
@@ -59,15 +57,20 @@ final class OpenApiCoverageExtension implements Extension
             }
         }
 
+        $consoleOutput = ConsoleOutput::resolve(
+            $parameters->has('console_output') ? $parameters->get('console_output') : null,
+        );
+
         $githubSummaryPath = getenv('GITHUB_STEP_SUMMARY') ?: null;
 
-        $facade->registerSubscriber(new class ($specs, $outputFile, $githubSummaryPath) implements ExecutionFinishedSubscriber {
+        $facade->registerSubscriber(new class ($specs, $outputFile, $consoleOutput, $githubSummaryPath) implements ExecutionFinishedSubscriber {
             /**
              * @param string[] $specs
              */
             public function __construct(
                 private readonly array $specs,
                 private readonly ?string $outputFile,
+                private readonly ConsoleOutput $consoleOutput,
                 private readonly ?string $githubSummaryPath,
             ) {}
 
@@ -80,7 +83,7 @@ final class OpenApiCoverageExtension implements Extension
                     return;
                 }
 
-                $this->printReport($results);
+                echo ConsoleCoverageRenderer::render($results, $this->consoleOutput);
 
                 if ($this->outputFile !== null || $this->githubSummaryPath !== null) {
                     $this->writeMarkdownReport($results);
@@ -125,39 +128,6 @@ final class OpenApiCoverageExtension implements Extension
             /**
              * @param array<string, array{covered: string[], uncovered: string[], total: int, coveredCount: int}> $results
              */
-            private function printReport(array $results): void
-            {
-                echo "\n\n";
-                echo "OpenAPI Contract Test Coverage\n";
-                echo str_repeat('=', 50) . "\n";
-
-                foreach ($results as $spec => $result) {
-                    $percentage = self::percentage($result['coveredCount'], $result['total']);
-
-                    echo "\n[{$spec}] {$result['coveredCount']}/{$result['total']} endpoints ({$percentage}%)\n";
-                    echo str_repeat('-', 50) . "\n";
-
-                    if ($result['covered'] !== []) {
-                        echo "Covered:\n";
-
-                        foreach ($result['covered'] as $endpoint) {
-                            echo "  ✓ {$endpoint}\n";
-                        }
-                    }
-
-                    $uncoveredCount = $result['total'] - $result['coveredCount'];
-
-                    if ($uncoveredCount > 0) {
-                        echo "Uncovered: {$uncoveredCount} endpoints\n";
-                    }
-                }
-
-                echo "\n";
-            }
-
-            /**
-             * @param array<string, array{covered: string[], uncovered: string[], total: int, coveredCount: int}> $results
-             */
             private function writeMarkdownReport(array $results): void
             {
                 $markdown = MarkdownCoverageRenderer::render($results);
@@ -177,11 +147,6 @@ final class OpenApiCoverageExtension implements Extension
                         fwrite(STDERR, "[OpenAPI Coverage] WARNING: Failed to append Markdown report to GITHUB_STEP_SUMMARY ({$this->githubSummaryPath})\n");
                     }
                 }
-            }
-
-            private static function percentage(int $covered, int $total): float|int
-            {
-                return $total > 0 ? round($covered / $total * 100, 1) : 0;
             }
         });
     }
