@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\PHPUnit;
 
+use function count;
 use function round;
 use function str_repeat;
 
@@ -27,13 +28,12 @@ final class ConsoleCoverageRenderer
 
         foreach ($results as $spec => $result) {
             $percentage = self::percentage($result['coveredCount'], $result['total']);
-            $uncoveredCount = $result['total'] - $result['coveredCount'];
 
             $output .= "\n[{$spec}] {$result['coveredCount']}/{$result['total']} endpoints ({$percentage}%)\n";
             $output .= str_repeat('-', 50) . "\n";
 
-            $output .= self::renderCovered($result, $consoleOutput, $uncoveredCount);
-            $output .= self::renderUncovered($result, $consoleOutput, $uncoveredCount);
+            $output .= self::renderCovered($result, $consoleOutput);
+            $output .= self::renderUncovered($result, $consoleOutput);
         }
 
         $output .= "\n";
@@ -44,7 +44,7 @@ final class ConsoleCoverageRenderer
     /**
      * @param CoverageResult $result
      */
-    private static function renderCovered(array $result, ConsoleOutput $consoleOutput, int $uncoveredCount): string
+    private static function renderCovered(array $result, ConsoleOutput $consoleOutput): string
     {
         if ($result['covered'] === []) {
             return '';
@@ -66,11 +66,13 @@ final class ConsoleCoverageRenderer
     /**
      * @param CoverageResult $result
      */
-    private static function renderUncovered(array $result, ConsoleOutput $consoleOutput, int $uncoveredCount): string
+    private static function renderUncovered(array $result, ConsoleOutput $consoleOutput): string
     {
-        if ($uncoveredCount <= 0) {
+        if ($result['uncovered'] === []) {
             return '';
         }
+
+        $uncoveredCount = count($result['uncovered']);
 
         if ($consoleOutput === ConsoleOutput::DEFAULT) {
             return "Uncovered: {$uncoveredCount} endpoints\n";

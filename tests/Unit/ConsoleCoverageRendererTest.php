@@ -223,6 +223,62 @@ class ConsoleCoverageRendererTest extends TestCase
     }
 
     #[Test]
+    public function render_zero_coverage_all_mode_shows_uncovered_list_only(): void
+    {
+        $results = [
+            'front' => [
+                'covered' => [],
+                'uncovered' => ['GET /v1/pets', 'POST /v1/pets'],
+                'total' => 2,
+                'coveredCount' => 0,
+            ],
+        ];
+
+        $output = ConsoleCoverageRenderer::render($results, ConsoleOutput::ALL);
+
+        $this->assertStringContainsString('[front] 0/2 endpoints (0%)', $output);
+        $this->assertStringNotContainsString('Covered', $output);
+        $this->assertStringContainsString('Uncovered:', $output);
+        $this->assertStringContainsString('  ✗ GET /v1/pets', $output);
+    }
+
+    #[Test]
+    public function render_full_coverage_uncovered_only_mode_shows_covered_count_only(): void
+    {
+        $results = [
+            'front' => [
+                'covered' => ['GET /v1/pets', 'POST /v1/pets'],
+                'uncovered' => [],
+                'total' => 2,
+                'coveredCount' => 2,
+            ],
+        ];
+
+        $output = ConsoleCoverageRenderer::render($results, ConsoleOutput::UNCOVERED_ONLY);
+
+        $this->assertStringContainsString('Covered: 2 endpoints', $output);
+        $this->assertStringNotContainsString('  ✓', $output);
+        $this->assertStringNotContainsString('Uncovered', $output);
+    }
+
+    #[Test]
+    public function render_percentage_rounds_to_one_decimal_place(): void
+    {
+        $results = [
+            'front' => [
+                'covered' => ['GET /v1/pets'],
+                'uncovered' => ['POST /v1/pets', 'DELETE /v1/pets/{petId}'],
+                'total' => 3,
+                'coveredCount' => 1,
+            ],
+        ];
+
+        $output = ConsoleCoverageRenderer::render($results);
+
+        $this->assertStringContainsString('[front] 1/3 endpoints (33.3%)', $output);
+    }
+
+    #[Test]
     public function render_spec_with_zero_endpoints(): void
     {
         $results = [
