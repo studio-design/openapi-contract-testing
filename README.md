@@ -62,6 +62,7 @@ Add the coverage extension to your `phpunit.xml`:
 | `strip_prefixes` | No | `[]` | Comma-separated prefixes to strip from request paths (e.g., `/api`) |
 | `specs` | No | `front` | Comma-separated spec names for coverage tracking |
 | `output_file` | No | — | File path to write Markdown coverage report (relative paths resolve from `getcwd()`) |
+| `console_output` | No | `default` | Console output mode: `default`, `all`, or `uncovered_only` (overridden by `OPENAPI_CONSOLE_OUTPUT` env var) |
 
 *Not required if you call `OpenApiSpecLoader::configure()` manually.
 
@@ -163,7 +164,11 @@ For Laravel, set the `max_errors` key in `config/openapi-contract-testing.php`.
 
 ## Coverage Report
 
-After running tests, the PHPUnit extension prints a coverage report:
+After running tests, the PHPUnit extension prints a coverage report. The output format is controlled by the `console_output` parameter (or `OPENAPI_CONSOLE_OUTPUT` environment variable).
+
+### `default` mode (default)
+
+Shows covered endpoints individually and uncovered as a count:
 
 ```
 OpenAPI Contract Test Coverage
@@ -177,6 +182,56 @@ Covered:
   ✓ GET /v1/pets/{petId}
   ✓ DELETE /v1/pets/{petId}
 Uncovered: 41 endpoints
+```
+
+### `all` mode
+
+Shows both covered and uncovered endpoints individually:
+
+```
+OpenAPI Contract Test Coverage
+==================================================
+
+[front] 12/45 endpoints (26.7%)
+--------------------------------------------------
+Covered:
+  ✓ GET /v1/pets
+  ✓ POST /v1/pets
+  ✓ GET /v1/pets/{petId}
+  ✓ DELETE /v1/pets/{petId}
+Uncovered:
+  ✗ PUT /v1/pets/{petId}
+  ✗ GET /v1/owners
+  ...
+```
+
+### `uncovered_only` mode
+
+Shows uncovered endpoints individually and covered as a count — useful for large APIs where you want to focus on missing coverage:
+
+```
+OpenAPI Contract Test Coverage
+==================================================
+
+[front] 12/45 endpoints (26.7%)
+--------------------------------------------------
+Covered: 12 endpoints
+Uncovered:
+  ✗ PUT /v1/pets/{petId}
+  ✗ GET /v1/owners
+  ...
+```
+
+You can set the mode via `phpunit.xml`:
+
+```xml
+<parameter name="console_output" value="uncovered_only"/>
+```
+
+Or via environment variable (takes priority over `phpunit.xml`):
+
+```bash
+OPENAPI_CONSOLE_OUTPUT=uncovered_only vendor/bin/phpunit
 ```
 
 ## CI Integration
@@ -199,6 +254,15 @@ Use the `output_file` parameter to write a Markdown report to a file. This is us
         <parameter name="output_file" value="coverage-report.md"/>
     </bootstrap>
 </extensions>
+```
+
+You can also use the `OPENAPI_CONSOLE_OUTPUT` environment variable in CI to show uncovered endpoints in the job log:
+
+```yaml
+- name: Run tests (show uncovered endpoints)
+  run: vendor/bin/phpunit
+  env:
+    OPENAPI_CONSOLE_OUTPUT: uncovered_only
 ```
 
 Example GitHub Actions workflow step to post the report as a PR comment:
