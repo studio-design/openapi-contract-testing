@@ -19,17 +19,4 @@ parameters:
             path: src/Laravel/OpenApiContractTestingServiceProvider.php
         -
             message: '#does not specify its types: TResponse#'
-            paths:
-                - src/Laravel/ValidatesOpenApiSchema.php
-                - tests/Unit/ValidatesOpenApiSchemaTest.php
-                - tests/Unit/ValidatesOpenApiSchemaDefaultSpecTest.php
-        -
-            message: '#expects TResponse of Symfony\\Component\\HttpFoundation\\Response#'
-            paths:
-                - tests/Unit/ValidatesOpenApiSchemaTest.php
-                - tests/Unit/ValidatesOpenApiSchemaDefaultSpecTest.php
-        -
-            message: '#class@anonymous/tests/Helpers/CreatesTestResponse\.php.*no value type specified in iterable type array#'
-            paths:
-                - tests/Unit/ValidatesOpenApiSchemaTest.php
-                - tests/Unit/ValidatesOpenApiSchemaDefaultSpecTest.php
+            path: src/Laravel/ValidatesOpenApiSchema.php

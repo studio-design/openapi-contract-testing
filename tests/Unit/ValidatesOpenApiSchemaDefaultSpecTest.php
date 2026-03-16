@@ -77,7 +77,8 @@ class ValidatesOpenApiSchemaDefaultSpecTest extends TestCase
         $this->expectException(AssertionFailedError::class);
         $this->expectExceptionMessage(
             'openApiSpec() must return a non-empty spec name, but an empty string was returned. '
-            . 'Either override openApiSpec() in your test class, or set the "default_spec" key '
+            . 'Either add #[OpenApiSpec(\'your-spec\')] to your test class or method, '
+            . 'override openApiSpec() in your test class, or set the "default_spec" key '
             . 'in config/openapi-contract-testing.php.',
         );
 

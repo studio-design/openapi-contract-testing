@@ -9,6 +9,7 @@ use JsonException;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+use Studio\OpenApiContractTesting\OpenApiSpecResolver;
 
 use function is_numeric;
 use function is_string;
@@ -17,6 +18,8 @@ use function strtolower;
 
 trait ValidatesOpenApiSchema
 {
+    use OpenApiSpecResolver;
+
     protected function openApiSpec(): string
     {
         $spec = config('openapi-contract-testing.default_spec');
@@ -28,16 +31,22 @@ trait ValidatesOpenApiSchema
         return $spec;
     }
 
+    protected function openApiSpecFallback(): string
+    {
+        return $this->openApiSpec();
+    }
+
     protected function assertResponseMatchesOpenApiSchema(
         TestResponse $response,
         ?HttpMethod $method = null,
         ?string $path = null,
     ): void {
-        $specName = $this->openApiSpec();
+        $specName = $this->resolveOpenApiSpec();
         if ($specName === '') {
             $this->fail(
                 'openApiSpec() must return a non-empty spec name, but an empty string was returned. '
-                . 'Either override openApiSpec() in your test class, or set the "default_spec" key '
+                . 'Either add #[OpenApiSpec(\'your-spec\')] to your test class or method, '
+                . 'override openApiSpec() in your test class, or set the "default_spec" key '
                 . 'in config/openapi-contract-testing.php.',
             );
         }
