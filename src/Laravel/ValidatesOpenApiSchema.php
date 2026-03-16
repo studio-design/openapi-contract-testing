@@ -6,11 +6,10 @@ namespace Studio\OpenApiContractTesting\Laravel;
 
 use Illuminate\Testing\TestResponse;
 use JsonException;
-use ReflectionClass;
-use ReflectionMethod;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+use Studio\OpenApiContractTesting\OpenApiSpecResolver;
 
 use function is_numeric;
 use function is_string;
@@ -19,6 +18,8 @@ use function strtolower;
 
 trait ValidatesOpenApiSchema
 {
+    use OpenApiSpecResolver;
+
     protected function openApiSpec(): string
     {
         $spec = config('openapi-contract-testing.default_spec');
@@ -28,6 +29,11 @@ trait ValidatesOpenApiSchema
         }
 
         return $spec;
+    }
+
+    protected function openApiSpecFallback(): string
+    {
+        return $this->openApiSpec();
     }
 
     protected function assertResponseMatchesOpenApiSchema(
@@ -84,27 +90,6 @@ trait ValidatesOpenApiSchema
             "OpenAPI schema validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"
             . $result->errorMessage(),
         );
-    }
-
-    private function resolveOpenApiSpec(): string
-    {
-        // 1. Method-level #[OpenApiSpec] attribute
-        $methodName = $this->name(); // @phpstan-ignore method.notFound
-        $refMethod = new ReflectionMethod($this, $methodName);
-        $methodAttrs = $refMethod->getAttributes(OpenApiSpec::class);
-        if ($methodAttrs !== []) {
-            return $methodAttrs[0]->newInstance()->name;
-        }
-
-        // 2. Class-level #[OpenApiSpec] attribute
-        $refClass = new ReflectionClass($this);
-        $classAttrs = $refClass->getAttributes(OpenApiSpec::class);
-        if ($classAttrs !== []) {
-            return $classAttrs[0]->newInstance()->name;
-        }
-
-        // 3. openApiSpec() method override / config default
-        return $this->openApiSpec();
     }
 
     /** @return null|array<string, mixed> */

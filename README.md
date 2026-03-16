@@ -109,7 +109,7 @@ class GetPetsTest extends TestCase
 To use a different spec for a specific test class, add the `#[OpenApiSpec]` attribute:
 
 ```php
-use Studio\OpenApiContractTesting\Laravel\OpenApiSpec;
+use Studio\OpenApiContractTesting\OpenApiSpec;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 
 #[OpenApiSpec('admin')]
@@ -152,6 +152,38 @@ Resolution priority (highest to lowest):
 > **Note:** You can still override `openApiSpec()` as before — it remains fully backward-compatible.
 
 #### Framework-agnostic
+
+You can use the `#[OpenApiSpec]` attribute with the `OpenApiSpecResolver` trait in any PHPUnit test:
+
+```php
+use Studio\OpenApiContractTesting\OpenApiSpec;
+use Studio\OpenApiContractTesting\OpenApiSpecResolver;
+use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+
+#[OpenApiSpec('front')]
+class GetPetsTest extends TestCase
+{
+    use OpenApiSpecResolver;
+
+    public function test_list_pets(): void
+    {
+        $specName = $this->resolveOpenApiSpec(); // 'front'
+        $validator = new OpenApiResponseValidator();
+        $result = $validator->validate(
+            specName: $specName,
+            method: 'GET',
+            requestPath: '/api/v1/pets',
+            statusCode: 200,
+            responseBody: $decodedJsonBody,
+            responseContentType: 'application/json',
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+}
+```
+
+Or without the attribute, pass the spec name directly:
 
 ```php
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;

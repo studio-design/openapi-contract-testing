@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Laravel;
+namespace Studio\OpenApiContractTesting;
 
 use Attribute;
 
