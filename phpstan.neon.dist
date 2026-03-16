@@ -23,13 +23,16 @@ parameters:
                 - src/Laravel/ValidatesOpenApiSchema.php
                 - tests/Unit/ValidatesOpenApiSchemaTest.php
                 - tests/Unit/ValidatesOpenApiSchemaDefaultSpecTest.php
+                - tests/Unit/ValidatesOpenApiSchemaAttributeTest.php
         -
             message: '#expects TResponse of Symfony\\Component\\HttpFoundation\\Response#'
             paths:
                 - tests/Unit/ValidatesOpenApiSchemaTest.php
                 - tests/Unit/ValidatesOpenApiSchemaDefaultSpecTest.php
+                - tests/Unit/ValidatesOpenApiSchemaAttributeTest.php
         -
             message: '#class@anonymous/tests/Helpers/CreatesTestResponse\.php.*no value type specified in iterable type array#'
             paths:
                 - tests/Unit/ValidatesOpenApiSchemaTest.php
                 - tests/Unit/ValidatesOpenApiSchemaDefaultSpecTest.php
+                - tests/Unit/ValidatesOpenApiSchemaAttributeTest.php
