@@ -6,6 +6,8 @@ namespace Studio\OpenApiContractTesting\Laravel;
 
 use Illuminate\Testing\TestResponse;
 use JsonException;
+use ReflectionClass;
+use ReflectionMethod;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
@@ -33,11 +35,12 @@ trait ValidatesOpenApiSchema
         ?HttpMethod $method = null,
         ?string $path = null,
     ): void {
-        $specName = $this->openApiSpec();
+        $specName = $this->resolveOpenApiSpec();
         if ($specName === '') {
             $this->fail(
                 'openApiSpec() must return a non-empty spec name, but an empty string was returned. '
-                . 'Either override openApiSpec() in your test class, or set the "default_spec" key '
+                . 'Either add #[OpenApiSpec(\'your-spec\')] to your test class or method, '
+                . 'override openApiSpec() in your test class, or set the "default_spec" key '
                 . 'in config/openapi-contract-testing.php.',
             );
         }
@@ -81,6 +84,27 @@ trait ValidatesOpenApiSchema
             "OpenAPI schema validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"
             . $result->errorMessage(),
         );
+    }
+
+    private function resolveOpenApiSpec(): string
+    {
+        // 1. Method-level #[OpenApiSpec] attribute
+        $methodName = $this->name(); // @phpstan-ignore method.notFound
+        $refMethod = new ReflectionMethod($this, $methodName);
+        $methodAttrs = $refMethod->getAttributes(OpenApiSpec::class);
+        if ($methodAttrs !== []) {
+            return $methodAttrs[0]->newInstance()->name;
+        }
+
+        // 2. Class-level #[OpenApiSpec] attribute
+        $refClass = new ReflectionClass($this);
+        $classAttrs = $refClass->getAttributes(OpenApiSpec::class);
+        if ($classAttrs !== []) {
+            return $classAttrs[0]->newInstance()->name;
+        }
+
+        // 3. openApiSpec() method override / config default
+        return $this->openApiSpec();
     }
 
     /** @return null|array<string, mixed> */
