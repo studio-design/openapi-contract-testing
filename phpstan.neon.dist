@@ -3,20 +3,6 @@ parameters:
     paths:
         - src
         - tests
+    excludePaths:
+        - src/Laravel
     tmpDir: .phpstan.cache
-    ignoreErrors:
-        -
-            message: '#Function (app|config) not found#'
-            path: src/Laravel/ValidatesOpenApiSchema.php
-        -
-            message: '#Call to an undefined method Illuminate\\Testing\\TestResponse::#'
-            path: src/Laravel/ValidatesOpenApiSchema.php
-        -
-            message: '#Access to an undefined property Illuminate\\Testing\\TestResponse::\$headers#'
-            path: src/Laravel/ValidatesOpenApiSchema.php
-        -
-            message: '#Function config_path not found#'
-            path: src/Laravel/OpenApiContractTestingServiceProvider.php
-        -
-            message: '#does not specify its types: TResponse#'
-            path: src/Laravel/ValidatesOpenApiSchema.php
