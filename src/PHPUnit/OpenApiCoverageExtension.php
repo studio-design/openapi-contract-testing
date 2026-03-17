@@ -79,6 +79,9 @@ final class OpenApiCoverageExtension implements Extension
             {
                 $results = $this->computeAllResults();
 
+                // Free cached spec data now that coverage has been computed
+                OpenApiSpecLoader::clearCache();
+
                 if ($results === []) {
                     return;
                 }
