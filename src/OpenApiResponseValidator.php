@@ -4,17 +4,17 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
-use const JSON_THROW_ON_ERROR;
 use const PHP_INT_MAX;
 
 use InvalidArgumentException;
 use Opis\JsonSchema\Errors\ErrorFormatter;
 use Opis\JsonSchema\Validator;
+use stdClass;
 
+use function array_is_list;
 use function array_keys;
 use function implode;
-use function json_decode;
-use function json_encode;
+use function is_array;
 use function sprintf;
 use function str_ends_with;
 use function strstr;
@@ -132,20 +132,8 @@ final class OpenApiResponseValidator
         $schema = $content[$jsonContentType]['schema'];
         $jsonSchema = OpenApiSchemaConverter::convert($schema, $version);
 
-        // opis/json-schema requires an object, so encode then decode
-        $schemaObject = json_decode(
-            (string) json_encode($jsonSchema, JSON_THROW_ON_ERROR),
-            false,
-            512,
-            JSON_THROW_ON_ERROR,
-        );
-
-        $dataObject = json_decode(
-            (string) json_encode($responseBody, JSON_THROW_ON_ERROR),
-            false,
-            512,
-            JSON_THROW_ON_ERROR,
-        );
+        $schemaObject = self::toObject($jsonSchema);
+        $dataObject = self::toObject($responseBody);
 
         $resolvedMaxErrors = $this->maxErrors === 0 ? PHP_INT_MAX : $this->maxErrors;
         $validator = new Validator(
@@ -169,6 +157,34 @@ final class OpenApiResponseValidator
         }
 
         return OpenApiValidationResult::failure($errors, $matchedPath);
+    }
+
+    /**
+     * Recursively convert PHP arrays to stdClass objects, matching the
+     * behaviour of json_decode(json_encode($data)) without the intermediate
+     * JSON string allocation.
+     */
+    private static function toObject(mixed $value): mixed
+    {
+        if (!is_array($value)) {
+            return $value;
+        }
+
+        if ($value === [] || array_is_list($value)) {
+            /** @var list<mixed> $value */
+            foreach ($value as $i => $item) {
+                $value[$i] = self::toObject($item);
+            }
+
+            return $value;
+        }
+
+        $object = new stdClass();
+        foreach ($value as $key => $item) {
+            $object->{$key} = self::toObject($item);
+        }
+
+        return $object;
     }
 
     /**
