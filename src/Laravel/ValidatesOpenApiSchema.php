@@ -20,12 +20,12 @@ trait ValidatesOpenApiSchema
 {
     use OpenApiSpecResolver;
     private static ?OpenApiResponseValidator $cachedValidator = null;
-    private static int $cachedMaxErrors = -1;
+    private static ?int $cachedMaxErrors = null;
 
     public static function resetValidatorCache(): void
     {
         self::$cachedValidator = null;
-        self::$cachedMaxErrors = -1;
+        self::$cachedMaxErrors = null;
     }
 
     protected function openApiSpec(): string
