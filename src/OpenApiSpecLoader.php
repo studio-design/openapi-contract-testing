@@ -79,6 +79,22 @@ final class OpenApiSpecLoader
         return $decoded;
     }
 
+    /**
+     * Clear only the cached specs, keeping basePath and stripPrefixes intact.
+     */
+    public static function clearCache(): void
+    {
+        self::$cache = [];
+    }
+
+    /**
+     * Remove a single spec from the cache.
+     */
+    public static function evict(string $specName): void
+    {
+        unset(self::$cache[$specName]);
+    }
+
     public static function reset(): void
     {
         self::$basePath = null;

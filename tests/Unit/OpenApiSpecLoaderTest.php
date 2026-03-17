@@ -105,4 +105,45 @@ class OpenApiSpecLoaderTest extends TestCase
         $this->expectException(RuntimeException::class);
         OpenApiSpecLoader::getBasePath();
     }
+
+    #[Test]
+    public function clear_cache_keeps_config(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath, ['/api']);
+
+        // Load to populate cache
+        OpenApiSpecLoader::load('petstore-3.0');
+
+        OpenApiSpecLoader::clearCache();
+
+        // Config is preserved
+        $this->assertSame($fixturesPath, OpenApiSpecLoader::getBasePath());
+        $this->assertSame(['/api'], OpenApiSpecLoader::getStripPrefixes());
+
+        // Cache is cleared — next load reads from disk again
+        $spec = OpenApiSpecLoader::load('petstore-3.0');
+        $this->assertSame('3.0.3', $spec['openapi']);
+    }
+
+    #[Test]
+    public function evict_removes_single_spec_from_cache(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        // Load two specs
+        $first30 = OpenApiSpecLoader::load('petstore-3.0');
+        $first31 = OpenApiSpecLoader::load('petstore-3.1');
+
+        // Evict only 3.0
+        OpenApiSpecLoader::evict('petstore-3.0');
+
+        // 3.1 still cached (same reference)
+        $this->assertSame($first31, OpenApiSpecLoader::load('petstore-3.1'));
+
+        // 3.0 reloaded from disk (equal but fresh instance)
+        $reloaded30 = OpenApiSpecLoader::load('petstore-3.0');
+        $this->assertSame($first30, $reloaded30);
+    }
 }
