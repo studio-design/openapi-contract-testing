@@ -19,6 +19,14 @@ use function strtolower;
 trait ValidatesOpenApiSchema
 {
     use OpenApiSpecResolver;
+    private static ?OpenApiResponseValidator $cachedValidator = null;
+    private static int $cachedMaxErrors = -1;
+
+    public static function resetValidatorCache(): void
+    {
+        self::$cachedValidator = null;
+        self::$cachedMaxErrors = -1;
+    }
 
     protected function openApiSpec(): string
     {
@@ -61,10 +69,7 @@ trait ValidatesOpenApiSchema
 
         $contentType = $response->headers->get('Content-Type', '');
 
-        $maxErrors = config('openapi-contract-testing.max_errors', 20);
-        $validator = new OpenApiResponseValidator(
-            maxErrors: is_numeric($maxErrors) ? (int) $maxErrors : 20,
-        );
+        $validator = self::getOrCreateValidator();
         $result = $validator->validate(
             $specName,
             $resolvedMethod,
@@ -90,6 +95,19 @@ trait ValidatesOpenApiSchema
             "OpenAPI schema validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"
             . $result->errorMessage(),
         );
+    }
+
+    private static function getOrCreateValidator(): OpenApiResponseValidator
+    {
+        $maxErrors = config('openapi-contract-testing.max_errors', 20);
+        $resolvedMaxErrors = is_numeric($maxErrors) ? (int) $maxErrors : 20;
+
+        if (self::$cachedValidator === null || self::$cachedMaxErrors !== $resolvedMaxErrors) {
+            self::$cachedValidator = new OpenApiResponseValidator(maxErrors: $resolvedMaxErrors);
+            self::$cachedMaxErrors = $resolvedMaxErrors;
+        }
+
+        return self::$cachedValidator;
     }
 
     /** @return null|array<string, mixed> */

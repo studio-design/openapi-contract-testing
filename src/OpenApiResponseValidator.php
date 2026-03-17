@@ -23,6 +23,11 @@ use function trim;
 
 final class OpenApiResponseValidator
 {
+    /** @var array<string, OpenApiPathMatcher> */
+    private array $pathMatchers = [];
+    private Validator $opisValidator;
+    private ErrorFormatter $errorFormatter;
+
     public function __construct(
         private readonly int $maxErrors = 20,
     ) {
@@ -31,6 +36,13 @@ final class OpenApiResponseValidator
                 sprintf('maxErrors must be 0 (unlimited) or a positive integer, got %d.', $this->maxErrors),
             );
         }
+
+        $resolvedMaxErrors = $this->maxErrors === 0 ? PHP_INT_MAX : $this->maxErrors;
+        $this->opisValidator = new Validator(
+            max_errors: $resolvedMaxErrors,
+            stop_at_first_error: $resolvedMaxErrors === 1,
+        );
+        $this->errorFormatter = new ErrorFormatter();
     }
 
     public function validate(
@@ -47,7 +59,7 @@ final class OpenApiResponseValidator
 
         /** @var string[] $specPaths */
         $specPaths = array_keys($spec['paths'] ?? []);
-        $matcher = new OpenApiPathMatcher($specPaths, OpenApiSpecLoader::getStripPrefixes());
+        $matcher = $this->getPathMatcher($specName, $specPaths);
         $matchedPath = $matcher->match($requestPath);
 
         if ($matchedPath === null) {
@@ -135,19 +147,13 @@ final class OpenApiResponseValidator
         $schemaObject = self::toObject($jsonSchema);
         $dataObject = self::toObject($responseBody);
 
-        $resolvedMaxErrors = $this->maxErrors === 0 ? PHP_INT_MAX : $this->maxErrors;
-        $validator = new Validator(
-            max_errors: $resolvedMaxErrors,
-            stop_at_first_error: $resolvedMaxErrors === 1,
-        );
-        $result = $validator->validate($dataObject, $schemaObject);
+        $result = $this->opisValidator->validate($dataObject, $schemaObject);
 
         if ($result->isValid()) {
             return OpenApiValidationResult::success($matchedPath);
         }
 
-        $formatter = new ErrorFormatter();
-        $formattedErrors = $formatter->format($result->error());
+        $formattedErrors = $this->errorFormatter->format($result->error());
 
         $errors = [];
         foreach ($formattedErrors as $path => $messages) {
@@ -185,6 +191,14 @@ final class OpenApiResponseValidator
         }
 
         return $object;
+    }
+
+    /**
+     * @param string[] $specPaths
+     */
+    private function getPathMatcher(string $specName, array $specPaths): OpenApiPathMatcher
+    {
+        return $this->pathMatchers[$specName] ??= new OpenApiPathMatcher($specPaths, OpenApiSpecLoader::getStripPrefixes());
     }
 
     /**
