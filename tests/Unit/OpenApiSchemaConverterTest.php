@@ -308,4 +308,60 @@ class OpenApiSchemaConverterTest extends TestCase
         $this->assertTrue($result['readOnly']);
         $this->assertFalse($result['writeOnly']);
     }
+
+    // ========================================
+    // Input immutability tests
+    // ========================================
+
+    #[Test]
+    public function convert_does_not_mutate_input_schema(): void
+    {
+        $schema = [
+            'type' => 'object',
+            'nullable' => true,
+            'example' => 'test',
+            'properties' => [
+                'name' => [
+                    'type' => 'string',
+                    'nullable' => true,
+                    'example' => 'John',
+                ],
+                'tags' => [
+                    'type' => 'array',
+                    'items' => [
+                        'type' => 'string',
+                        'deprecated' => true,
+                    ],
+                ],
+            ],
+        ];
+        $original = $schema;
+
+        OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
+
+        $this->assertSame($original, $schema);
+    }
+
+    #[Test]
+    public function convert_does_not_mutate_input_schema_v31(): void
+    {
+        $schema = [
+            'type' => 'object',
+            'prefixItems' => [
+                ['type' => 'string'],
+            ],
+            'examples' => [['key' => 'value']],
+            'properties' => [
+                'data' => [
+                    'type' => 'object',
+                    '$dynamicRef' => '#meta',
+                ],
+            ],
+        ];
+        $original = $schema;
+
+        OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertSame($original, $schema);
+    }
 }

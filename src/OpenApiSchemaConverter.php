@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting;
 
 use function array_is_list;
-use function array_map;
 use function is_array;
 use function is_string;
 
@@ -44,77 +43,77 @@ final class OpenApiSchemaConverter
      */
     public static function convert(array $schema, OpenApiVersion $version = OpenApiVersion::V3_0): array
     {
-        return self::convertRecursive($schema, $version);
+        self::convertInPlace($schema, $version);
+
+        return $schema;
     }
 
     /**
      * @param array<string, mixed> $schema
-     *
-     * @return array<string, mixed>
      */
-    private static function convertRecursive(array $schema, OpenApiVersion $version): array
+    private static function convertInPlace(array &$schema, OpenApiVersion $version): void
     {
         if ($version === OpenApiVersion::V3_0) {
-            $schema = self::handleNullable($schema);
-            $schema = self::removeKeys($schema, self::OPENAPI_3_0_KEYS);
+            self::handleNullable($schema);
+            self::removeKeys($schema, self::OPENAPI_3_0_KEYS);
         } else {
-            $schema = self::handlePrefixItems($schema);
-            $schema = self::removeKeys($schema, self::DRAFT_2020_12_KEYS);
+            self::handlePrefixItems($schema);
+            self::removeKeys($schema, self::DRAFT_2020_12_KEYS);
         }
 
-        $schema = self::removeKeys($schema, self::OPENAPI_COMMON_KEYS);
+        self::removeKeys($schema, self::OPENAPI_COMMON_KEYS);
 
         if (isset($schema['properties']) && is_array($schema['properties'])) {
-            foreach ($schema['properties'] as $key => $property) {
+            foreach ($schema['properties'] as &$property) {
                 if (is_array($property)) {
-                    $schema['properties'][$key] = self::convertRecursive($property, $version);
+                    self::convertInPlace($property, $version);
                 }
             }
+            unset($property);
         }
 
         if (isset($schema['items']) && is_array($schema['items'])) {
-            // items can be an array (tuple from prefixItems conversion) or an object schema
             if (array_is_list($schema['items'])) {
-                $schema['items'] = array_map(
-                    static fn(mixed $item): mixed => is_array($item) ? self::convertRecursive($item, $version) : $item,
-                    $schema['items'],
-                );
+                foreach ($schema['items'] as &$item) {
+                    if (is_array($item)) {
+                        self::convertInPlace($item, $version);
+                    }
+                }
+                unset($item);
             } else {
-                $schema['items'] = self::convertRecursive($schema['items'], $version);
+                self::convertInPlace($schema['items'], $version);
             }
         }
 
         foreach (['allOf', 'oneOf', 'anyOf'] as $combiner) {
             if (isset($schema[$combiner]) && is_array($schema[$combiner])) {
-                $schema[$combiner] = array_map(
-                    static fn(mixed $item): mixed => is_array($item) ? self::convertRecursive($item, $version) : $item,
-                    $schema[$combiner],
-                );
+                foreach ($schema[$combiner] as &$item) {
+                    if (is_array($item)) {
+                        self::convertInPlace($item, $version);
+                    }
+                }
+                unset($item);
             }
         }
 
         if (isset($schema['additionalProperties']) && is_array($schema['additionalProperties'])) {
-            $schema['additionalProperties'] = self::convertRecursive($schema['additionalProperties'], $version);
+            self::convertInPlace($schema['additionalProperties'], $version);
         }
 
         if (isset($schema['not']) && is_array($schema['not'])) {
-            $schema['not'] = self::convertRecursive($schema['not'], $version);
+            self::convertInPlace($schema['not'], $version);
         }
-
-        return $schema;
     }
 
     /**
      * Convert OpenAPI 3.0 nullable to JSON Schema compatible type.
      *
      * @param array<string, mixed> $schema
-     *
-     * @return array<string, mixed>
      */
-    private static function handleNullable(array $schema): array
+    private static function handleNullable(array &$schema): void
     {
         if (!isset($schema['nullable']) || $schema['nullable'] !== true) {
-            return $schema;
+            return;
         }
 
         unset($schema['nullable']);
@@ -122,14 +121,14 @@ final class OpenApiSchemaConverter
         if (isset($schema['type']) && is_string($schema['type'])) {
             $schema['type'] = [$schema['type'], 'null'];
 
-            return $schema;
+            return;
         }
 
         foreach (['oneOf', 'anyOf'] as $combiner) {
             if (isset($schema[$combiner]) && is_array($schema[$combiner])) {
                 $schema[$combiner][] = ['type' => 'null'];
 
-                return $schema;
+                return;
             }
         }
 
@@ -140,42 +139,30 @@ final class OpenApiSchemaConverter
                 ['allOf' => $allOf],
                 ['type' => 'null'],
             ];
-
-            return $schema;
         }
-
-        return $schema;
     }
 
     /**
      * Convert Draft 2020-12 prefixItems to Draft 07 items array (tuple validation).
      *
      * @param array<string, mixed> $schema
-     *
-     * @return array<string, mixed>
      */
-    private static function handlePrefixItems(array $schema): array
+    private static function handlePrefixItems(array &$schema): void
     {
         if (isset($schema['prefixItems']) && is_array($schema['prefixItems'])) {
             $schema['items'] = $schema['prefixItems'];
             unset($schema['prefixItems']);
         }
-
-        return $schema;
     }
 
     /**
      * @param array<string, mixed> $schema
      * @param string[] $keys
-     *
-     * @return array<string, mixed>
      */
-    private static function removeKeys(array $schema, array $keys): array
+    private static function removeKeys(array &$schema, array $keys): void
     {
         foreach ($keys as $key) {
             unset($schema[$key]);
         }
-
-        return $schema;
     }
 }
