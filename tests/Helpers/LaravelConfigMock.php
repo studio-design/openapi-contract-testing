@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Laravel;
 
-use Throwable;
+use Illuminate\Container\Container;
 
 use function array_key_exists;
-use function function_exists;
+use function class_exists;
 
 /**
  * Namespace-level config() mock for unit testing.
@@ -29,11 +29,16 @@ use function function_exists;
  * Resolution order:
  * 1. A unit-test override in $GLOBALS['__openapi_testing_config'] wins — unit
  *    tests set this explicitly to control what the trait sees.
- * 2. Otherwise, defer to the real framework helper when an app is running
- *    (integration tests using orchestra/testbench). The global helper is
- *    invoked via a variable function to bypass both PHP namespace resolution
- *    (which would recurse into this mock) and cs-fixer's global_namespace_import
- *    rule (which would strip a leading backslash and break the call).
+ * 2. When a Laravel container is bootstrapped and has a "config" binding (i.e.
+ *    integration tests using orchestra/testbench), delegate to the framework's
+ *    config() helper via a variable function. The variable call avoids both
+ *    PHP namespace resolution (which would recurse into this mock) and any
+ *    future auto-import of the global \config() by cs-fixer's
+ *    global_namespace_import rule (which would add a "use function config;"
+ *    and re-break this mock for the same reason as a manual import).
+ * 3. Otherwise (pure unit tests with no booted app), return the provided
+ *    default. The container-bound check avoids swallowing real binding errors:
+ *    only an unbootstrapped container falls through here.
  */
 function config(string $key, mixed $default = null): mixed
 {
@@ -44,14 +49,10 @@ function config(string $key, mixed $default = null): mixed
         return $GLOBALS['__openapi_testing_config'][$key];
     }
 
-    if (function_exists('config')) {
+    if (class_exists(Container::class) && Container::getInstance()->bound('config')) {
         $globalConfig = 'config';
 
-        try {
-            return $globalConfig($key, $default);
-        } catch (Throwable) {
-            return $default;
-        }
+        return $globalConfig($key, $default);
     }
 
     return $default;
