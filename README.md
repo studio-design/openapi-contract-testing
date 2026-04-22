@@ -284,13 +284,14 @@ class ExperimentalApiTest extends TestCase
 }
 ```
 
-The attribute can also be applied at the class level to skip every method in that class. Method-level attributes take precedence over class-level ones (the `reason` of the method-level attribute wins).
+The attribute can also be applied at the class level to skip every method in that class. A method-level `#[SkipOpenApi]` fully shadows the class-level one — only the method-level attribute (and its `reason`) is inspected.
 
 Notes:
 
-- `#[SkipOpenApi]` suppresses auto-assert **only**. Explicit calls to `assertResponseMatchesOpenApiSchema()` still run — the assertion is the user's direct intent.
-- When auto-assert is skipped, no coverage is recorded for that request (the endpoint is treated as uncovered in the report).
-- If a test is marked `#[SkipOpenApi]` and still calls `assertResponseMatchesOpenApiSchema()` explicitly, a `E_USER_DEPRECATED` warning is emitted to flag the contradictory intent. The assertion is not suppressed — fix the cause by removing either the attribute or the explicit call.
+- `#[SkipOpenApi]` suppresses **auto-assert only**. Explicit calls to `assertResponseMatchesOpenApiSchema()` still run — the assertion is the user's direct intent.
+- When auto-assert is skipped and no explicit assertion is made, no coverage is recorded for that request (the endpoint is treated as uncovered in the report). If you call `assertResponseMatchesOpenApiSchema()` explicitly on a skipped test, validation runs and coverage is recorded as usual.
+- If a test is marked `#[SkipOpenApi]` and still calls `assertResponseMatchesOpenApiSchema()` explicitly, an advisory warning is written to `STDERR` and a user deprecation is raised to flag the contradictory intent. The assertion is not suppressed — fix the cause by removing either the attribute or the explicit call.
+- The attribute is resolved via reflection on the direct class only; a class-level `#[SkipOpenApi]` on an abstract parent is **not** inherited by subclasses. Apply the attribute on each concrete test class (or per method) instead.
 
 ## Coverage Report
 
