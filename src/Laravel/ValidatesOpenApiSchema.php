@@ -14,6 +14,7 @@ use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecResolver;
+use Studio\OpenApiContractTesting\SkipOpenApi;
 use Studio\OpenApiContractTesting\SkipOpenApiResolver;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -93,9 +94,8 @@ trait ValidatesOpenApiSchema
 
         // #[SkipOpenApi] opts the test out of auto-assert entirely — no
         // validation, no coverage recording. Explicit calls to
-        // assertResponseMatchesOpenApiSchema() are not affected here; they
-        // still run but emit a warning so contradictory intent is visible.
-        if ($this->shouldSkipOpenApi()) {
+        // assertResponseMatchesOpenApiSchema() still run but emit a warning.
+        if ($this->findSkipOpenApiAttribute() !== null) {
             return;
         }
 
@@ -123,8 +123,9 @@ trait ValidatesOpenApiSchema
         ?HttpMethod $method = null,
         ?string $path = null,
     ): void {
-        if ($this->shouldSkipOpenApi()) {
-            $this->emitSkipOpenApiWarning();
+        $skipAttribute = $this->findSkipOpenApiAttribute();
+        if ($skipAttribute !== null) {
+            $this->emitSkipOpenApiWarning($skipAttribute);
         }
 
         $resolvedMethod = $method !== null ? $method->value : app('request')->getMethod();
@@ -215,9 +216,9 @@ trait ValidatesOpenApiSchema
         return self::$cachedValidator;
     }
 
-    private function emitSkipOpenApiWarning(): void
+    private function emitSkipOpenApiWarning(SkipOpenApi $attribute): void
     {
-        $reason = $this->resolveSkipOpenApiReason();
+        $reason = $attribute->reason;
         $message = sprintf(
             '%s::%s is marked #[SkipOpenApi%s] but called assertResponseMatchesOpenApiSchema() explicitly. '
             . 'The assertion will run. Remove the attribute or the explicit call to clarify intent.',
