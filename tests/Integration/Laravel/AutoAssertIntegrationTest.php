@@ -179,6 +179,21 @@ class AutoAssertIntegrationTest extends TestCase
         $this->assertArrayNotHasKey('petstore-3.0', OpenApiCoverageTracker::getCovered());
     }
 
+    #[Test]
+    #[SkipOpenApi]
+    public function skip_open_api_attribute_opts_post_out_of_auto_assert(): void
+    {
+        // Guard against a regression that only checks skip on GET. The hook
+        // is verb-agnostic in theory, but a bug that validated POST bodies
+        // before consulting skip would only be caught here.
+        config()->set('openapi-contract-testing.auto_assert', true);
+
+        $response = $this->postJson('/v1/pets', ['name' => 'Buddy']);
+        $response->assertCreated();
+
+        $this->assertArrayNotHasKey('petstore-3.0', OpenApiCoverageTracker::getCovered());
+    }
+
     /** @return array<int, class-string> */
     protected function getPackageProviders($app): array
     {

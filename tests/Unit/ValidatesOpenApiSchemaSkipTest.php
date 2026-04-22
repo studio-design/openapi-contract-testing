@@ -118,4 +118,21 @@ class ValidatesOpenApiSchemaSkipTest extends TestCase
 
         $this->assertSame([], $this->capturedWarnings);
     }
+
+    #[Test]
+    #[SkipOpenApi(reason: 'intentional violation test')]
+    public function warning_message_includes_reason_when_provided(): void
+    {
+        $body = (string) json_encode(
+            ['data' => [['id' => 1, 'name' => 'Fido', 'tag' => null]]],
+            JSON_THROW_ON_ERROR,
+        );
+        $response = $this->makeTestResponse($body, 200);
+
+        $this->assertResponseMatchesOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
+
+        $this->assertCount(1, $this->capturedWarnings);
+        // Formatted via var_export so the reason value is quoted verbatim.
+        $this->assertStringContainsString("(reason: 'intentional violation test')", $this->capturedWarnings[0]);
+    }
 }
