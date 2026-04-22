@@ -7,6 +7,7 @@ namespace Studio\OpenApiContractTesting\Laravel;
 use const E_USER_DEPRECATED;
 use const FILTER_NULL_ON_FAILURE;
 use const FILTER_VALIDATE_BOOLEAN;
+use const STDERR;
 
 use Illuminate\Testing\TestResponse;
 use JsonException;
@@ -21,6 +22,7 @@ use Symfony\Component\HttpFoundation\Response;
 use WeakMap;
 
 use function filter_var;
+use function fwrite;
 use function get_debug_type;
 use function is_numeric;
 use function is_string;
@@ -42,11 +44,13 @@ trait ValidatesOpenApiSchema
     private static ?WeakMap $validatedResponses = null;
 
     /**
-     * Swap the handler that receives "#[SkipOpenApi] + explicit assert" warnings.
-     * Defaults to emitting an E_USER_DEPRECATED via trigger_error() so PHPUnit
-     * surfaces it in the run summary without failing the test (option A
-     * semantics: explicit calls always run; the warning is only a nudge).
-     * Tests can swap it to capture warnings in-memory.
+     * Receives the warning emitted when a test marked #[SkipOpenApi] still
+     * calls assertResponseMatchesOpenApiSchema() explicitly. The explicit
+     * assertion always runs regardless — this is an advisory nudge that the
+     * two signals contradict each other.
+     *
+     * Defaults to writing to STDERR and emitting an E_USER_DEPRECATED via
+     * trigger_error(). Tests can swap it to capture warnings in-memory.
      *
      * @var null|callable(string): void
      */
@@ -234,6 +238,13 @@ trait ValidatesOpenApiSchema
             return;
         }
 
+        // STDERR guarantees the message body is visible in CI regardless of
+        // PHPUnit's `displayDetailsOnTestsThatTriggerDeprecations` setting —
+        // without it, the default config would only show a "1 deprecation"
+        // tally and hide the actual contradictory-intent message.
+        fwrite(STDERR, sprintf("\n[openapi-contract-testing] %s\n", $message));
+        // trigger_error still fires so PHPUnit counts the deprecation and
+        // surfaces it in the run summary for downstream tools to detect.
         trigger_error($message, E_USER_DEPRECATED);
     }
 
