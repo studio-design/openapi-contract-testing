@@ -94,7 +94,6 @@ class ValidatesOpenApiSchemaAutoAssertTest extends TestCase
         $body = (string) json_encode(['wrong_key' => 'value'], JSON_THROW_ON_ERROR);
         $response = $this->makeTestResponse($body, 200);
 
-        // No exception expected — validation is skipped.
         $this->maybeAutoAssertOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
 
         $covered = OpenApiCoverageTracker::getCovered();
@@ -104,7 +103,6 @@ class ValidatesOpenApiSchemaAutoAssertTest extends TestCase
     #[Test]
     public function auto_assert_not_set_skips_validation_for_invalid_response(): void
     {
-        // No auto_assert config key present — default should be false.
         $body = (string) json_encode(['wrong_key' => 'value'], JSON_THROW_ON_ERROR);
         $response = $this->makeTestResponse($body, 200);
 
@@ -115,7 +113,45 @@ class ValidatesOpenApiSchemaAutoAssertTest extends TestCase
     }
 
     #[Test]
-    public function double_manual_assert_is_idempotent(): void
+    public function auto_assert_with_non_bool_value_fails_loudly(): void
+    {
+        // A user who mis-configures auto_assert (e.g. via env without cast)
+        // should see a loud failure, not a silent skip.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_assert'] = 'yolo';
+
+        $body = (string) json_encode(
+            ['data' => [['id' => 1, 'name' => 'Fido', 'tag' => null]]],
+            JSON_THROW_ON_ERROR,
+        );
+        $response = $this->makeTestResponse($body, 200);
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('auto_assert must be a boolean');
+
+        $this->maybeAutoAssertOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
+    }
+
+    #[Test]
+    public function auto_assert_with_truthy_string_validates(): void
+    {
+        // env('X') returns strings; "true" must be treated as truthy so that
+        // `'auto_assert' => env('AUTO_ASSERT')` (the idiomatic Laravel
+        // pattern) works without an explicit cast.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_assert'] = 'true';
+
+        $body = (string) json_encode(
+            ['data' => [['id' => 1, 'name' => 'Fido', 'tag' => null]]],
+            JSON_THROW_ON_ERROR,
+        );
+        $response = $this->makeTestResponse($body, 200);
+
+        $this->maybeAutoAssertOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
+
+        $this->assertArrayHasKey('petstore-3.0', OpenApiCoverageTracker::getCovered());
+    }
+
+    #[Test]
+    public function double_manual_assert_with_same_signature_is_idempotent(): void
     {
         $body = (string) json_encode(
             ['data' => [['id' => 1, 'name' => 'Fido', 'tag' => null]]],
@@ -128,15 +164,11 @@ class ValidatesOpenApiSchemaAutoAssertTest extends TestCase
 
         $covered = OpenApiCoverageTracker::getCovered();
         $this->assertArrayHasKey('petstore-3.0', $covered);
-        $this->assertCount(
-            1,
-            $covered['petstore-3.0'],
-            'Coverage entries should not be duplicated when the same response is validated twice.',
-        );
+        $this->assertCount(1, $covered['petstore-3.0']);
     }
 
     #[Test]
-    public function manual_assert_then_auto_assert_is_idempotent(): void
+    public function manual_then_auto_assert_with_same_signature_is_idempotent(): void
     {
         $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_assert'] = true;
 
@@ -147,27 +179,19 @@ class ValidatesOpenApiSchemaAutoAssertTest extends TestCase
         $response = $this->makeTestResponse($body, 200);
 
         $this->assertResponseMatchesOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
+        $countBefore = count(OpenApiCoverageTracker::getCovered()['petstore-3.0'] ?? []);
 
-        $coveredBefore = OpenApiCoverageTracker::getCovered();
-        $countBefore = count($coveredBefore['petstore-3.0'] ?? []);
-
-        // A subsequent auto-assert on the same response must not re-validate or
-        // re-record coverage.
         $this->maybeAutoAssertOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
 
-        $coveredAfter = OpenApiCoverageTracker::getCovered();
-        $this->assertCount($countBefore, $coveredAfter['petstore-3.0'] ?? []);
+        $this->assertCount($countBefore, OpenApiCoverageTracker::getCovered()['petstore-3.0'] ?? []);
     }
 
     #[Test]
-    public function auto_assert_then_manual_assert_does_not_raise_for_invalid_response(): void
+    public function auto_then_manual_assert_with_same_signature_does_not_duplicate_coverage(): void
     {
-        // When auto-assert has already failed (and been caught), a manual
-        // assert on the same response instance should no-op so the same error
-        // is not reported twice. We simulate this by recording the response as
-        // validated via a successful auto-assert first, then calling the
-        // manual API — which would normally raise on a subsequent mismatch —
-        // expecting no exception because the response is already marked.
+        // After a successful auto-assert, a manual call with the matching
+        // (method, path) signature must no-op — no second validator run,
+        // no second coverage entry.
         $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_assert'] = true;
 
         $body = (string) json_encode(
@@ -177,11 +201,27 @@ class ValidatesOpenApiSchemaAutoAssertTest extends TestCase
         $response = $this->makeTestResponse($body, 200);
 
         $this->maybeAutoAssertOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
-        // Calling manual assert afterwards must not throw or add another
-        // coverage entry.
         $this->assertResponseMatchesOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
 
-        $covered = OpenApiCoverageTracker::getCovered();
-        $this->assertCount(1, $covered['petstore-3.0'] ?? []);
+        $this->assertCount(1, OpenApiCoverageTracker::getCovered()['petstore-3.0'] ?? []);
+    }
+
+    #[Test]
+    public function manual_assert_with_different_method_path_re_validates_same_response(): void
+    {
+        // Idempotency is keyed on (spec, method, path) — a second call with
+        // different (method, path) must re-validate, not silently no-op.
+        // We prove this by making the second call one that SHOULD fail:
+        // if idempotency wrongly skipped it, no exception would be raised.
+        //
+        // The empty 204 body validates against DELETE /v1/pets/{petId} but
+        // does NOT satisfy GET /v1/pets (which expects a JSON body). Before
+        // the tuple-keyed fix, this second call was silently skipped.
+        $response = $this->makeTestResponse('', 204);
+
+        $this->assertResponseMatchesOpenApiSchema($response, HttpMethod::DELETE, '/v1/pets/123');
+
+        $this->expectException(AssertionFailedError::class);
+        $this->assertResponseMatchesOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
     }
 }
