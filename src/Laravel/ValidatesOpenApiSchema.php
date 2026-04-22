@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Laravel;
 
+use const E_USER_DEPRECATED;
 use const FILTER_NULL_ON_FAILURE;
 use const FILTER_VALIDATE_BOOLEAN;
 
@@ -13,6 +14,7 @@ use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecResolver;
+use Studio\OpenApiContractTesting\SkipOpenApiResolver;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use WeakMap;
@@ -25,16 +27,29 @@ use function sprintf;
 use function str_contains;
 use function strtolower;
 use function strtoupper;
+use function trigger_error;
 use function var_export;
 
 trait ValidatesOpenApiSchema
 {
     use OpenApiSpecResolver;
+    use SkipOpenApiResolver;
     private static ?OpenApiResponseValidator $cachedValidator = null;
     private static ?int $cachedMaxErrors = null;
 
     /** @var null|WeakMap<TestResponse, array<string, true>> */
     private static ?WeakMap $validatedResponses = null;
+
+    /**
+     * Swap the handler that receives "#[SkipOpenApi] + explicit assert" warnings.
+     * Defaults to emitting an E_USER_DEPRECATED via trigger_error() so PHPUnit
+     * surfaces it in the run summary without failing the test (option A
+     * semantics: explicit calls always run; the warning is only a nudge).
+     * Tests can swap it to capture warnings in-memory.
+     *
+     * @var null|callable(string): void
+     */
+    private static $skipWarningHandler;
 
     public static function resetValidatorCache(): void
     {
@@ -76,6 +91,14 @@ trait ValidatesOpenApiSchema
             return;
         }
 
+        // #[SkipOpenApi] opts the test out of auto-assert entirely — no
+        // validation, no coverage recording. Explicit calls to
+        // assertResponseMatchesOpenApiSchema() are not affected here; they
+        // still run but emit a warning so contradictory intent is visible.
+        if ($this->shouldSkipOpenApi()) {
+            return;
+        }
+
         $this->assertResponseMatchesOpenApiSchema($response, $method, $path);
     }
 
@@ -100,6 +123,10 @@ trait ValidatesOpenApiSchema
         ?HttpMethod $method = null,
         ?string $path = null,
     ): void {
+        if ($this->shouldSkipOpenApi()) {
+            $this->emitSkipOpenApiWarning();
+        }
+
         $resolvedMethod = $method !== null ? $method->value : app('request')->getMethod();
         $resolvedPath = $path ?? app('request')->getPathInfo();
 
@@ -186,6 +213,27 @@ trait ValidatesOpenApiSchema
         }
 
         return self::$cachedValidator;
+    }
+
+    private function emitSkipOpenApiWarning(): void
+    {
+        $reason = $this->resolveSkipOpenApiReason();
+        $message = sprintf(
+            '%s::%s is marked #[SkipOpenApi%s] but called assertResponseMatchesOpenApiSchema() explicitly. '
+            . 'The assertion will run. Remove the attribute or the explicit call to clarify intent.',
+            static::class,
+            $this->name(), // @phpstan-ignore method.notFound
+            $reason !== '' ? sprintf('(reason: %s)', var_export($reason, true)) : '',
+        );
+
+        $handler = self::$skipWarningHandler;
+        if ($handler !== null) {
+            $handler($message);
+
+            return;
+        }
+
+        trigger_error($message, E_USER_DEPRECATED);
     }
 
     private function isAutoAssertEnabled(): bool
