@@ -264,6 +264,34 @@ Notes:
 - `auto_assert` accepts boolean-compatible values (`true`/`false`/`"1"`/`"0"`/`"true"`/`"false"`) so `'auto_assert' => env('OPENAPI_AUTO_ASSERT')` works. Unrecognized values fail the test loudly with a clear message, not silently.
 - Streamed responses (`StreamedResponse`, binary downloads) cause `getContent()` to return `false`, which fails auto-assert with a clear message. If you use `auto_assert=true` on tests that exercise streams, scope the config change per-test or fall back to explicit manual asserts.
 
+#### Opting out with `#[SkipOpenApi]`
+
+Some tests intentionally return responses that violate the spec (error-injection tests, experimental endpoints with a not-yet-finalized contract, etc.). For these, use the `#[SkipOpenApi]` attribute to opt out of auto-assert without turning the feature off globally:
+
+```php
+use Studio\OpenApiContractTesting\SkipOpenApi;
+
+class ExperimentalApiTest extends TestCase
+{
+    use ValidatesOpenApiSchema;
+
+    #[Test]
+    #[SkipOpenApi(reason: 'endpoint is behind an experimental flag')]
+    public function test_experimental_endpoint(): void
+    {
+        $this->get('/v1/experimental');  // auto-assert is skipped
+    }
+}
+```
+
+The attribute can also be applied at the class level to skip every method in that class. Method-level attributes take precedence over class-level ones (the `reason` of the method-level attribute wins).
+
+Notes:
+
+- `#[SkipOpenApi]` suppresses auto-assert **only**. Explicit calls to `assertResponseMatchesOpenApiSchema()` still run — the assertion is the user's direct intent.
+- When auto-assert is skipped, no coverage is recorded for that request (the endpoint is treated as uncovered in the report).
+- If a test is marked `#[SkipOpenApi]` and still calls `assertResponseMatchesOpenApiSchema()` explicitly, a `E_USER_DEPRECATED` warning is emitted to flag the contradictory intent. The assertion is not suppressed — fix the cause by removing either the attribute or the explicit call.
+
 ## Coverage Report
 
 After running tests, the PHPUnit extension prints a coverage report. The output format is controlled by the `console_output` parameter (or `OPENAPI_CONSOLE_OUTPUT` environment variable).
