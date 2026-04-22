@@ -258,8 +258,11 @@ class GetPetsTest extends TestCase
 Notes:
 
 - Defaults to `false` so existing test suites keep their explicit-assert behavior.
-- Auto-assert hooks into `createTestResponse()`, which is only invoked by Laravel's `MakesHttpRequests`. Responses you construct manually (outside `$this->get()`, `$this->post()`, etc.) are not touched.
-- Calling `$this->assertResponseMatchesOpenApiSchema($response)` on a response that auto-assert already validated is a no-op (idempotent), so mixing both styles is safe.
+- Auto-assert hooks into `MakesHttpRequests::createTestResponse()`. Responses you construct manually (outside `$this->get()`, `$this->post()`, etc.) are not touched.
+- Idempotency is keyed on the `(spec, method, path)` tuple. Calling `assertResponseMatchesOpenApiSchema($response)` after auto-assert with the matching signature is a no-op. Calling it with a different `method`/`path` — or a different `#[OpenApiSpec]` — runs validation again.
+- When auto-assert fails, the exception is thrown from inside `$this->get(...)`, so any chained assertion on the same line (`$this->get(...)->assertOk()`) will not run. This is usually what you want — the schema failure takes precedence over status-code checks.
+- `auto_assert` accepts boolean-compatible values (`true`/`false`/`"1"`/`"0"`/`"true"`/`"false"`) so `'auto_assert' => env('OPENAPI_AUTO_ASSERT')` works. Unrecognized values fail the test loudly with a clear message, not silently.
+- Streamed responses (`StreamedResponse`, binary downloads) cause `getContent()` to return `false`, which fails auto-assert with a clear message. If you use `auto_assert=true` on tests that exercise streams, scope the config change per-test or fall back to explicit manual asserts.
 
 ## Coverage Report
 
