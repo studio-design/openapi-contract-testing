@@ -10,6 +10,8 @@ use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecResolver;
+use Symfony\Component\HttpFoundation\Response;
+use WeakMap;
 
 use function is_numeric;
 use function is_string;
@@ -22,10 +24,45 @@ trait ValidatesOpenApiSchema
     private static ?OpenApiResponseValidator $cachedValidator = null;
     private static ?int $cachedMaxErrors = null;
 
+    /** @var null|WeakMap<TestResponse, true> */
+    private static ?WeakMap $validatedResponses = null;
+
     public static function resetValidatorCache(): void
     {
         self::$cachedValidator = null;
         self::$cachedMaxErrors = null;
+        self::$validatedResponses = null;
+    }
+
+    /**
+     * Overrides Illuminate\Foundation\Testing\TestCase::createTestResponse so
+     * every HTTP test call runs schema validation when auto_assert is enabled.
+     * When the library is used outside Laravel, this method is never called.
+     *
+     * @param Response $response
+     */
+    protected function createTestResponse($response, $request = null): TestResponse
+    {
+        $testResponse = parent::createTestResponse($response, $request);
+        $this->maybeAutoAssertOpenApiSchema($testResponse);
+
+        return $testResponse;
+    }
+
+    protected function maybeAutoAssertOpenApiSchema(
+        TestResponse $response,
+        ?HttpMethod $method = null,
+        ?string $path = null,
+    ): void {
+        if (config('openapi-contract-testing.auto_assert') !== true) {
+            return;
+        }
+
+        if (self::isAlreadyValidated($response)) {
+            return;
+        }
+
+        $this->assertResponseMatchesOpenApiSchema($response, $method, $path);
     }
 
     protected function openApiSpec(): string
@@ -49,6 +86,11 @@ trait ValidatesOpenApiSchema
         ?HttpMethod $method = null,
         ?string $path = null,
     ): void {
+        if (self::isAlreadyValidated($response)) {
+            return;
+        }
+        self::markValidated($response);
+
         $specName = $this->resolveOpenApiSpec();
         if ($specName === '') {
             $this->fail(
@@ -95,6 +137,18 @@ trait ValidatesOpenApiSchema
             "OpenAPI schema validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"
             . $result->errorMessage(),
         );
+    }
+
+    private static function isAlreadyValidated(TestResponse $response): bool
+    {
+        return self::$validatedResponses !== null &&
+            isset(self::$validatedResponses[$response]);
+    }
+
+    private static function markValidated(TestResponse $response): void
+    {
+        self::$validatedResponses ??= new WeakMap();
+        self::$validatedResponses[$response] = true;
     }
 
     private static function getOrCreateValidator(): OpenApiResponseValidator

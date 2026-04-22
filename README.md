@@ -85,6 +85,11 @@ return [
     // Maximum number of validation errors to report per response.
     // 0 = unlimited (reports all errors).
     'max_errors' => 20,
+
+    // Automatically validate every TestResponse produced by Laravel HTTP
+    // helpers (get(), post(), etc.) against the OpenAPI spec. Defaults to
+    // false for backward compatibility.
+    'auto_assert' => false,
 ];
 ```
 
@@ -222,6 +227,39 @@ $validator = new OpenApiResponseValidator(maxErrors: 1);
 ```
 
 For Laravel, set the `max_errors` key in `config/openapi-contract-testing.php`.
+
+#### Auto-assert every response
+
+Forgetting `$this->assertResponseMatchesOpenApiSchema($response)` in a test means the contract is silently unchecked. Enable `auto_assert` to validate every response produced by Laravel's HTTP helpers automatically — just include the trait:
+
+```php
+// config/openapi-contract-testing.php
+return [
+    'default_spec' => 'front',
+    'auto_assert'  => true,
+];
+```
+
+```php
+use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
+
+class GetPetsTest extends TestCase
+{
+    use ValidatesOpenApiSchema;
+
+    public function test_list_pets(): void
+    {
+        // Contract is checked automatically — no explicit assert call needed.
+        $this->get('/api/v1/pets')->assertOk();
+    }
+}
+```
+
+Notes:
+
+- Defaults to `false` so existing test suites keep their explicit-assert behavior.
+- Auto-assert hooks into `createTestResponse()`, which is only invoked by Laravel's `MakesHttpRequests`. Responses you construct manually (outside `$this->get()`, `$this->post()`, etc.) are not touched.
+- Calling `$this->assertResponseMatchesOpenApiSchema($response)` on a response that auto-assert already validated is a no-op (idempotent), so mixing both styles is safe.
 
 ## Coverage Report
 
