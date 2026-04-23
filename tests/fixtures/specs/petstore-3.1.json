@@ -424,6 +424,61 @@
                     }
                 }
             }
+        },
+        "/v1/reports": {
+            "get": {
+                "summary": "Fetch reports (header parameter fixture, OAS 3.1 multi-type)",
+                "operationId": "getReports",
+                "parameters": [
+                    {
+                        "name": "X-Request-ID",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": ["string"],
+                            "format": "uuid"
+                        }
+                    },
+                    {
+                        "name": "X-Trace-Id",
+                        "in": "header",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[A-Z0-9-]+$"
+                        }
+                    },
+                    {
+                        "name": "X-Page-Size",
+                        "in": "header",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "Accept",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": ["never-match"]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

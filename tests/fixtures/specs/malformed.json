@@ -226,6 +226,24 @@
                     }
                 }
             }
+        },
+        "/header-required-no-schema": {
+            "get": {
+                "summary": "required in:header parameter without a schema",
+                "operationId": "headerRequiredNoSchema",
+                "parameters": [
+                    {
+                        "name": "X-Api-Key",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
         }
     }
 }

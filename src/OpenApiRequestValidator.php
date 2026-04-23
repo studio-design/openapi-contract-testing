@@ -14,11 +14,13 @@ use stdClass;
 
 use function array_is_list;
 use function array_key_exists;
+use function array_key_first;
 use function array_keys;
 use function array_map;
 use function array_values;
 use function filter_var;
 use function implode;
+use function in_array;
 use function is_array;
 use function is_int;
 use function is_numeric;
@@ -33,6 +35,15 @@ use function trim;
 
 final class OpenApiRequestValidator
 {
+    /**
+     * Per OpenAPI 3.x: "If `in` is `header` and the `name` field is `Accept`,
+     * `Content-Type` or `Authorization`, the parameter definition SHALL be
+     * ignored." These are controlled by content negotiation and security
+     * schemes; surfacing them through parameter validation would duplicate
+     * (and often disagree with) the framework's own handling.
+     */
+    private const RESERVED_HEADER_NAMES = ['accept', 'content-type', 'authorization'];
+
     /** @var array<string, OpenApiPathMatcher> */
     private array $pathMatchers = [];
     private Validator $opisValidator;
@@ -58,13 +69,14 @@ final class OpenApiRequestValidator
     /**
      * Validate an incoming request against the OpenAPI spec.
      *
-     * Composes path-parameter, query-parameter, and request-body validation
-     * plus any spec-level errors surfaced while collecting merged parameters,
-     * and returns a single result. Errors from all sources are accumulated
-     * so a single test run surfaces every contract drift the request exhibits.
+     * Composes path-parameter, query-parameter, header-parameter, and
+     * request-body validation plus any spec-level errors surfaced while
+     * collecting merged parameters, and returns a single result. Errors from
+     * all sources are accumulated so a single test run surfaces every
+     * contract drift the request exhibits.
      *
      * @param array<string, mixed> $queryParams parsed query string (string|array<string> per key)
-     * @param array<string, mixed> $headers currently ignored; placeholder for header validation
+     * @param array<string, mixed> $headers request headers (string|array<string> per key, case-insensitive name match)
      */
     public function validate(
         string $specName,
@@ -125,6 +137,13 @@ final class OpenApiRequestValidator
             $queryParams,
             $version,
         );
+        $headerErrors = $this->validateHeaderParameters(
+            $method,
+            $matchedPath,
+            $parameters,
+            $headers,
+            $version,
+        );
         $bodyErrors = $this->validateRequestBody(
             $specName,
             $method,
@@ -135,7 +154,7 @@ final class OpenApiRequestValidator
             $version,
         );
 
-        $errors = [...$specErrors, ...$pathErrors, ...$queryErrors, ...$bodyErrors];
+        $errors = [...$specErrors, ...$pathErrors, ...$queryErrors, ...$headerErrors, ...$bodyErrors];
 
         if ($errors === []) {
             return OpenApiValidationResult::success($matchedPath);
@@ -256,6 +275,39 @@ final class OpenApiRequestValidator
             },
             default => $value,
         };
+    }
+
+    /**
+     * Lower-case the keys of the caller-supplied headers map, and reduce
+     * array-shaped values (Laravel HeaderBag's representation of repeated
+     * headers) to their first element. Non-string keys are skipped — they
+     * cannot match any spec name and would cause a TypeError on strtolower().
+     *
+     * @param array<array-key, mixed> $headers
+     *
+     * @return array<string, mixed>
+     */
+    private static function normalizeHeaders(array $headers): array
+    {
+        $normalized = [];
+
+        foreach ($headers as $name => $value) {
+            if (!is_string($name)) {
+                continue;
+            }
+
+            $key = strtolower($name);
+
+            if (is_array($value)) {
+                $normalized[$key] = $value === [] ? null : $value[array_key_first($value)];
+
+                continue;
+            }
+
+            $normalized[$key] = $value;
+        }
+
+        return $normalized;
     }
 
     /**
@@ -433,6 +485,100 @@ final class OpenApiRequestValidator
         foreach ($pathVariables as $name => $_) {
             if (!isset($declared[$name])) {
                 $errors[] = "[path.{$name}] placeholder in {$method} {$matchedPath} template is not declared as an 'in: path' parameter — malformed spec (OpenAPI requires every placeholder to be declared).";
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Validate header parameters declared by the matched operation (or
+     * inherited from the path-level `parameters` block).
+     *
+     * HTTP header names are case-insensitive (RFC 7230) so both the spec
+     * `name` and the caller-supplied `$headers` keys are lower-cased before
+     * matching. Error messages keep the spec's original casing so users can
+     * grep the spec directly.
+     *
+     * Per OpenAPI 3.x, `Accept`, `Content-Type`, and `Authorization`
+     * declarations are ignored — these are controlled by content negotiation
+     * and security schemes, not arbitrary header parameters.
+     *
+     * Header values arriving as `array<string>` (Laravel's HeaderBag models
+     * repeated occurrences this way) are reduced to their first element for
+     * primitive coercion. `style: simple` with `type: array | object` is out
+     * of scope here; #45 covers required / type / pattern only.
+     *
+     * @param list<array<string, mixed>> $parameters pre-collected merged parameters
+     * @param array<string, mixed> $headers caller-supplied request headers
+     *
+     * @return string[]
+     */
+    private function validateHeaderParameters(
+        string $method,
+        string $matchedPath,
+        array $parameters,
+        array $headers,
+        OpenApiVersion $version,
+    ): array {
+        $errors = [];
+        $normalizedHeaders = self::normalizeHeaders($headers);
+
+        foreach ($parameters as $param) {
+            if (($param['in'] ?? null) !== 'header') {
+                continue;
+            }
+
+            /** @var string $name */
+            $name = $param['name'];
+            $lowerName = strtolower($name);
+
+            if (in_array($lowerName, self::RESERVED_HEADER_NAMES, true)) {
+                continue;
+            }
+
+            $required = ($param['required'] ?? false) === true;
+
+            // Same reasoning as query/path: a required parameter without a schema would
+            // silently pass every request, so surface it as a hard spec error. Optional
+            // entries without a schema have nothing to validate — let them through.
+            if (!isset($param['schema']) || !is_array($param['schema'])) {
+                if ($required) {
+                    $errors[] = "[header.{$name}] required parameter has no schema for {$method} {$matchedPath} — cannot validate.";
+                }
+
+                continue;
+            }
+
+            /** @var array<string, mixed> $schema */
+            $schema = $param['schema'];
+
+            $present = array_key_exists($lowerName, $normalizedHeaders) && $normalizedHeaders[$lowerName] !== null;
+            if (!$present) {
+                if ($required) {
+                    $errors[] = "[header.{$name}] required header is missing.";
+                }
+
+                continue;
+            }
+
+            $coerced = self::coercePrimitiveValue($normalizedHeaders[$lowerName], $schema);
+            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version);
+
+            $schemaObject = self::toObject($jsonSchema);
+            $dataObject = self::toObject($coerced);
+
+            $result = $this->opisValidator->validate($dataObject, $schemaObject);
+            if ($result->isValid()) {
+                continue;
+            }
+
+            $formatted = $this->errorFormatter->format($result->error());
+            foreach ($formatted as $path => $messages) {
+                $suffix = $path === '/' ? '' : $path;
+                foreach ($messages as $message) {
+                    $errors[] = "[header.{$name}{$suffix}] {$message}";
+                }
             }
         }
 
