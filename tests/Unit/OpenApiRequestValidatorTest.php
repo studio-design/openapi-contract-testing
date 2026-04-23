@@ -11,6 +11,7 @@ use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
 use function array_filter;
+use function implode;
 use function str_contains;
 use function strtolower;
 
@@ -35,6 +36,45 @@ class OpenApiRequestValidatorTest extends TestCase
     // ========================================
     // Acceptance criteria: valid / invalid / spec 未定義
     // ========================================
+
+    #[Test]
+    public function validates_request_body_against_ref_backed_schema(): void
+    {
+        // End-to-end mirror of the response-side integration test: the spec's
+        // requestBody is a $ref to components.requestBodies.PetBody, whose
+        // schema is itself $ref'd. Loader -> resolver -> converter -> opis
+        // must all line up for a valid payload to pass.
+        $result = $this->validator->validate(
+            'refs-valid',
+            'POST',
+            '/pets',
+            [],
+            [],
+            ['id' => 1, 'name' => 'Fido', 'category' => ['id' => 7, 'label' => 'dog']],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid(), 'errors: ' . implode(' | ', $result->errors()));
+        $this->assertSame('/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function rejects_invalid_request_body_against_ref_backed_schema(): void
+    {
+        // Negative path confirming the ref-backed schema actually enforces
+        // the Pet shape — a missing required `category` must fail.
+        $result = $this->validator->validate(
+            'refs-valid',
+            'POST',
+            '/pets',
+            [],
+            [],
+            ['id' => 1, 'name' => 'Fido'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+    }
 
     #[Test]
     public function v30_valid_request_body_passes(): void

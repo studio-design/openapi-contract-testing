@@ -207,11 +207,65 @@ class OpenApiSpecLoaderTest extends TestCase
         // Evict only 3.0
         OpenApiSpecLoader::evict('petstore-3.0');
 
-        // 3.1 still cached (same reference)
+        // 3.1 still cached (by-value equal)
         $this->assertSame($first31, OpenApiSpecLoader::load('petstore-3.1'));
 
-        // 3.0 reloaded from disk (equal but fresh instance)
+        // 3.0 reload produces the same content (by-value; array equality, not instance identity)
         $reloaded30 = OpenApiSpecLoader::load('petstore-3.0');
         $this->assertSame($first30, $reloaded30);
+    }
+
+    #[Test]
+    public function failed_load_does_not_poison_cache(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        try {
+            OpenApiSpecLoader::load('refs-unresolvable');
+            $this->fail('expected RuntimeException');
+        } catch (RuntimeException) {
+            // Expected — next load must re-attempt from disk, not return a
+            // partially-resolved array captured before the throw.
+        }
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Unresolvable $ref');
+        OpenApiSpecLoader::load('refs-unresolvable');
+    }
+
+    #[Test]
+    public function failed_load_does_not_affect_other_specs(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        try {
+            OpenApiSpecLoader::load('refs-circular');
+        } catch (RuntimeException) {
+            // Swallow so we can verify a different spec still loads afterwards.
+        }
+
+        // A sibling spec with clean refs must still load successfully even if
+        // an earlier failure left any intermediate state behind.
+        $spec = OpenApiSpecLoader::load('refs-valid');
+        $this->assertSame('Refs valid', $spec['info']['title']);
+    }
+
+    #[Test]
+    public function load_returns_independent_copies_of_cached_specs(): void
+    {
+        // Pins the PHP copy-on-write assumption that OpenApiRefResolver relies
+        // on: mutating the returned array must not corrupt the cached copy.
+        // Swapping to by-reference returns (or accidentally sharing the root
+        // snapshot) would show up here.
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $first = OpenApiSpecLoader::load('refs-valid');
+        $first['info']['title'] = 'mutated';
+
+        $second = OpenApiSpecLoader::load('refs-valid');
+        $this->assertSame('Refs valid', $second['info']['title']);
     }
 }

@@ -22,15 +22,21 @@ use function substr;
 final class OpenApiRefResolver
 {
     /**
-     * Resolve all internal `$ref` entries in the spec in place and return it.
+     * Resolve all internal `$ref` entries in the spec in place and return the
+     * same array. External, circular, unresolvable, malformed, and root refs
+     * all throw `RuntimeException` so users get one actionable error at load
+     * time instead of a cryptic opis failure surfacing deep inside validation.
      *
-     * External refs (cross-file, URL), circular refs, and dangling internal refs
-     * throw `RuntimeException` so the user gets an early, actionable error at
-     * load time instead of a cryptic opis failure deep in validation.
+     * The input array is mutated: on a successful resolve the returned value
+     * is the same array with `$ref` nodes substituted. On throw, the partially
+     * mutated state is discarded at the caller (`OpenApiSpecLoader::load()`
+     * only caches the result after `resolve()` returns cleanly).
      *
      * @param array<string, mixed> $spec
      *
      * @return array<string, mixed>
+     *
+     * @throws RuntimeException on external / circular / unresolvable / malformed refs
      */
     public static function resolve(array $spec): array
     {
@@ -45,7 +51,7 @@ final class OpenApiRefResolver
     /**
      * @param array<int|string, mixed> $node
      * @param array<string, mixed> $root
-     * @param list<string> $chain absolute refs currently being resolved
+     * @param list<string> $chain pointer-refs already on the resolution stack — used to detect cycles
      */
     private static function walk(array &$node, array $root, array $chain): void
     {
@@ -59,9 +65,24 @@ final class OpenApiRefResolver
                 ));
             }
 
+            if ($ref === '#/' || $ref === '#') {
+                // A bare root pointer substitutes the entire spec in place,
+                // which triggers unbounded recursion before cycle detection
+                // can help. Reject with a specific message so the author
+                // doesn't chase a confusing "Circular" error.
+                throw new RuntimeException('Invalid $ref: root pointer "' . $ref . '" is not a reference to a definition');
+            }
+
             if (!str_starts_with($ref, '#/')) {
+                if (str_starts_with($ref, '#')) {
+                    throw new RuntimeException(sprintf(
+                        'Invalid $ref: bare fragment %s is not a JSON Pointer (expected "#/..." form)',
+                        $ref,
+                    ));
+                }
+
                 throw new RuntimeException(sprintf(
-                    'External $ref is not supported in phase 1: %s. Only internal refs (#/...) are resolved; '
+                    'External $ref is not supported: %s. Only internal refs (#/...) are resolved; '
                     . 'bundle external files with a tool like `redocly bundle` before loading.',
                     $ref,
                 ));
@@ -74,8 +95,8 @@ final class OpenApiRefResolver
                 ));
             }
 
-            $target = self::lookup($ref, $root);
-            if ($target === null) {
+            [$found, $target] = self::lookup($ref, $root);
+            if (!$found) {
                 throw new RuntimeException(sprintf('Unresolvable $ref: target not found for %s', $ref));
             }
 
@@ -87,13 +108,11 @@ final class OpenApiRefResolver
                 ));
             }
 
-            // Recurse into the copied target so nested refs resolve with the
-            // current ref pushed onto the chain for cycle detection.
+            // Push $ref onto the chain before recursing so nested self-references
+            // are detected as cycles; then replace the node entirely. Sibling
+            // keys alongside $ref are dropped per OAS 3.0 ("any sibling
+            // elements of a $ref are ignored"), which is a safe subset of 3.1.
             self::walk($target, $root, [...$chain, $ref]);
-
-            // Replace the node entirely. Sibling keys alongside $ref are
-            // dropped per OAS 3.0 semantics ("any sibling elements of a $ref
-            // are ignored"); the same behaviour is a safe subset of OAS 3.1.
             $node = $target;
 
             return;
@@ -104,19 +123,23 @@ final class OpenApiRefResolver
                 self::walk($child, $root, $chain);
             }
         }
+        unset($child);
     }
 
     /**
-     * Resolve a local JSON Pointer (e.g. `#/components/schemas/Foo`) against
-     * the root spec. Returns `null` when any segment is missing.
+     * Returns `[found, value]` where `found` disambiguates a missing segment
+     * from a literal `null` leaf — both of which could otherwise be the same
+     * `null` return and silently misroute the error message.
      *
      * @param array<string, mixed> $root
+     *
+     * @return array{0: bool, 1: mixed}
      */
-    private static function lookup(string $ref, array $root): mixed
+    private static function lookup(string $ref, array $root): array
     {
         $pointer = substr($ref, 2);
         if ($pointer === '') {
-            return $root;
+            return [true, $root];
         }
 
         $segments = explode('/', $pointer);
@@ -126,19 +149,19 @@ final class OpenApiRefResolver
             $segment = self::unescapePointerSegment($segment);
 
             if (!is_array($node) || !array_key_exists($segment, $node)) {
-                return null;
+                return [false, null];
             }
 
             $node = $node[$segment];
         }
 
-        return $node;
+        return [true, $node];
     }
 
     /**
-     * Decode a single JSON Pointer segment per RFC 6901, additionally tolerating
-     * URL-encoded input (e.g. `%20`). Order matters: `~1` must be decoded before
-     * `~0` so a literal `~1` in the key survives round-tripping.
+     * `~1` must be decoded before `~0` so a literal `~1` stored in the key
+     * round-trips correctly. `rawurldecode` runs first so percent-encoded
+     * segments produced by URL-aware tooling also resolve.
      */
     private static function unescapePointerSegment(string $segment): string
     {

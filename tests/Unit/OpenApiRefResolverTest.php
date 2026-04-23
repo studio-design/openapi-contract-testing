@@ -227,6 +227,101 @@ class OpenApiRefResolverTest extends TestCase
     }
 
     #[Test]
+    public function resolves_ref_targeting_array_index(): void
+    {
+        // RFC 6901 allows numeric segments to address list elements. `$ref`s
+        // pointing to `parameters[0]` are common when aliasing operation-level
+        // definitions; the walker must descend through numeric keys correctly.
+        $spec = [
+            'paths' => [
+                '/pets' => [
+                    'parameters' => [
+                        [
+                            'name' => 'petId',
+                            'in' => 'path',
+                            'required' => true,
+                            'schema' => ['type' => 'integer'],
+                        ],
+                    ],
+                ],
+            ],
+            'x-alias' => ['$ref' => '#/paths/~1pets/parameters/0'],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame('petId', $resolved['x-alias']['name']);
+        $this->assertSame('path', $resolved['x-alias']['in']);
+    }
+
+    #[Test]
+    public function resolves_ref_to_empty_object_target(): void
+    {
+        // An empty-object schema is legal (matches anything). The walker's
+        // foreach must handle the zero-child case cleanly.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'AnyShape' => [],
+                ],
+            ],
+            'x-alias' => ['$ref' => '#/components/schemas/AnyShape'],
+        ];
+
+        $this->assertSame([], OpenApiRefResolver::resolve($spec)['x-alias']);
+    }
+
+    #[Test]
+    public function resolves_ref_with_utf8_segment_url_encoded(): void
+    {
+        // Non-ASCII schema names are valid JSON. URL-aware tooling often
+        // percent-encodes them in refs; rawurldecode() must run before the
+        // JSON Pointer escape unwinding so both forms resolve.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'ペット' => ['type' => 'string'],
+                ],
+            ],
+            'x-alias' => ['$ref' => '#/components/schemas/%E3%83%9A%E3%83%83%E3%83%88'],
+        ];
+
+        $this->assertSame(
+            ['type' => 'string'],
+            OpenApiRefResolver::resolve($spec)['x-alias'],
+        );
+    }
+
+    #[Test]
+    public function resolves_ref_inside_all_of_composition(): void
+    {
+        // allOf/oneOf/anyOf arrays are the most common place `$ref` appears
+        // in practice. A regression in list-index walking would surface here
+        // first.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Pet' => ['type' => 'object', 'required' => ['id']],
+                    'Named' => [
+                        'allOf' => [
+                            ['$ref' => '#/components/schemas/Pet'],
+                            ['type' => 'object', 'properties' => ['name' => ['type' => 'string']]],
+                        ],
+                    ],
+                ],
+            ],
+            'x-alias' => ['$ref' => '#/components/schemas/Named'],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame(
+            ['type' => 'object', 'required' => ['id']],
+            $resolved['x-alias']['allOf'][0],
+        );
+    }
+
+    #[Test]
     public function throws_on_external_file_ref(): void
     {
         $spec = [
@@ -341,6 +436,41 @@ class OpenApiRefResolverTest extends TestCase
     }
 
     #[Test]
+    public function throws_on_three_node_circular_ref(): void
+    {
+        // The 2-node case is covered above. A 3-node cycle exercises the
+        // chain length beyond the trivial minimum; a regression that only
+        // checks the immediate parent would slip past.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'A' => [
+                        'properties' => [
+                            'next' => ['$ref' => '#/components/schemas/B'],
+                        ],
+                    ],
+                    'B' => [
+                        'properties' => [
+                            'next' => ['$ref' => '#/components/schemas/C'],
+                        ],
+                    ],
+                    'C' => [
+                        'properties' => [
+                            'next' => ['$ref' => '#/components/schemas/A'],
+                        ],
+                    ],
+                ],
+            ],
+            'x-alias' => ['$ref' => '#/components/schemas/A'],
+        ];
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Circular $ref');
+
+        OpenApiRefResolver::resolve($spec);
+    }
+
+    #[Test]
     public function throws_on_unresolvable_ref(): void
     {
         $spec = [
@@ -414,9 +544,32 @@ class OpenApiRefResolverTest extends TestCase
     }
 
     #[Test]
-    public function throws_on_ref_not_starting_with_hash_slash(): void
+    public function throws_when_ref_target_is_literal_null_not_unresolvable(): void
     {
-        // Bare fragment like '#foo' (missing '/') is invalid per RFC 6901 JSON Pointer.
+        // A key that exists but holds `null` is a present-but-invalid target.
+        // Distinguishing this from a genuinely missing segment avoids telling
+        // the author "target not found" when the target is right there.
+        $spec = [
+            'x-placeholder' => null,
+            'components' => [
+                'schemas' => [
+                    'Bad' => ['$ref' => '#/x-placeholder'],
+                ],
+            ],
+        ];
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('not an object');
+
+        OpenApiRefResolver::resolve($spec);
+    }
+
+    #[Test]
+    public function throws_on_bare_fragment_ref_with_clear_message(): void
+    {
+        // A bare fragment like '#foo' or just '#' is neither a JSON Pointer
+        // nor an external URL. Surface it with a dedicated message so the
+        // author doesn't mistake it for a bundling instruction.
         $spec = [
             'components' => [
                 'schemas' => [
@@ -426,6 +579,23 @@ class OpenApiRefResolverTest extends TestCase
         ];
 
         $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('bare fragment');
+
+        OpenApiRefResolver::resolve($spec);
+    }
+
+    #[Test]
+    public function throws_on_root_pointer_ref(): void
+    {
+        // `$ref: "#/"` points at the spec root. Substituting it would recurse
+        // unboundedly before cycle detection kicks in; reject with a specific
+        // message so the author sees the real problem.
+        $spec = [
+            'x-bad' => ['$ref' => '#/'],
+        ];
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('root pointer');
 
         OpenApiRefResolver::resolve($spec);
     }

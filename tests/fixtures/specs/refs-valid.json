@@ -23,6 +23,17 @@
                         }
                     }
                 }
+            },
+            "post": {
+                "operationId": "createPet",
+                "requestBody": {
+                    "$ref": "#/components/requestBodies/PetBody"
+                },
+                "responses": {
+                    "201": {
+                        "$ref": "#/components/responses/PetResponse"
+                    }
+                }
             }
         },
         "/pets/{petId}": {
@@ -82,6 +93,18 @@
         "responses": {
             "PetResponse": {
                 "description": "A single pet",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/Pet"
+                        }
+                    }
+                }
+            }
+        },
+        "requestBodies": {
+            "PetBody": {
+                "required": true,
                 "content": {
                     "application/json": {
                         "schema": {
