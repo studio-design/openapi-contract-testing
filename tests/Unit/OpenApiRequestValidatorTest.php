@@ -440,10 +440,6 @@ class OpenApiRequestValidatorTest extends TestCase
         $this->assertSame('/v1/pets', $result->matchedPath());
     }
 
-    // ========================================
-    // Query parameter validation
-    // ========================================
-
     #[Test]
     public function query_params_all_valid_passes(): void
     {
@@ -493,7 +489,7 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('[query.status', $result->errorMessage());
+        $this->assertStringContainsString('[query.status]', $result->errorMessage());
     }
 
     #[Test]
@@ -510,7 +506,7 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('[query.limit', $result->errorMessage());
+        $this->assertStringContainsString('[query.limit]', $result->errorMessage());
     }
 
     #[Test]
@@ -576,7 +572,7 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('[query.limit', $result->errorMessage());
+        $this->assertStringContainsString('[query.limit]', $result->errorMessage());
     }
 
     #[Test]
@@ -593,7 +589,7 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('[query.q', $result->errorMessage());
+        $this->assertStringContainsString('[query.q]', $result->errorMessage());
     }
 
     #[Test]
@@ -611,7 +607,7 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('[query.traceId', $result->errorMessage());
+        $this->assertStringContainsString('[query.traceId]', $result->errorMessage());
     }
 
     #[Test]
@@ -647,7 +643,7 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('[query.traceId', $result->errorMessage());
+        $this->assertStringContainsString('[query.traceId]', $result->errorMessage());
     }
 
     #[Test]
@@ -667,13 +663,264 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('[query.dryRun', $result->errorMessage());
+        $this->assertStringContainsString('[query.dryRun]', $result->errorMessage());
         // Body errors use opis JSON pointer paths (no "query." prefix); assert at least one such entry.
         $bodyErrors = array_filter(
             $result->errors(),
             static fn(string $err): bool => !str_contains($err, '[query.'),
         );
         $this->assertNotEmpty($bodyErrors, 'expected at least one body validation error in combined result');
+    }
+
+    #[Test]
+    public function query_and_body_both_valid_passes(): void
+    {
+        // Mirror of the combined-error test: confirms the success path through
+        // the composed validate() with both phases active and contributing zero errors.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            ['dryRun' => 'true'],
+            [],
+            ['name' => 'Fido'],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_boolean_true_coerced(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            ['dryRun' => 'true'],
+            [],
+            ['name' => 'Fido'],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_boolean_false_coerced(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            ['dryRun' => 'false'],
+            [],
+            ['name' => 'Fido'],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_number_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '5', 'score' => '0.7'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_number_invalid_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '5', 'score' => 'not-a-number'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.score]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_no_type_schema_passes(): void
+    {
+        // category schema declares only `enum`, no `type` — coercion must skip,
+        // and opis must accept the matching enum value untouched.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '5', 'category' => 'dog'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_no_type_schema_enum_violation_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '5', 'category' => 'fish'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.category]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_explicit_null_treated_as_missing(): void
+    {
+        // Explicit null for a required parameter should hit the same branch as "absent".
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => null],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.limit]', $result->errorMessage());
+        $this->assertStringContainsString('required', strtolower($result->errorMessage()));
+    }
+
+    #[Test]
+    public function query_params_explicit_null_optional_skipped(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '5', 'status' => null],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_integer_overflow_treated_as_string(): void
+    {
+        // Out-of-range integer must NOT silently truncate to PHP_INT_MAX — opis
+        // should see the original string and emit a type error.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '99999999999999999999'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.limit]', $result->errorMessage());
+        $this->assertStringContainsString('type: integer', $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_integer_negative_passes(): void
+    {
+        // The integer schema for `count` (3.1) has minimum: 0, so use a permissive
+        // schema-less coercion check via path-level traceId... actually use the
+        // integer-typed `limit` with a known-passing positive value to prove
+        // negative-prefix regex handling — exercised via integer-overflow test.
+        // This case asserts the "clean integer" branch: filter_var accepts "-5" → -5,
+        // and even though -5 fails minimum:1, it does NOT fail with a type error.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '-5'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringNotContainsString('type: integer', $result->errorMessage());
+        $this->assertStringContainsString('greater', strtolower($result->errorMessage()));
+    }
+
+    #[Test]
+    public function query_params_ref_entry_surfaces_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/ref-parameter',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('Parameter $ref encountered', $result->errors()[0]);
+        $this->assertStringContainsString('redocly bundle --dereference', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function query_params_scalar_entry_surfaces_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/scalar-parameter',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('Malformed parameter entry', $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function query_params_required_no_schema_surfaces_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/required-no-schema',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.token]', $result->errors()[0]);
+        $this->assertStringContainsString('no schema', $result->errors()[0]);
     }
 
     // ========================================
@@ -710,6 +957,41 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('[query.status', $result->errorMessage());
+        $this->assertStringContainsString('[query.status]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v31_query_params_multi_type_coerced_passes(): void
+    {
+        // count has type: ["integer", "null"] — coerceQueryValue must pick "integer"
+        // as the coercion target so "42" → 42 passes the schema.
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '5', 'count' => '42'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v31_query_params_multi_type_invalid_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '5', 'count' => 'not-a-number'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.count]', $result->errorMessage());
     }
 }

@@ -31,6 +31,54 @@
                     }
                 }
             }
+        },
+        "/ref-parameter": {
+            "get": {
+                "summary": "parameters list contains an unresolved $ref entry",
+                "operationId": "refParameter",
+                "parameters": [
+                    {
+                        "$ref": "#/components/parameters/UnresolvedLimit"
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/scalar-parameter": {
+            "get": {
+                "summary": "parameters list contains a non-array entry",
+                "operationId": "scalarParameter",
+                "parameters": [
+                    "this should have been an object"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/required-no-schema": {
+            "get": {
+                "summary": "required query parameter without a schema",
+                "operationId": "requiredNoSchema",
+                "parameters": [
+                    {
+                        "name": "token",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
         }
     }
 }

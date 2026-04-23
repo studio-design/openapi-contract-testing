@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
+use const FILTER_VALIDATE_INT;
 use const PHP_INT_MAX;
 
 use InvalidArgumentException;
@@ -16,11 +17,12 @@ use function array_key_exists;
 use function array_keys;
 use function array_map;
 use function array_values;
+use function filter_var;
 use function implode;
 use function is_array;
+use function is_int;
 use function is_numeric;
 use function is_string;
-use function preg_match;
 use function sprintf;
 use function str_ends_with;
 use function strstr;
@@ -59,7 +61,7 @@ final class OpenApiRequestValidator
      * single test run surfaces every contract drift the request exhibits.
      *
      * @param array<string, mixed> $queryParams parsed query string (string|array<string> per key)
-     * @param array<string, mixed> $headers reserved for future use; ignored in this phase
+     * @param array<string, mixed> $headers currently ignored; placeholder for header validation
      */
     public function validate(
         string $specName,
@@ -98,7 +100,14 @@ final class OpenApiRequestValidator
         /** @var array<string, mixed> $operation */
         $operation = $pathSpec[$lowerMethod];
 
-        $queryErrors = $this->validateQueryParameters($pathSpec, $operation, $queryParams, $version);
+        $queryErrors = $this->validateQueryParameters(
+            $method,
+            $matchedPath,
+            $pathSpec,
+            $operation,
+            $queryParams,
+            $version,
+        );
         $bodyErrors = $this->validateRequestBody(
             $specName,
             $method,
@@ -147,6 +156,36 @@ final class OpenApiRequestValidator
     }
 
     /**
+     * Pick the first primitive type from an OAS 3.1 multi-type declaration,
+     * skipping `null`. Returns `null` if no usable string type is found.
+     *
+     * @param array<int|string, mixed> $types
+     */
+    private static function firstPrimitiveType(array $types): ?string
+    {
+        foreach ($types as $candidate) {
+            if (is_string($candidate) && $candidate !== 'null') {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Coerce a query string to int, guarding against overflow. `filter_var`
+     * returns `false` for values exceeding PHP_INT_MAX/MIN or containing
+     * non-digit characters, so the original string falls through and opis
+     * reports a type mismatch instead of receiving a silently truncated value.
+     */
+    private static function coerceToInt(string $value): int|string
+    {
+        $result = filter_var($value, FILTER_VALIDATE_INT);
+
+        return is_int($result) ? $result : $value;
+    }
+
+    /**
      * @param string[] $specPaths
      */
     private function getPathMatcher(string $specName, array $specPaths): OpenApiPathMatcher
@@ -170,14 +209,15 @@ final class OpenApiRequestValidator
      * @return string[]
      */
     private function validateQueryParameters(
+        string $method,
+        string $matchedPath,
         array $pathSpec,
         array $operation,
         array $queryParams,
         OpenApiVersion $version,
     ): array {
-        $parameters = $this->collectParameters($pathSpec, $operation);
+        [$parameters, $errors] = $this->collectParameters($method, $matchedPath, $pathSpec, $operation);
 
-        $errors = [];
         foreach ($parameters as $param) {
             if (($param['in'] ?? null) !== 'query') {
                 continue;
@@ -185,15 +225,21 @@ final class OpenApiRequestValidator
 
             /** @var string $name */
             $name = $param['name'];
+            $required = ($param['required'] ?? false) === true;
 
+            // A required parameter with no schema is a clearly malformed spec — surface it
+            // rather than silently passing every request. Optional parameters with no schema
+            // have nothing to validate, so we let them through (matches the body validator).
             if (!isset($param['schema']) || !is_array($param['schema'])) {
-                // No schema → nothing to validate against; mirrors body behaviour.
+                if ($required) {
+                    $errors[] = "[query.{$name}] required parameter has no schema for {$method} {$matchedPath} — cannot validate.";
+                }
+
                 continue;
             }
 
             /** @var array<string, mixed> $schema */
             $schema = $param['schema'];
-            $required = ($param['required'] ?? false) === true;
 
             $present = array_key_exists($name, $queryParams) && $queryParams[$name] !== null;
             if (!$present) {
@@ -217,8 +263,9 @@ final class OpenApiRequestValidator
 
             $formatted = $this->errorFormatter->format($result->error());
             foreach ($formatted as $path => $messages) {
+                $suffix = $path === '/' ? '' : $path;
                 foreach ($messages as $message) {
-                    $errors[] = "[query.{$name}{$path}] {$message}";
+                    $errors[] = "[query.{$name}{$suffix}] {$message}";
                 }
             }
         }
@@ -229,17 +276,22 @@ final class OpenApiRequestValidator
     /**
      * Merge path-level and operation-level parameters. Operation-level entries
      * override path-level ones with the same `name` + `in` (per OpenAPI spec).
-     * Malformed entries (missing or non-string `name`/`in`) are silently
-     * skipped — they cannot be uniquely identified for override matching.
+     *
+     * Malformed entries are surfaced as errors rather than silently skipped,
+     * because for a contract-testing tool the absence of an error means
+     * "validated and OK" — silently dropping a parameter would leave drift
+     * invisible. `$ref` entries are flagged separately so users know the spec
+     * needs to be pre-bundled (we don't resolve refs).
      *
      * @param array<string, mixed> $pathSpec
      * @param array<string, mixed> $operation
      *
-     * @return list<array<string, mixed>>
+     * @return array{0: list<array<string, mixed>>, 1: string[]}
      */
-    private function collectParameters(array $pathSpec, array $operation): array
+    private function collectParameters(string $method, string $matchedPath, array $pathSpec, array $operation): array
     {
         $merged = [];
+        $errors = [];
 
         foreach ([$pathSpec['parameters'] ?? [], $operation['parameters'] ?? []] as $source) {
             if (!is_array($source)) {
@@ -248,10 +300,21 @@ final class OpenApiRequestValidator
 
             foreach ($source as $param) {
                 if (!is_array($param)) {
+                    $errors[] = "Malformed parameter entry for {$method} {$matchedPath}: expected object, got scalar.";
+
+                    continue;
+                }
+
+                if (array_key_exists('$ref', $param)) {
+                    $ref = is_string($param['$ref']) ? $param['$ref'] : '(non-string $ref)';
+                    $errors[] = "Parameter \$ref encountered for {$method} {$matchedPath} ('{$ref}') — \$ref resolution is not supported. Pre-bundle the spec (e.g. redocly bundle --dereference).";
+
                     continue;
                 }
 
                 if (!isset($param['in'], $param['name']) || !is_string($param['in']) || !is_string($param['name'])) {
+                    $errors[] = "Malformed parameter entry for {$method} {$matchedPath}: 'name' and 'in' must be strings.";
+
                     continue;
                 }
 
@@ -260,7 +323,7 @@ final class OpenApiRequestValidator
             }
         }
 
-        return array_values($merged);
+        return [array_values($merged), $errors];
     }
 
     /**
@@ -269,20 +332,24 @@ final class OpenApiRequestValidator
      * type, the original value is returned unchanged so opis can surface a
      * meaningful type error rather than silently passing.
      *
+     * For multi-type schemas (OAS 3.1 `type: ["integer", "null"]`) the first
+     * non-`null` primitive type is used as the coercion target.
+     *
      * @param array<string, mixed> $schema
      */
     private function coerceQueryValue(mixed $value, array $schema): mixed
     {
         $type = $schema['type'] ?? null;
 
+        if (is_array($type)) {
+            $type = self::firstPrimitiveType($type);
+        }
+
         if ($type === 'array') {
-            if (!is_array($value)) {
-                $value = [$value];
-            }
+            $value = is_array($value) ? array_values($value) : [$value];
 
             $itemSchema = $schema['items'] ?? null;
             if (is_array($itemSchema)) {
-                /** @var list<mixed> $value */
                 return array_map(fn(mixed $item): mixed => $this->coerceQueryValue($item, $itemSchema), $value);
             }
 
@@ -294,7 +361,7 @@ final class OpenApiRequestValidator
         }
 
         return match ($type) {
-            'integer' => preg_match('/^-?\d+$/', $value) === 1 ? (int) $value : $value,
+            'integer' => self::coerceToInt($value),
             'number' => is_numeric($value) ? (float) $value : $value,
             'boolean' => match (strtolower($value)) {
                 'true' => true,
