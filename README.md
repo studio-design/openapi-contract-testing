@@ -293,6 +293,42 @@ Notes:
 - If a test is marked `#[SkipOpenApi]` and still calls `assertResponseMatchesOpenApiSchema()` explicitly, an advisory warning is written to `STDERR` and a user deprecation is raised to flag the contradictory intent. The assertion is not suppressed — fix the cause by removing either the attribute or the explicit call.
 - The attribute is resolved via reflection on the direct class only; a class-level `#[SkipOpenApi]` on an abstract parent is **not** inherited by subclasses. Apply the attribute on each concrete test class (or per method) instead.
 
+#### Per-request skip with `withoutValidation()`
+
+When only a single request should skip validation — e.g., exercising a legacy endpoint during a staged migration — use the fluent `withoutValidation()` API instead of annotating the whole method:
+
+```php
+class PetApiTest extends TestCase
+{
+    use ValidatesOpenApiSchema;
+
+    public function test_legacy_endpoint(): void
+    {
+        // Only this HTTP call skips validation.
+        $this->withoutValidation()
+            ->get('/v1/pets/legacy')
+            ->assertOk();
+
+        // The next call is validated as usual.
+        $this->get('/v1/pets')->assertOk();
+    }
+}
+```
+
+Three scopes are available:
+
+- `withoutValidation()` — skip both request and response validation
+- `withoutResponseValidation()` — skip response validation only
+- `withoutRequestValidation()` — skip request validation only (forward-looking hook; request validation itself is not yet implemented)
+
+Notes:
+
+- The flag applies to **exactly one HTTP call**. It is consumed on the next `$this->get()` / `$this->post()` / etc., then automatically resets — a second consecutive call validates normally.
+- Scoped to auto-assert only, like `#[SkipOpenApi]`. An explicit `assertResponseMatchesOpenApiSchema()` call still runs regardless of the flag.
+- No coverage is recorded for the skipped request.
+- Each method returns `$this`, so both `$this->withoutValidation()->get(...)` and the step-by-step form (`$this->withoutValidation(); $this->get(...);`) work.
+- `withoutRequestValidation()` currently has no observable effect because request validation has not landed yet — the method exists so tests can adopt the intended API surface today without a later rewrite.
+
 ## Coverage Report
 
 After running tests, the PHPUnit extension prints a coverage report. The output format is controlled by the `console_output` parameter (or `OPENAPI_CONSOLE_OUTPUT` environment variable).
