@@ -15,6 +15,8 @@ use function array_is_list;
 use function array_keys;
 use function implode;
 use function is_array;
+use function preg_last_error_msg;
+use function preg_match;
 use function sprintf;
 use function str_ends_with;
 use function strstr;
@@ -23,19 +25,39 @@ use function trim;
 
 final class OpenApiResponseValidator
 {
+    /**
+     * Regex patterns (without delimiters or anchors) that match response status
+     * codes which should skip body validation. The default of `5\d\d` reflects
+     * the common convention of not documenting production 5xx in specs.
+     */
+    public const DEFAULT_SKIP_RESPONSE_CODES = ['5\d\d'];
+
     /** @var array<string, OpenApiPathMatcher> */
     private array $pathMatchers = [];
     private Validator $opisValidator;
     private ErrorFormatter $errorFormatter;
 
+    /** @var array<string, string> Raw pattern (as supplied) => anchored pattern ready for preg_match. */
+    private readonly array $skipPatterns;
+
+    /**
+     * @param string[] $skipResponseCodes Regex patterns (without delimiters or
+     *                                    anchors) matched against the response status code as a string. A hit
+     *                                    short-circuits validation and returns an `OpenApiValidationResult::skipped()`
+     *                                    — isValid() stays true, isSkipped() becomes true, and the matched
+     *                                    path is still reported so coverage is recorded.
+     */
     public function __construct(
         private readonly int $maxErrors = 20,
+        array $skipResponseCodes = self::DEFAULT_SKIP_RESPONSE_CODES,
     ) {
         if ($this->maxErrors < 0) {
             throw new InvalidArgumentException(
                 sprintf('maxErrors must be 0 (unlimited) or a positive integer, got %d.', $this->maxErrors),
             );
         }
+
+        $this->skipPatterns = self::compileSkipPatterns($skipResponseCodes);
 
         $resolvedMaxErrors = $this->maxErrors === 0 ? PHP_INT_MAX : $this->maxErrors;
         $this->opisValidator = new Validator(
@@ -79,6 +101,19 @@ final class OpenApiResponseValidator
 
         $statusCodeStr = (string) $statusCode;
         $responses = $pathSpec[$lowerMethod]['responses'] ?? [];
+
+        // Skip-by-status-code: applied before the "Status code not defined"
+        // branch so a configured skip suppresses both status-code-level failure
+        // modes — "this code isn't in the spec's responses map" AND "this code
+        // IS documented but the body doesn't match its schema". Earlier checks
+        // (path / method not in spec) still fail loudly so typos stay visible.
+        $matchingPattern = $this->matchingSkipPattern($statusCodeStr);
+        if ($matchingPattern !== null) {
+            return OpenApiValidationResult::skipped(
+                $matchedPath,
+                sprintf('status %s matched skip pattern %s', $statusCodeStr, $matchingPattern),
+            );
+        }
 
         if (!isset($responses[$statusCodeStr])) {
             return OpenApiValidationResult::failure([
@@ -166,6 +201,46 @@ final class OpenApiResponseValidator
     }
 
     /**
+     * Keys keyed by the user-provided pattern (raw, without delimiters/anchors)
+     * so skipReason can echo what the caller wrote rather than the internal
+     * anchored form.
+     *
+     * @param string[] $patterns
+     *
+     * @return array<string, string> raw pattern => anchored pattern
+     */
+    private static function compileSkipPatterns(array $patterns): array
+    {
+        $compiled = [];
+
+        foreach ($patterns as $index => $pattern) {
+            if ($pattern === '') {
+                throw new InvalidArgumentException(
+                    sprintf('skipResponseCodes[%s] must not be an empty string.', (string) $index),
+                );
+            }
+
+            $anchored = '/^(?:' . $pattern . ')$/';
+
+            $ok = @preg_match($anchored, '');
+            if ($ok === false) {
+                throw new InvalidArgumentException(
+                    sprintf(
+                        'skipResponseCodes[%s] is not a valid regex pattern "%s": %s',
+                        (string) $index,
+                        $pattern,
+                        preg_last_error_msg(),
+                    ),
+                );
+            }
+
+            $compiled[$pattern] = $anchored;
+        }
+
+        return $compiled;
+    }
+
+    /**
      * Recursively convert PHP arrays to stdClass objects, matching the
      * behaviour of json_decode(json_encode($data)) without the intermediate
      * JSON string allocation.
@@ -191,6 +266,24 @@ final class OpenApiResponseValidator
         }
 
         return $object;
+    }
+
+    /**
+     * Returns the raw pattern (as supplied by the caller) that matched, or
+     * null if no pattern matched. `preg_match` returning false (runtime
+     * failure) is impossible in practice because compileSkipPatterns already
+     * probed each pattern successfully against the empty string and the
+     * subject here is always a short status-code string.
+     */
+    private function matchingSkipPattern(string $statusCode): ?string
+    {
+        foreach ($this->skipPatterns as $raw => $anchored) {
+            if (preg_match($anchored, $statusCode) === 1) {
+                return $raw;
+            }
+        }
+
+        return null;
     }
 
     /**

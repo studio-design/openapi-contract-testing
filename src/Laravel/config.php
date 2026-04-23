@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+
 return [
     'default_spec' => '',
 
@@ -14,4 +16,12 @@ return [
     // time, without requiring an explicit assertResponseMatchesOpenApiSchema()
     // call in each test. Defaults to false for backward compatibility.
     'auto_assert' => false,
+
+    // Regex patterns (without delimiters or anchors) matched against the
+    // response status code. Matching codes short-circuit body validation and
+    // return a "skipped" result — the test is not failed, and the endpoint is
+    // still recorded as covered. The default skips every 5xx because specs
+    // typically do not document production error responses.
+    // Set to [] to disable and validate every status code against the spec.
+    'skip_response_codes' => OpenApiResponseValidator::DEFAULT_SKIP_RESPONSE_CODES,
 ];

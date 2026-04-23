@@ -13,6 +13,7 @@ Validate your API responses against your OpenAPI specification during testing, a
 - **OpenAPI 3.0 & 3.1 support** — Automatic version detection from the `openapi` field
 - **Response validation** — Validates response bodies against JSON Schema (Draft 07 via opis/json-schema). Supports `application/json` and any `+json` content type (e.g., `application/problem+json`)
 - **Content negotiation** — Accepts the actual response `Content-Type` to handle mixed-content specs. Non-JSON responses (e.g., `text/html`, `application/xml`) are verified for spec presence without body validation; JSON-compatible responses are fully schema-validated
+- **Skip-by-status-code** — Configurable regex list of status codes whose bodies are not validated (default: every `5xx`), reflecting the common convention of not documenting production error responses in the spec
 - **Endpoint coverage tracking** — Unique PHPUnit extension that reports which spec endpoints are covered by tests
 - **Path matching** — Handles parameterized paths (`/pets/{petId}`) with configurable prefix stripping
 - **Laravel adapter** — Optional trait for seamless integration with Laravel's `TestResponse`
@@ -90,6 +91,12 @@ return [
     // helpers (get(), post(), etc.) against the OpenAPI spec. Defaults to
     // false for backward compatibility.
     'auto_assert' => false,
+
+    // Regex patterns (without delimiters or anchors) matched against the
+    // response status code. Matching codes short-circuit body validation —
+    // the test passes and the endpoint is still recorded as covered.
+    // Defaults to skipping every 5xx. Set to [] to validate every code.
+    'skip_response_codes' => ['5\d\d'],
 ];
 ```
 
@@ -227,6 +234,39 @@ $validator = new OpenApiResponseValidator(maxErrors: 1);
 ```
 
 For Laravel, set the `max_errors` key in `config/openapi-contract-testing.php`.
+
+#### Skipping responses by status code
+
+Production error responses (typically `5xx`) are often deliberately left out of the OpenAPI spec. Without special handling, a test that hits a `500` would fail twice: once from the underlying bug, and again from "Status code 500 not defined". To avoid that noise, every `5xx` response is **skipped by default** — body validation is not performed, the assertion passes, and the endpoint is still recorded as covered.
+
+Override via `skip_response_codes` in `config/openapi-contract-testing.php`:
+
+```php
+return [
+    // Default — skip all 5xx
+    'skip_response_codes' => ['5\d\d'],
+
+    // Widen to also skip all 4xx
+    'skip_response_codes' => ['4\d\d', '5\d\d'],
+
+    // Disable entirely — validate every status code
+    'skip_response_codes' => [],
+];
+```
+
+Or pass directly to `OpenApiResponseValidator`:
+
+```php
+$validator = new OpenApiResponseValidator(skipResponseCodes: ['5\d\d']);
+```
+
+Notes:
+
+- Patterns are regex strings **without** `/` delimiters or `^$` anchors; they are anchored automatically, so `5\d\d` matches exactly `500`–`599` (not `5000`).
+- The skip check sits **between** the "path / method not in spec" checks and the "status code not defined" / schema-validation checks. A skipped code therefore suppresses both status-code failure modes (undocumented code AND body mismatch for a documented code), but typos in the request path or method still fail loudly.
+- Skipped endpoints count as covered — the endpoint was exercised, just not schema-validated. Coverage semantics here match how non-JSON content types and schema-less `204` responses are handled, but `OpenApiValidationResult::isSkipped()` returns `true` **only** for status-code skips; the other no-body-validation branches still return a plain `success()`.
+- `OpenApiValidationResult::isSkipped()` is exposed for callers who want to distinguish a skip from a genuine success. `skipReason()` identifies the matched pattern.
+- **Observability trade-off**: a real regression that causes an unrelated `500` will not fail this assertion. Keep your HTTP-level assertions (`$response->assertOk()`, status-code expectations in the test) alongside the contract check so a stray 5xx still surfaces — the contract assertion alone is not a substitute for status-code assertions on happy paths.
 
 #### Auto-assert every response
 
@@ -478,10 +518,12 @@ $result = $validator->validate(
     responseContentType: 'application/json',
 );
 
-$result->isValid();      // bool
+$result->isValid();      // bool (true for both successes AND skipped results)
+$result->isSkipped();    // bool (true when the status code matched skip_response_codes)
 $result->errors();       // string[]
 $result->errorMessage(); // string (joined errors)
 $result->matchedPath();  // ?string (e.g., '/v1/pets/{petId}')
+$result->skipReason();   // ?string (non-null when skipped)
 ```
 
 ### `OpenApiSpecLoader`
