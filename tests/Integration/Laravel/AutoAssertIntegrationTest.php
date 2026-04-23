@@ -194,6 +194,64 @@ class AutoAssertIntegrationTest extends TestCase
         $this->assertArrayNotHasKey('petstore-3.0', OpenApiCoverageTracker::getCovered());
     }
 
+    #[Test]
+    public function without_validation_skips_next_http_call_only(): void
+    {
+        // Proves the fluent chain works through Laravel's actual HTTP helpers:
+        // withoutValidation() returns $this, then get() on the same instance
+        // sees the flag. The /v1/pets?bad=1 route returns a spec-violating
+        // body — auto-assert would otherwise fail.
+        config()->set('openapi-contract-testing.auto_assert', true);
+
+        $response = $this->withoutValidation()->get('/v1/pets?bad=1');
+        $response->assertOk();
+
+        // No coverage from the skipped call.
+        $this->assertArrayNotHasKey('petstore-3.0', OpenApiCoverageTracker::getCovered());
+    }
+
+    #[Test]
+    public function without_validation_flag_resets_after_one_http_call(): void
+    {
+        // Core guarantee from issue #41. First call consumes the flag; the
+        // second identical call must re-validate and fail. Without proper
+        // reset, the second call would silently pass.
+        config()->set('openapi-contract-testing.auto_assert', true);
+
+        $this->withoutValidation()->get('/v1/pets?bad=1')->assertOk();
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('OpenAPI schema validation failed');
+
+        $this->get('/v1/pets?bad=1');
+    }
+
+    #[Test]
+    public function without_response_validation_skips_next_http_call(): void
+    {
+        config()->set('openapi-contract-testing.auto_assert', true);
+
+        $response = $this->withoutResponseValidation()->get('/v1/pets?bad=1');
+        $response->assertOk();
+
+        $this->assertArrayNotHasKey('petstore-3.0', OpenApiCoverageTracker::getCovered());
+    }
+
+    #[Test]
+    public function without_request_validation_still_runs_response_auto_assert(): void
+    {
+        // withoutRequestValidation is a forward-looking hook — it must NOT
+        // suppress the response-side validation that already runs today. The
+        // /v1/pets?bad=1 body violates the spec, so auto-assert should still
+        // fail.
+        config()->set('openapi-contract-testing.auto_assert', true);
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('OpenAPI schema validation failed');
+
+        $this->withoutRequestValidation()->get('/v1/pets?bad=1');
+    }
+
     /** @return array<int, class-string> */
     protected function getPackageProviders($app): array
     {
