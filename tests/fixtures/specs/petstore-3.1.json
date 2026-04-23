@@ -479,6 +479,149 @@
                     }
                 }
             }
+        },
+        "/v1/secure/bearer": {
+            "get": {
+                "summary": "Requires bearerAuth",
+                "operationId": "secureBearer",
+                "security": [
+                    { "bearerAuth": [] }
+                ],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        },
+        "/v1/secure/apikey-header": {
+            "get": {
+                "summary": "Requires apiKey in header",
+                "operationId": "secureApiKeyHeader",
+                "security": [
+                    { "apiKeyHeader": [] }
+                ],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        },
+        "/v1/secure/apikey-query": {
+            "get": {
+                "summary": "Requires apiKey in query",
+                "operationId": "secureApiKeyQuery",
+                "security": [
+                    { "apiKeyQuery": [] }
+                ],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        },
+        "/v1/secure/apikey-cookie": {
+            "get": {
+                "summary": "Requires apiKey in cookie",
+                "operationId": "secureApiKeyCookie",
+                "security": [
+                    { "apiKeyCookie": [] }
+                ],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        },
+        "/v1/secure/or": {
+            "get": {
+                "summary": "Bearer OR apiKey (header)",
+                "operationId": "secureOr",
+                "security": [
+                    { "bearerAuth": [] },
+                    { "apiKeyHeader": [] }
+                ],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        },
+        "/v1/secure/and": {
+            "get": {
+                "summary": "Bearer AND apiKey (header) in single requirement",
+                "operationId": "secureAnd",
+                "security": [
+                    { "bearerAuth": [], "apiKeyHeader": [] }
+                ],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        },
+        "/v1/secure/opt-out": {
+            "get": {
+                "summary": "Explicitly no auth required",
+                "operationId": "secureOptOut",
+                "security": [],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        },
+        "/v1/secure/oauth2-only": {
+            "get": {
+                "summary": "Only OAuth2 (unsupported in phase 1)",
+                "operationId": "secureOauth2Only",
+                "security": [
+                    { "oauth2Flow": ["read"] }
+                ],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        },
+        "/v1/secure/bearer-or-oauth2": {
+            "get": {
+                "summary": "Bearer OR OAuth2 (unsupported entry must not block)",
+                "operationId": "secureBearerOrOauth2",
+                "security": [
+                    { "bearerAuth": [] },
+                    { "oauth2Flow": ["read"] }
+                ],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer"
+            },
+            "apiKeyHeader": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-API-Key"
+            },
+            "apiKeyQuery": {
+                "type": "apiKey",
+                "in": "query",
+                "name": "api_key"
+            },
+            "apiKeyCookie": {
+                "type": "apiKey",
+                "in": "cookie",
+                "name": "session_id"
+            },
+            "oauth2Flow": {
+                "type": "oauth2",
+                "flows": {
+                    "authorizationCode": {
+                        "authorizationUrl": "https://example.com/oauth/authorize",
+                        "tokenUrl": "https://example.com/oauth/token",
+                        "scopes": {
+                            "read": "Read access"
+                        }
+                    }
+                }
+            }
         }
     }
 }

@@ -244,6 +244,90 @@
                     }
                 }
             }
+        },
+        "/security-undefined-scheme": {
+            "get": {
+                "summary": "security references a scheme not defined in components.securitySchemes",
+                "operationId": "securityUndefinedScheme",
+                "security": [
+                    { "ghostScheme": [] }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/security-scalar-entry": {
+            "get": {
+                "summary": "security entry is a scalar instead of an object",
+                "operationId": "securityScalarEntry",
+                "security": [
+                    "not-an-object"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/security-scheme-missing-type": {
+            "get": {
+                "summary": "referenced scheme exists but has no 'type' field",
+                "operationId": "securitySchemeMissingType",
+                "security": [
+                    { "brokenScheme": [] }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/security-scheme-http-no-scheme-field": {
+            "get": {
+                "summary": "referenced http scheme missing 'scheme' field",
+                "operationId": "securityHttpNoSchemeField",
+                "security": [
+                    { "httpNoScheme": [] }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/security-scheme-apikey-missing-name": {
+            "get": {
+                "summary": "referenced apiKey scheme missing 'name' or 'in'",
+                "operationId": "securityApiKeyMissingName",
+                "security": [
+                    { "apiKeyNoName": [] }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "brokenScheme": {
+                "description": "no type field"
+            },
+            "httpNoScheme": {
+                "type": "http"
+            },
+            "apiKeyNoName": {
+                "type": "apiKey",
+                "in": "header"
+            }
         }
     }
 }
