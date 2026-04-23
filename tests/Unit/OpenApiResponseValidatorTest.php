@@ -199,6 +199,149 @@ class OpenApiResponseValidatorTest extends TestCase
     }
 
     // ========================================
+    // Skip-by-status-code tests
+    // ========================================
+
+    #[Test]
+    public function v30_500_response_is_skipped_by_default(): void
+    {
+        // petstore-3.0 defines 500 with an empty schema. The default skip
+        // pattern must short-circuit even when the status code is defined,
+        // so tests exercising production-only error paths stay green.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            500,
+            ['error' => 'something went wrong'],
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
+        $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function v30_503_response_is_skipped_by_default(): void
+    {
+        // petstore-3.0 does NOT define 503. The default skip pattern must
+        // suppress the normal "Status code 503 not defined" failure so that
+        // unexpected 5xx in test environments doesn't produce extra noise.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            503,
+            ['error' => 'service unavailable'],
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
+        $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function v30_499_response_is_not_skipped_by_default(): void
+    {
+        // 499 is outside the 5xx default pattern — validation should proceed
+        // to the normal "Status code not defined" failure for this spec.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            499,
+            ['error' => 'client closed request'],
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertFalse($result->isSkipped());
+        $this->assertStringContainsString('Status code 499 not defined', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function v30_299_response_is_not_skipped_by_default(): void
+    {
+        // 299 is a 2xx, not in the default 5xx skip window. It must fall
+        // through to the existing "not defined" failure.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            299,
+            ['data' => []],
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertFalse($result->isSkipped());
+        $this->assertStringContainsString('Status code 299 not defined', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function skip_response_codes_can_be_disabled(): void
+    {
+        // Opting out of the default skip list means 5xx behaves like any
+        // other status code again — a 503 not in the spec becomes a failure.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $result = $validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            503,
+            ['error' => 'service unavailable'],
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertFalse($result->isSkipped());
+        $this->assertStringContainsString('Status code 503 not defined', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function custom_skip_response_codes_pattern(): void
+    {
+        // Users can widen the skip set to cover 4xx or a specific code.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: ['4\d\d', '5\d\d']);
+
+        $result = $validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            404,
+            null,
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
+    }
+
+    #[Test]
+    public function skip_pattern_is_anchored(): void
+    {
+        // Anchoring matters: "50" must not match "500". Without anchors, a
+        // pattern like "50" would accidentally skip any code starting with 50.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: ['50']);
+
+        $result = $validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            500,
+            null,
+        );
+
+        $this->assertFalse($result->isSkipped());
+    }
+
+    #[Test]
+    public function invalid_skip_pattern_throws(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('skipResponseCodes');
+
+        new OpenApiResponseValidator(skipResponseCodes: ['(unclosed']);
+    }
+
+    // ========================================
     // OAS 3.0 JSON-compatible content type tests
     // ========================================
 
@@ -293,7 +436,13 @@ class OpenApiResponseValidatorTest extends TestCase
     #[Test]
     public function v30_json_content_type_without_schema_skips_validation(): void
     {
-        $result = $this->validator->validate(
+        // Bypass the 5xx default skip so we exercise the "content entry with
+        // no schema" path specifically (petstore-3.0 defines 500 with an empty
+        // application/json object). With the default skip list, the 5xx check
+        // would short-circuit before reaching the schema-less branch.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $result = $validator->validate(
             'petstore-3.0',
             'GET',
             '/v1/pets',
@@ -302,6 +451,7 @@ class OpenApiResponseValidatorTest extends TestCase
         );
 
         $this->assertTrue($result->isValid());
+        $this->assertFalse($result->isSkipped());
         $this->assertSame('/v1/pets', $result->matchedPath());
     }
 

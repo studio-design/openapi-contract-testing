@@ -192,4 +192,86 @@ class ValidatesOpenApiSchemaDefaultSpecTest extends TestCase
             $this->assertGreaterThan(1, count($errorLines));
         }
     }
+
+    // ========================================
+    // skip_response_codes config tests
+    // ========================================
+
+    #[Test]
+    public function default_skip_response_codes_config_skips_5xx_responses(): void
+    {
+        // With no explicit config, the default from config.php (['5\d\d']) must
+        // apply: a 503 that is not in the spec must NOT fail the assertion.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = 'petstore-3.0';
+
+        $body = (string) json_encode(['error' => 'service unavailable'], JSON_THROW_ON_ERROR);
+        $response = $this->makeTestResponse($body, 503);
+
+        $this->assertResponseMatchesOpenApiSchema(
+            $response,
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+
+        // Skipped endpoints still count as covered — the endpoint was exercised
+        // even though the body wasn't schema-checked.
+        $this->assertArrayHasKey('petstore-3.0', OpenApiCoverageTracker::getCovered());
+    }
+
+    #[Test]
+    public function skip_response_codes_config_can_be_disabled(): void
+    {
+        // Empty array means "validate every status code" — a 503 not in the
+        // spec must fall through to the usual "Status code not defined" failure.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = 'petstore-3.0';
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.skip_response_codes'] = [];
+
+        $body = (string) json_encode(['error' => 'service unavailable'], JSON_THROW_ON_ERROR);
+        $response = $this->makeTestResponse($body, 503);
+
+        try {
+            $this->assertResponseMatchesOpenApiSchema(
+                $response,
+                HttpMethod::GET,
+                '/v1/pets',
+            );
+            $this->fail('Expected AssertionFailedError was not thrown.');
+        } catch (AssertionFailedError $e) {
+            $this->assertStringContainsString('Status code 503 not defined', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function custom_skip_response_codes_config_widens_skip_set(): void
+    {
+        // Users can widen the skip to include 4xx by overriding the config.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = 'petstore-3.0';
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.skip_response_codes'] = ['4\d\d', '5\d\d'];
+
+        $response = $this->makeTestResponse('{}', 404);
+
+        $this->assertResponseMatchesOpenApiSchema(
+            $response,
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
+    public function non_array_skip_response_codes_config_fails_with_clear_message(): void
+    {
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = 'petstore-3.0';
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.skip_response_codes'] = '5\d\d';
+
+        $response = $this->makeTestResponse('{}', 500);
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('openapi-contract-testing.skip_response_codes must be an array');
+
+        $this->assertResponseMatchesOpenApiSchema(
+            $response,
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+    }
 }

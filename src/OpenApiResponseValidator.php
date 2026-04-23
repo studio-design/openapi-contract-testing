@@ -15,6 +15,7 @@ use function array_is_list;
 use function array_keys;
 use function implode;
 use function is_array;
+use function preg_match;
 use function sprintf;
 use function str_ends_with;
 use function strstr;
@@ -23,19 +24,39 @@ use function trim;
 
 final class OpenApiResponseValidator
 {
+    /**
+     * Regex patterns (without delimiters or anchors) that match response status
+     * codes which should skip body validation. The default of `5\d\d` reflects
+     * the common convention of not documenting production 5xx in specs.
+     */
+    public const DEFAULT_SKIP_RESPONSE_CODES = ['5\d\d'];
+
     /** @var array<string, OpenApiPathMatcher> */
     private array $pathMatchers = [];
     private Validator $opisValidator;
     private ErrorFormatter $errorFormatter;
 
+    /** @var string[] Anchored regex patterns ready for preg_match. */
+    private readonly array $skipPatterns;
+
+    /**
+     * @param string[] $skipResponseCodes Regex patterns (without delimiters or
+     *                                    anchors) matched against the response status code as a string. A hit
+     *                                    short-circuits validation and returns an `OpenApiValidationResult::skipped()`
+     *                                    — isValid() stays true, isSkipped() becomes true, and the matched
+     *                                    path is still reported so coverage is recorded.
+     */
     public function __construct(
         private readonly int $maxErrors = 20,
+        array $skipResponseCodes = self::DEFAULT_SKIP_RESPONSE_CODES,
     ) {
         if ($this->maxErrors < 0) {
             throw new InvalidArgumentException(
                 sprintf('maxErrors must be 0 (unlimited) or a positive integer, got %d.', $this->maxErrors),
             );
         }
+
+        $this->skipPatterns = self::compileSkipPatterns($skipResponseCodes);
 
         $resolvedMaxErrors = $this->maxErrors === 0 ? PHP_INT_MAX : $this->maxErrors;
         $this->opisValidator = new Validator(
@@ -79,6 +100,17 @@ final class OpenApiResponseValidator
 
         $statusCodeStr = (string) $statusCode;
         $responses = $pathSpec[$lowerMethod]['responses'] ?? [];
+
+        // Skip-by-status-code: applied before the "Status code not defined"
+        // branch so that callers can suppress both outcomes (no-spec-entry AND
+        // schema mismatch) for codes they explicitly don't want to validate,
+        // e.g. production-only 5xx responses that aren't documented in the spec.
+        if ($this->matchesSkipPattern($statusCodeStr)) {
+            return OpenApiValidationResult::skipped(
+                $matchedPath,
+                sprintf('status %s matched skip pattern', $statusCodeStr),
+            );
+        }
 
         if (!isset($responses[$statusCodeStr])) {
             return OpenApiValidationResult::failure([
@@ -166,6 +198,31 @@ final class OpenApiResponseValidator
     }
 
     /**
+     * @param string[] $patterns
+     *
+     * @return string[]
+     */
+    private static function compileSkipPatterns(array $patterns): array
+    {
+        $compiled = [];
+
+        foreach ($patterns as $index => $pattern) {
+            $anchored = '/^(?:' . $pattern . ')$/';
+
+            $ok = @preg_match($anchored, '');
+            if ($ok === false) {
+                throw new InvalidArgumentException(
+                    sprintf('skipResponseCodes[%s] is not a valid regex pattern: %s', (string) $index, $pattern),
+                );
+            }
+
+            $compiled[] = $anchored;
+        }
+
+        return $compiled;
+    }
+
+    /**
      * Recursively convert PHP arrays to stdClass objects, matching the
      * behaviour of json_decode(json_encode($data)) without the intermediate
      * JSON string allocation.
@@ -191,6 +248,17 @@ final class OpenApiResponseValidator
         }
 
         return $object;
+    }
+
+    private function matchesSkipPattern(string $statusCode): bool
+    {
+        foreach ($this->skipPatterns as $pattern) {
+            if (preg_match($pattern, $statusCode) === 1) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

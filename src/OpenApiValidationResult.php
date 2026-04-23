@@ -15,6 +15,8 @@ final class OpenApiValidationResult
         private readonly bool $valid,
         private readonly array $errors = [],
         private readonly ?string $matchedPath = null,
+        private readonly bool $skipped = false,
+        private readonly ?string $skipReason = null,
     ) {}
 
     public static function success(?string $matchedPath = null): self
@@ -28,9 +30,25 @@ final class OpenApiValidationResult
         return new self(false, $errors, $matchedPath);
     }
 
+    /**
+     * Represents a response whose body was intentionally not validated (e.g. a
+     * 5xx production error that the spec does not document). isValid() stays
+     * true so the assertion does not fail the test; isSkipped() distinguishes
+     * the case from a genuine successful match for callers that care.
+     */
+    public static function skipped(?string $matchedPath = null, ?string $reason = null): self
+    {
+        return new self(true, [], $matchedPath, true, $reason);
+    }
+
     public function isValid(): bool
     {
         return $this->valid;
+    }
+
+    public function isSkipped(): bool
+    {
+        return $this->skipped;
     }
 
     /** @return string[] */
@@ -47,5 +65,10 @@ final class OpenApiValidationResult
     public function matchedPath(): ?string
     {
         return $this->matchedPath;
+    }
+
+    public function skipReason(): ?string
+    {
+        return $this->skipReason;
     }
 }

@@ -24,6 +24,7 @@ use WeakMap;
 use function filter_var;
 use function fwrite;
 use function get_debug_type;
+use function is_array;
 use function is_numeric;
 use function is_string;
 use function sprintf;
@@ -39,6 +40,9 @@ trait ValidatesOpenApiSchema
     use SkipOpenApiResolver;
     private static ?OpenApiResponseValidator $cachedValidator = null;
     private static ?int $cachedMaxErrors = null;
+
+    /** @var null|string[] */
+    private static ?array $cachedSkipResponseCodes = null;
 
     /** @var null|WeakMap<TestResponse, array<string, true>> */
     private static ?WeakMap $validatedResponses = null;
@@ -68,6 +72,7 @@ trait ValidatesOpenApiSchema
     {
         self::$cachedValidator = null;
         self::$cachedMaxErrors = null;
+        self::$cachedSkipResponseCodes = null;
         self::$validatedResponses = null;
     }
 
@@ -227,7 +232,7 @@ trait ValidatesOpenApiSchema
 
         $contentType = $response->headers->get('Content-Type', '');
 
-        $validator = self::getOrCreateValidator();
+        $validator = $this->getOrCreateValidator();
         $result = $validator->validate(
             $specName,
             $resolvedMethod,
@@ -271,17 +276,55 @@ trait ValidatesOpenApiSchema
         self::$validatedResponses[$response] = $signatures;
     }
 
-    private static function getOrCreateValidator(): OpenApiResponseValidator
+    private function getOrCreateValidator(): OpenApiResponseValidator
     {
         $maxErrors = config('openapi-contract-testing.max_errors', 20);
         $resolvedMaxErrors = is_numeric($maxErrors) ? (int) $maxErrors : 20;
 
-        if (self::$cachedValidator === null || self::$cachedMaxErrors !== $resolvedMaxErrors) {
-            self::$cachedValidator = new OpenApiResponseValidator(maxErrors: $resolvedMaxErrors);
+        $resolvedSkipCodes = $this->resolveSkipResponseCodes();
+
+        if (
+            self::$cachedValidator === null ||
+            self::$cachedMaxErrors !== $resolvedMaxErrors ||
+            self::$cachedSkipResponseCodes !== $resolvedSkipCodes
+        ) {
+            self::$cachedValidator = new OpenApiResponseValidator(
+                maxErrors: $resolvedMaxErrors,
+                skipResponseCodes: $resolvedSkipCodes,
+            );
             self::$cachedMaxErrors = $resolvedMaxErrors;
+            self::$cachedSkipResponseCodes = $resolvedSkipCodes;
         }
 
         return self::$cachedValidator;
+    }
+
+    /** @return string[] */
+    private function resolveSkipResponseCodes(): array
+    {
+        $raw = config('openapi-contract-testing.skip_response_codes', OpenApiResponseValidator::DEFAULT_SKIP_RESPONSE_CODES);
+
+        if (!is_array($raw)) {
+            $this->fail(sprintf(
+                'openapi-contract-testing.skip_response_codes must be an array of regex patterns, got %s: %s.',
+                get_debug_type($raw),
+                var_export($raw, true),
+            ));
+        }
+
+        $patterns = [];
+        foreach ($raw as $index => $pattern) {
+            if (!is_string($pattern)) {
+                $this->fail(sprintf(
+                    'openapi-contract-testing.skip_response_codes[%s] must be a string regex pattern, got %s.',
+                    (string) $index,
+                    get_debug_type($pattern),
+                ));
+            }
+            $patterns[] = $pattern;
+        }
+
+        return $patterns;
     }
 
     private function emitSkipOpenApiWarning(SkipOpenApi $attribute): void
