@@ -1088,4 +1088,351 @@ class OpenApiRequestValidatorTest extends TestCase
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString('[query.count]', $result->errorMessage());
     }
+
+    // ========================================
+    // Path parameter validation
+    // ========================================
+
+    #[Test]
+    public function path_params_valid_integer_passes(): void
+    {
+        // petId is declared `type: integer, minimum: 1` — "42" coerces to int 42 and passes.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/42',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+        $this->assertSame('/v1/pets/{petId}', $result->matchedPath());
+    }
+
+    #[Test]
+    public function path_params_integer_expected_string_fails(): void
+    {
+        // Acceptance: integer 期待で文字列 → surface [path.petId] type error.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/not-a-number',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.petId]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_params_integer_violates_minimum_fails(): void
+    {
+        // Coercion succeeds but schema constraint (minimum:1) rejects 0.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/0',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.petId]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_params_uuid_format_valid_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/orders/f47ac10b-58cc-4372-a567-0e02b2c3d479',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+        $this->assertSame('/v1/orders/{orderId}', $result->matchedPath());
+    }
+
+    #[Test]
+    public function path_params_uuid_format_violation_fails(): void
+    {
+        // Acceptance: uuid 違反 → surface [path.orderId] format error.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/orders/not-a-uuid',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.orderId]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_params_percent_encoded_value_decoded_for_validation(): void
+    {
+        // Canonical UUID with a literal hyphen replaced by "%2D" (percent-encoded '-').
+        // Without rawurldecode() the string `f47ac10b%2D58cc-4372-a567-0e02b2c3d479`
+        // would fail uuid format validation; with decoding it is the valid canonical form.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/orders/f47ac10b%2D58cc-4372-a567-0e02b2c3d479',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+        $this->assertSame('/v1/orders/{orderId}', $result->matchedPath());
+    }
+
+    #[Test]
+    public function path_params_no_schema_surfaces_error(): void
+    {
+        // Path parameters are always required (OpenAPI spec) — a declared `in: path`
+        // entry without a schema is a malformed spec and should surface as a hard error
+        // rather than silently passing every request.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/widgets/anything',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.widgetId]', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function v31_path_params_uuid_format_violation_fails(): void
+    {
+        // OAS 3.1 parity: the 3.1 fixture declares orderId as `type: ["string"], format: uuid`
+        // (multi-type array form). The format validator must still fire.
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/orders/still-not-a-uuid',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.orderId]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v31_path_params_uuid_format_valid_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/orders/f47ac10b-58cc-4372-a567-0e02b2c3d479',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+        $this->assertSame('/v1/orders/{orderId}', $result->matchedPath());
+    }
+
+    #[Test]
+    public function path_params_date_time_format_valid_passes(): void
+    {
+        // Pin the docblock claim that opis's built-in FormatResolver handles date-time
+        // without additional configuration. A future refactor of OpenApiSchemaConverter
+        // that accidentally strips `format` for path params would fail this test.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/events/2026-04-23T10:00:00Z',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+        $this->assertSame('/v1/events/{eventTime}', $result->matchedPath());
+    }
+
+    #[Test]
+    public function path_params_date_time_format_violation_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/events/not-a-timestamp',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.eventTime]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_params_integer_with_trailing_space_fails(): void
+    {
+        // filter_var(FILTER_VALIDATE_INT) accepts "5 " as 5; combined with rawurldecode("5%20"),
+        // this would silently launder a whitespace-polluted URL into a valid integer.
+        // Real HTTP servers typically reject such paths — the validator should mirror them.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/5%20',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.petId]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_params_integer_with_leading_plus_fails(): void
+    {
+        // filter_var accepts "+5" as 5. OpenAPI's `style: simple` path serialization does
+        // not emit a leading sign; accepting it silently passes a non-canonical value.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/+5',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.petId]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_params_ref_entry_surfaces_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/path-ref-parameter/123',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('Parameter $ref encountered', $result->errors()[0]);
+        $this->assertStringContainsString('redocly bundle --dereference', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function path_params_scalar_entry_surfaces_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/path-scalar-parameter/123',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('Malformed parameter entry', $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function path_placeholder_without_declaration_surfaces_error(): void
+    {
+        // A template with `{id}` but no matching `in: path` parameter declaration is
+        // a malformed spec per OpenAPI (every placeholder MUST be declared). Silently
+        // accepting any value would be a classic drift-hiding silent pass.
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/path-undeclared/anything',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.id]', $result->errorMessage());
+        $this->assertStringContainsString('not declared', $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_params_declared_but_not_in_template_surfaces_error(): void
+    {
+        // Inverse of the above: a spec declares `in: path` name: wrongId but the template
+        // uses {id}. Defensive check should surface this so the author fixes the typo.
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/path-name-mismatch/123',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.wrongId]', $result->errorMessage());
+        $this->assertStringContainsString('not captured', $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_and_query_errors_are_combined(): void
+    {
+        // GET /v1/pets/{petId} with:
+        //   - invalid path (petId = "abc" — not an integer)
+        //   - invalid query (traceId = "lower" fails the operation-level ^[A-Z]+$ pattern)
+        // Both errors must surface in a single result so users see the full diagnostic
+        // in one run. (GET has no body — the POST /v1/pets endpoint that defines a body
+        // has no path parameter, so body composition is covered by
+        // query_and_body_errors_are_combined above.)
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/abc',
+            ['traceId' => 'lower'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.petId]', $result->errorMessage());
+        $this->assertStringContainsString('[query.traceId]', $result->errorMessage());
+    }
 }

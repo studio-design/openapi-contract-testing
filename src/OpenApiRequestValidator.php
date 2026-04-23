@@ -23,6 +23,8 @@ use function is_array;
 use function is_int;
 use function is_numeric;
 use function is_string;
+use function preg_match;
+use function rawurldecode;
 use function sprintf;
 use function str_ends_with;
 use function strstr;
@@ -56,9 +58,10 @@ final class OpenApiRequestValidator
     /**
      * Validate an incoming request against the OpenAPI spec.
      *
-     * Composes two validation phases — query parameters and request body — and
-     * returns a single result. Errors from both phases are accumulated so a
-     * single test run surfaces every contract drift the request exhibits.
+     * Composes path-parameter, query-parameter, and request-body validation
+     * plus any spec-level errors surfaced while collecting merged parameters,
+     * and returns a single result. Errors from all sources are accumulated
+     * so a single test run surfaces every contract drift the request exhibits.
      *
      * @param array<string, mixed> $queryParams parsed query string (string|array<string> per key)
      * @param array<string, mixed> $headers currently ignored; placeholder for header validation
@@ -79,13 +82,16 @@ final class OpenApiRequestValidator
         /** @var string[] $specPaths */
         $specPaths = array_keys($spec['paths'] ?? []);
         $matcher = $this->getPathMatcher($specName, $specPaths);
-        $matchedPath = $matcher->match($requestPath);
+        $matched = $matcher->matchWithVariables($requestPath);
 
-        if ($matchedPath === null) {
+        if ($matched === null) {
             return OpenApiValidationResult::failure([
                 "No matching path found in '{$specName}' spec for: {$requestPath}",
             ]);
         }
+
+        $matchedPath = $matched['path'];
+        $pathVariables = $matched['variables'];
 
         $lowerMethod = strtolower($method);
         /** @var array<string, mixed> $pathSpec */
@@ -100,11 +106,22 @@ final class OpenApiRequestValidator
         /** @var array<string, mixed> $operation */
         $operation = $pathSpec[$lowerMethod];
 
+        // Collect merged path/operation parameters once so path + query validation
+        // share a single view of the spec and spec-level errors (malformed entries,
+        // unresolved $refs) are surfaced only once.
+        [$parameters, $specErrors] = $this->collectParameters($method, $matchedPath, $pathSpec, $operation);
+
+        $pathErrors = $this->validatePathParameters(
+            $method,
+            $matchedPath,
+            $parameters,
+            $pathVariables,
+            $version,
+        );
         $queryErrors = $this->validateQueryParameters(
             $method,
             $matchedPath,
-            $pathSpec,
-            $operation,
+            $parameters,
             $queryParams,
             $version,
         );
@@ -118,7 +135,7 @@ final class OpenApiRequestValidator
             $version,
         );
 
-        $errors = [...$queryErrors, ...$bodyErrors];
+        $errors = [...$specErrors, ...$pathErrors, ...$queryErrors, ...$bodyErrors];
 
         if ($errors === []) {
             return OpenApiValidationResult::success($matchedPath);
@@ -173,16 +190,72 @@ final class OpenApiRequestValidator
     }
 
     /**
-     * Coerce a query string to int, guarding against overflow. `filter_var`
-     * returns `false` for values exceeding PHP_INT_MAX/MIN or containing
-     * non-digit characters, so the original string falls through and opis
-     * reports a type mismatch instead of receiving a silently truncated value.
+     * Coerce a URL-sourced string to int.
+     *
+     * `filter_var(FILTER_VALIDATE_INT)` is too permissive for contract testing:
+     * it accepts leading/trailing whitespace (e.g. "5 " → 5) and a leading
+     * sign prefix ("+5" → 5). Combined with rawurldecode these laundering
+     * behaviours would silently pass non-canonical URLs — real servers
+     * typically reject them, creating silent drift between the test harness
+     * and production. Pre-filter with a strict canonical-integer regex:
+     * optional leading `-`, then either `0` or a digit string without a
+     * leading zero. Anything else falls through unchanged so opis can
+     * report a meaningful type error.
+     *
+     * Overflow is still handled by `filter_var` returning `false` for
+     * values exceeding PHP_INT_MAX/MIN.
      */
     private static function coerceToInt(string $value): int|string
     {
+        if (preg_match('/^-?(0|[1-9]\d*)$/', $value) !== 1) {
+            return $value;
+        }
+
         $result = filter_var($value, FILTER_VALIDATE_INT);
 
         return is_int($result) ? $result : $value;
+    }
+
+    /**
+     * Scalar-only variant used for path parameters. Path segments arrive as
+     * single strings (OpenAPI default `style: simple`) so array handling is
+     * never appropriate — a spec declaring `type: array` for a path param
+     * would be rejected by opis because the request value is still scalar.
+     *
+     * @param array<string, mixed> $schema
+     */
+    private static function coercePrimitiveValue(mixed $value, array $schema): mixed
+    {
+        $type = $schema['type'] ?? null;
+
+        if (is_array($type)) {
+            $type = self::firstPrimitiveType($type);
+        }
+
+        return self::coercePrimitiveFromType($value, $type);
+    }
+
+    /**
+     * Shared scalar coercion: string → int/float/bool when the target type is
+     * clean, otherwise the original value passes through so opis can report a
+     * meaningful type mismatch.
+     */
+    private static function coercePrimitiveFromType(mixed $value, mixed $type): mixed
+    {
+        if (!is_string($value) || !is_string($type)) {
+            return $value;
+        }
+
+        return match ($type) {
+            'integer' => self::coerceToInt($value),
+            'number' => is_numeric($value) ? (float) $value : $value,
+            'boolean' => match (strtolower($value)) {
+                'true' => true,
+                'false' => false,
+                default => $value,
+            },
+            default => $value,
+        };
     }
 
     /**
@@ -202,8 +275,7 @@ final class OpenApiRequestValidator
      * PHP arrays from the framework. Other styles (`form`+`explode:false`,
      * `pipeDelimited`, `spaceDelimited`) are out of scope.
      *
-     * @param array<string, mixed> $pathSpec
-     * @param array<string, mixed> $operation
+     * @param list<array<string, mixed>> $parameters pre-collected merged parameters (path + operation level)
      * @param array<string, mixed> $queryParams
      *
      * @return string[]
@@ -211,12 +283,11 @@ final class OpenApiRequestValidator
     private function validateQueryParameters(
         string $method,
         string $matchedPath,
-        array $pathSpec,
-        array $operation,
+        array $parameters,
         array $queryParams,
         OpenApiVersion $version,
     ): array {
-        [$parameters, $errors] = $this->collectParameters($method, $matchedPath, $pathSpec, $operation);
+        $errors = [];
 
         foreach ($parameters as $param) {
             if (($param['in'] ?? null) !== 'query') {
@@ -267,6 +338,101 @@ final class OpenApiRequestValidator
                 foreach ($messages as $message) {
                     $errors[] = "[query.{$name}{$suffix}] {$message}";
                 }
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Validate path parameters declared by the matched operation (or
+     * inherited from the path-level `parameters` block) against the values
+     * extracted by the path matcher.
+     *
+     * Path parameters are always required in OpenAPI, so a declared `in: path`
+     * entry without a `schema` is treated as a hard spec error rather than a
+     * silent pass. Percent-encoded segments are decoded via `rawurldecode()`
+     * before type coercion / schema validation — the matcher leaves values
+     * raw so encoding policy stays in one place.
+     *
+     * String-valued `format: uuid | date-time | date | email | ...` is
+     * delegated to opis/json-schema's built-in FormatResolver (registered on
+     * the `string` type by default). Numeric OAS formats (`int32`, `int64`,
+     * `float`, `double`) are advisory-only and are not validated.
+     *
+     * @param list<array<string, mixed>> $parameters pre-collected merged parameters
+     * @param array<string, string> $pathVariables values extracted by OpenApiPathMatcher
+     *
+     * @return string[]
+     */
+    private function validatePathParameters(
+        string $method,
+        string $matchedPath,
+        array $parameters,
+        array $pathVariables,
+        OpenApiVersion $version,
+    ): array {
+        $errors = [];
+        $declared = [];
+
+        foreach ($parameters as $param) {
+            if (($param['in'] ?? null) !== 'path') {
+                continue;
+            }
+
+            /** @var string $name */
+            $name = $param['name'];
+            $declared[$name] = true;
+
+            // Defensive: every path placeholder in the matched template should have
+            // been captured by the regex. A mismatch here means the spec template and
+            // the compiled matcher disagree — surface it loudly rather than skipping.
+            if (!array_key_exists($name, $pathVariables)) {
+                $errors[] = "[path.{$name}] declared in {$method} {$matchedPath} spec but not captured by path matcher.";
+
+                continue;
+            }
+
+            if (!isset($param['schema']) || !is_array($param['schema'])) {
+                // Path parameters are implicitly required (OpenAPI spec), so a schema-less
+                // entry means every value passes — exactly the silent-drift outcome this
+                // library exists to prevent.
+                $errors[] = "[path.{$name}] parameter has no schema for {$method} {$matchedPath} — cannot validate.";
+
+                continue;
+            }
+
+            /** @var array<string, mixed> $schema */
+            $schema = $param['schema'];
+
+            $decoded = rawurldecode($pathVariables[$name]);
+            $coerced = self::coercePrimitiveValue($decoded, $schema);
+            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version);
+
+            $schemaObject = self::toObject($jsonSchema);
+            $dataObject = self::toObject($coerced);
+
+            $result = $this->opisValidator->validate($dataObject, $schemaObject);
+            if ($result->isValid()) {
+                continue;
+            }
+
+            $formatted = $this->errorFormatter->format($result->error());
+            foreach ($formatted as $path => $messages) {
+                $suffix = $path === '/' ? '' : $path;
+                foreach ($messages as $message) {
+                    $errors[] = "[path.{$name}{$suffix}] {$message}";
+                }
+            }
+        }
+
+        // Reverse check: every `{placeholder}` in the URL template MUST be declared
+        // as an `in: path` parameter per OpenAPI. A captured-but-not-declared name
+        // means the spec author forgot the declaration entirely, which would otherwise
+        // let any value pass silently — the drift this library exists to catch.
+        foreach ($pathVariables as $name => $_) {
+            if (!isset($declared[$name])) {
+                $errors[] = "[path.{$name}] placeholder in {$method} {$matchedPath} template is not declared as an 'in: path' parameter — malformed spec (OpenAPI requires every placeholder to be declared).";
             }
         }
 
@@ -356,20 +522,7 @@ final class OpenApiRequestValidator
             return $value;
         }
 
-        if (!is_string($value) || !is_string($type)) {
-            return $value;
-        }
-
-        return match ($type) {
-            'integer' => self::coerceToInt($value),
-            'number' => is_numeric($value) ? (float) $value : $value,
-            'boolean' => match (strtolower($value)) {
-                'true' => true,
-                'false' => false,
-                default => $value,
-            },
-            default => $value,
-        };
+        return self::coercePrimitiveFromType($value, $type);
     }
 
     /**
