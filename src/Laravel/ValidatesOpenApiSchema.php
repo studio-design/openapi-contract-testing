@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Laravel;
 
+use const E_USER_DEPRECATED;
 use const FILTER_NULL_ON_FAILURE;
 use const FILTER_VALIDATE_BOOLEAN;
+use const STDERR;
 
 use Illuminate\Testing\TestResponse;
 use JsonException;
@@ -13,11 +15,14 @@ use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecResolver;
+use Studio\OpenApiContractTesting\SkipOpenApi;
+use Studio\OpenApiContractTesting\SkipOpenApiResolver;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use WeakMap;
 
 use function filter_var;
+use function fwrite;
 use function get_debug_type;
 use function is_numeric;
 use function is_string;
@@ -25,16 +30,31 @@ use function sprintf;
 use function str_contains;
 use function strtolower;
 use function strtoupper;
+use function trigger_error;
 use function var_export;
 
 trait ValidatesOpenApiSchema
 {
     use OpenApiSpecResolver;
+    use SkipOpenApiResolver;
     private static ?OpenApiResponseValidator $cachedValidator = null;
     private static ?int $cachedMaxErrors = null;
 
     /** @var null|WeakMap<TestResponse, array<string, true>> */
     private static ?WeakMap $validatedResponses = null;
+
+    /**
+     * Receives the warning emitted when a test marked #[SkipOpenApi] still
+     * calls assertResponseMatchesOpenApiSchema() explicitly. The explicit
+     * assertion always runs regardless — this is an advisory nudge that the
+     * two signals contradict each other.
+     *
+     * Defaults to writing to STDERR and emitting an E_USER_DEPRECATED via
+     * trigger_error(). Tests can swap it to capture warnings in-memory.
+     *
+     * @var null|callable(string): void
+     */
+    private static $skipWarningHandler;
 
     public static function resetValidatorCache(): void
     {
@@ -76,6 +96,13 @@ trait ValidatesOpenApiSchema
             return;
         }
 
+        // #[SkipOpenApi] opts the test out of auto-assert entirely — no
+        // validation, no coverage recording. Explicit calls to
+        // assertResponseMatchesOpenApiSchema() still run but emit a warning.
+        if ($this->findSkipOpenApiAttribute() !== null) {
+            return;
+        }
+
         $this->assertResponseMatchesOpenApiSchema($response, $method, $path);
     }
 
@@ -100,6 +127,11 @@ trait ValidatesOpenApiSchema
         ?HttpMethod $method = null,
         ?string $path = null,
     ): void {
+        $skipAttribute = $this->findSkipOpenApiAttribute();
+        if ($skipAttribute !== null) {
+            $this->emitSkipOpenApiWarning($skipAttribute);
+        }
+
         $resolvedMethod = $method !== null ? $method->value : app('request')->getMethod();
         $resolvedPath = $path ?? app('request')->getPathInfo();
 
@@ -186,6 +218,34 @@ trait ValidatesOpenApiSchema
         }
 
         return self::$cachedValidator;
+    }
+
+    private function emitSkipOpenApiWarning(SkipOpenApi $attribute): void
+    {
+        $reason = $attribute->reason;
+        $message = sprintf(
+            '%s::%s is marked #[SkipOpenApi%s] but called assertResponseMatchesOpenApiSchema() explicitly. '
+            . 'The assertion will run. Remove the attribute or the explicit call to clarify intent.',
+            static::class,
+            $this->name(), // @phpstan-ignore method.notFound
+            $reason !== '' ? sprintf('(reason: %s)', var_export($reason, true)) : '',
+        );
+
+        $handler = self::$skipWarningHandler;
+        if ($handler !== null) {
+            $handler($message);
+
+            return;
+        }
+
+        // STDERR guarantees the message body is visible in CI regardless of
+        // PHPUnit's `displayDetailsOnTestsThatTriggerDeprecations` setting —
+        // without it, the default config would only show a "1 deprecation"
+        // tally and hide the actual contradictory-intent message.
+        fwrite(STDERR, sprintf("\n[openapi-contract-testing] %s\n", $message));
+        // trigger_error still fires so PHPUnit counts the deprecation and
+        // surfaces it in the run summary for downstream tools to detect.
+        trigger_error($message, E_USER_DEPRECATED);
     }
 
     private function isAutoAssertEnabled(): bool
