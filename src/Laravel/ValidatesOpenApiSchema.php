@@ -56,11 +56,57 @@ trait ValidatesOpenApiSchema
      */
     private static $skipWarningHandler;
 
+    // Per-request skip flags set by withoutRequestValidation() /
+    // withoutResponseValidation() / withoutValidation(). Consumed (and reset)
+    // on the next auto-assert attempt, so the flag covers exactly one HTTP
+    // call. Instance-level because PHPUnit builds a fresh TestCase per
+    // method — this gives us natural per-test isolation.
+    private bool $skipNextRequestValidation = false;
+    private bool $skipNextResponseValidation = false;
+
     public static function resetValidatorCache(): void
     {
         self::$cachedValidator = null;
         self::$cachedMaxErrors = null;
         self::$validatedResponses = null;
+    }
+
+    /**
+     * Skips both request and response validation for the next HTTP call only.
+     * The flag self-resets after one auto-assert attempt, so subsequent calls
+     * are validated as usual.
+     *
+     * Scoped to auto-assert only — explicit calls to
+     * assertResponseMatchesOpenApiSchema() still run, matching the convention
+     * already established by #[SkipOpenApi].
+     */
+    public function withoutValidation(): static
+    {
+        $this->skipNextRequestValidation = true;
+        $this->skipNextResponseValidation = true;
+
+        return $this;
+    }
+
+    /**
+     * Skips request validation for the next HTTP call only. Currently a
+     * forward-looking hook: request validation itself lands in #43, and this
+     * method wires up the flag ahead of time so callers can already write the
+     * intended API surface.
+     */
+    public function withoutRequestValidation(): static
+    {
+        $this->skipNextRequestValidation = true;
+
+        return $this;
+    }
+
+    /** Skips response validation for the next HTTP call only. */
+    public function withoutResponseValidation(): static
+    {
+        $this->skipNextResponseValidation = true;
+
+        return $this;
     }
 
     /**
@@ -92,7 +138,19 @@ trait ValidatesOpenApiSchema
         ?HttpMethod $method = null,
         ?string $path = null,
     ): void {
+        // Consume per-request skip flags unconditionally, so they track the
+        // HTTP call boundary regardless of auto_assert state. Without this,
+        // a flag set before an auto_assert=false call would silently leak
+        // into the next call after auto_assert flips on.
+        $skipResponse = $this->skipNextResponseValidation;
+        $this->skipNextRequestValidation = false;
+        $this->skipNextResponseValidation = false;
+
         if (!$this->isAutoAssertEnabled()) {
+            return;
+        }
+
+        if ($skipResponse) {
             return;
         }
 
