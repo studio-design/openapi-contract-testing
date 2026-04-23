@@ -13,7 +13,7 @@ Validate your API responses against your OpenAPI specification during testing, a
 - **OpenAPI 3.0 & 3.1 support** — Automatic version detection from the `openapi` field
 - **Response validation** — Validates response bodies against JSON Schema (Draft 07 via opis/json-schema). Supports `application/json` and any `+json` content type (e.g., `application/problem+json`)
 - **Content negotiation** — Accepts the actual response `Content-Type` to handle mixed-content specs. Non-JSON responses (e.g., `text/html`, `application/xml`) are verified for spec presence without body validation; JSON-compatible responses are fully schema-validated
-- **Skip-by-status-code** — Configurable regex list of status codes whose bodies are not validated (default: every `5xx`), reflecting the common convention of not documenting production error responses in the spec
+- **Skip-by-status-code** — Configurable regex list of status codes whose bodies are not validated (default: every `5xx`), reflecting the common convention of not documenting production error responses in the spec. Also available per-request via the fluent `skipResponseCode()` API
 - **Endpoint coverage tracking** — Unique PHPUnit extension that reports which spec endpoints are covered by tests
 - **Path matching** — Handles parameterized paths (`/pets/{petId}`) with configurable prefix stripping
 - **Laravel adapter** — Optional trait for seamless integration with Laravel's `TestResponse`
@@ -367,6 +367,39 @@ Notes:
 - Scoped to auto-assert only, like `#[SkipOpenApi]`. An explicit `assertResponseMatchesOpenApiSchema()` call still runs regardless of the flag.
 - No coverage is recorded for the skipped request.
 - Each method returns `$this`, so both `$this->withoutValidation()->get(...)` and the step-by-step form (`$this->withoutValidation(); $this->get(...);`) work.
+
+#### Per-request status-code skip with `skipResponseCode()`
+
+`withoutValidation()` is all-or-nothing for a request. When you only need to suppress a specific status code — e.g., a flaky `404` while a fixture is being repaired — `skipResponseCode()` adds a one-off skip on top of the config-level set:
+
+```php
+class PetApiTest extends TestCase
+{
+    use ValidatesOpenApiSchema;
+
+    public function test_endpoint_returning_a_documented_404(): void
+    {
+        // Only this call treats 404 as a skip; other calls keep the default behavior.
+        $this->skipResponseCode(404)
+            ->get('/v1/pets/missing')
+            ->assertNotFound();
+    }
+}
+```
+
+Argument shapes:
+
+- **`int`** — exact match, anchored. `skipResponseCode(500)` matches `"500"` only, never `"5000"` or `"50"`.
+- **`string`** — regex pattern (anchored automatically). `skipResponseCode('4\d\d')` matches the entire `4xx` range.
+- **`array`** — expanded one level. Mixed types are allowed: `skipResponseCode([404, '5\d\d'])`.
+- **Variadic** — multiple positional arguments work too: `skipResponseCode(404, 500, '5\d\d')`.
+
+Notes:
+
+- **Merged** with `skip_response_codes` from config — per-request codes ADD to the config set rather than replacing it. With the default config, `skipResponseCode(404)` skips both `404` and every `5xx`.
+- **One HTTP call**: same consumption model as `withoutValidation()`. The codes are consumed on the next auto-assert attempt and reset, so the next call falls back to the config-level set.
+- **Auto-assert only**. Explicit `assertResponseMatchesOpenApiSchema()` calls ignore per-request codes — explicit calls are the user's direct intent.
+- **Chainable**: returns `$this`. Multiple chained calls accumulate (`$this->skipResponseCode(404)->skipResponseCode(503)` registers both).
 - `withoutRequestValidation()` currently has no observable effect because request validation has not landed yet — the method exists so tests can adopt the intended API surface today without a later rewrite.
 
 ## Coverage Report

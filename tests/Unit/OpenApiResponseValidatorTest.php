@@ -413,6 +413,28 @@ class OpenApiResponseValidatorTest extends TestCase
     }
 
     #[Test]
+    public function numeric_string_pattern_key_survives_array_coercion(): void
+    {
+        // Regression guard: PHP coerces canonical-integer string array keys
+        // (e.g. "503") to int keys. The internal skipPatterns map is keyed by
+        // the raw user-supplied pattern, so a numeric pattern like "503"
+        // lands under int key 503. Without a string cast at retrieval time,
+        // skipReason() would return an int and violate its ?string contract.
+        //
+        // The Laravel adapter's skipResponseCode(int) path stringifies ints
+        // to bare "503" before passing them in, which exposes exactly this
+        // shape to compileSkipPatterns(). Pin the round-trip so a future
+        // refactor that drops the (string) cast fails here, not at the
+        // caller site where the root cause is less obvious.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: ['503']);
+
+        $result = $validator->validate('petstore-3.0', 'GET', '/v1/pets', 503, null);
+
+        $this->assertTrue($result->isSkipped());
+        $this->assertSame('status 503 matched skip pattern 503', $result->skipReason());
+    }
+
+    #[Test]
     public function invalid_skip_pattern_throws(): void
     {
         $this->expectException(InvalidArgumentException::class);
