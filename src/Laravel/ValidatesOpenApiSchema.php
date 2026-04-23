@@ -21,10 +21,12 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use WeakMap;
 
+use function array_merge;
 use function filter_var;
 use function fwrite;
 use function get_debug_type;
 use function is_array;
+use function is_int;
 use function is_numeric;
 use function is_string;
 use function sprintf;
@@ -67,6 +69,14 @@ trait ValidatesOpenApiSchema
     // method — this gives us natural per-test isolation.
     private bool $skipNextRequestValidation = false;
     private bool $skipNextResponseValidation = false;
+
+    // Per-request additional response-code skip patterns set by
+    // skipResponseCode(). Merged with the config-level skip set when building
+    // the validator, then consumed (reset) on the next auto-assert attempt.
+    // Patterns are stored raw (without delimiters/anchors) so the existing
+    // OpenApiResponseValidator::compileSkipPatterns() pipeline can anchor them.
+    /** @var string[] */
+    private array $skipNextResponseCodes = [];
 
     public static function resetValidatorCache(): void
     {
@@ -121,6 +131,39 @@ trait ValidatesOpenApiSchema
     }
 
     /**
+     * Adds one or more response status codes to skip for the next auto-assert
+     * HTTP call only. Merged with the config-level `skip_response_codes` set,
+     * then consumed (reset) after one call — matching the per-request
+     * consumption model of withoutValidation().
+     *
+     * - int: exact match (the existing skip-pattern compiler anchors it to
+     *   `^(?:500)$`, so `500` only matches `"500"`).
+     * - string: regex pattern (anchored by the compiler).
+     * - array: expanded one level; each element is treated as int or string
+     *   per the above.
+     *
+     * Scoped to auto-assert only, matching withoutValidation()'s convention.
+     * Explicit assertResponseMatchesOpenApiSchema() calls are the user's
+     * direct intent and ignore this flag.
+     *
+     * @param array<int|string>|int|string ...$codes
+     */
+    public function skipResponseCode(array|int|string ...$codes): static
+    {
+        foreach ($codes as $code) {
+            if (is_array($code)) {
+                foreach ($code as $inner) {
+                    $this->skipNextResponseCodes[] = self::normalizeSkipCode($inner);
+                }
+            } else {
+                $this->skipNextResponseCodes[] = self::normalizeSkipCode($code);
+            }
+        }
+
+        return $this;
+    }
+
+    /**
      * Overrides Laravel's MakesHttpRequests::createTestResponse hook so every
      * HTTP test call runs schema validation when auto_assert is enabled.
      * When the library is used outside Laravel, this method is never called.
@@ -154,8 +197,10 @@ trait ValidatesOpenApiSchema
         // a flag set before an auto_assert=false call would silently leak
         // into the next call after auto_assert flips on.
         $skipResponse = $this->skipNextResponseValidation;
+        $extraSkipCodes = $this->skipNextResponseCodes;
         $this->skipNextRequestValidation = false;
         $this->skipNextResponseValidation = false;
+        $this->skipNextResponseCodes = [];
 
         if (!$this->isAutoAssertEnabled()) {
             return;
@@ -172,7 +217,7 @@ trait ValidatesOpenApiSchema
             return;
         }
 
-        $this->assertResponseMatchesOpenApiSchema($response, $method, $path);
+        $this->assertResponseMatchesOpenApiSchema($response, $method, $path, $extraSkipCodes);
     }
 
     protected function openApiSpec(): string
@@ -191,10 +236,19 @@ trait ValidatesOpenApiSchema
         return $this->openApiSpec();
     }
 
+    /**
+     * @param string[] $extraSkipResponseCodes Additional skip patterns merged
+     *                                         into the validator's skip set for this call only. Populated by
+     *                                         maybeAutoAssertOpenApiSchema() from the per-request
+     *                                         skipResponseCode() flag. Empty for explicit user calls — the flag
+     *                                         is scoped to auto-assert only, matching withoutValidation()'s
+     *                                         convention.
+     */
     protected function assertResponseMatchesOpenApiSchema(
         TestResponse $response,
         ?HttpMethod $method = null,
         ?string $path = null,
+        array $extraSkipResponseCodes = [],
     ): void {
         $skipAttribute = $this->findSkipOpenApiAttribute();
         if ($skipAttribute !== null) {
@@ -232,7 +286,12 @@ trait ValidatesOpenApiSchema
 
         $contentType = $response->headers->get('Content-Type', '');
 
-        $validator = $this->getOrCreateValidator();
+        // One-off validator when per-request skip codes are present — bypasses
+        // the static cache so test-local codes don't pollute it (and so
+        // cache-entry churn can't grow unbounded across tests).
+        $validator = $extraSkipResponseCodes !== []
+            ? $this->buildOneOffValidator($extraSkipResponseCodes)
+            : $this->getOrCreateValidator();
         $result = $validator->validate(
             $specName,
             $resolvedMethod,
@@ -276,11 +335,17 @@ trait ValidatesOpenApiSchema
         self::$validatedResponses[$response] = $signatures;
     }
 
+    private static function normalizeSkipCode(int|string $code): string
+    {
+        // Int codes are returned as a bare string so the existing
+        // OpenApiResponseValidator::compileSkipPatterns() pipeline wraps them
+        // in ^(?:...)$ for exact-match semantics. Strings are already regex.
+        return is_int($code) ? (string) $code : $code;
+    }
+
     private function getOrCreateValidator(): OpenApiResponseValidator
     {
-        $maxErrors = config('openapi-contract-testing.max_errors', 20);
-        $resolvedMaxErrors = is_numeric($maxErrors) ? (int) $maxErrors : 20;
-
+        $resolvedMaxErrors = $this->resolveMaxErrors();
         $resolvedSkipCodes = $this->resolveSkipResponseCodes();
 
         if (
@@ -297,6 +362,27 @@ trait ValidatesOpenApiSchema
         }
 
         return self::$cachedValidator;
+    }
+
+    /**
+     * @param string[] $extraSkipResponseCodes
+     */
+    private function buildOneOffValidator(array $extraSkipResponseCodes): OpenApiResponseValidator
+    {
+        return new OpenApiResponseValidator(
+            maxErrors: $this->resolveMaxErrors(),
+            skipResponseCodes: array_merge(
+                $this->resolveSkipResponseCodes(),
+                $extraSkipResponseCodes,
+            ),
+        );
+    }
+
+    private function resolveMaxErrors(): int
+    {
+        $maxErrors = config('openapi-contract-testing.max_errors', 20);
+
+        return is_numeric($maxErrors) ? (int) $maxErrors : 20;
     }
 
     /** @return string[] */

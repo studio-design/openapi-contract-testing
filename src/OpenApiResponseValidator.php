@@ -279,7 +279,11 @@ final class OpenApiResponseValidator
     {
         foreach ($this->skipPatterns as $raw => $anchored) {
             if (preg_match($anchored, $statusCode) === 1) {
-                return $raw;
+                // PHP coerces numeric-string array keys to int (e.g. the
+                // pattern "500" lands under key 500). Cast back to string so
+                // the documented ?string return type is honoured even for
+                // status-code-shaped patterns.
+                return (string) $raw;
             }
         }
 
