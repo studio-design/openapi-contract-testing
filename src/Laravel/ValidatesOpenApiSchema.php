@@ -321,6 +321,12 @@ trait ValidatesOpenApiSchema
                     get_debug_type($pattern),
                 ));
             }
+            if ($pattern === '') {
+                $this->fail(sprintf(
+                    'openapi-contract-testing.skip_response_codes[%s] must not be an empty string.',
+                    (string) $index,
+                ));
+            }
             $patterns[] = $pattern;
         }
 

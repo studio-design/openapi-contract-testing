@@ -73,6 +73,20 @@ class OpenApiResponseValidatorTest extends TestCase
         yield 'empty nested object' => [['data' => []]];
     }
 
+    /**
+     * @return iterable<string, array{int, bool}>
+     */
+    public static function provideSkip_boundary_casesCases(): iterable
+    {
+        // Pin the exact 5xx boundary so that a future tweak to the default
+        // pattern (e.g. accidental `5\d+` instead of `5\d\d`) cannot silently
+        // widen or narrow the skip window.
+        yield '499 is not skipped' => [499, false];
+        yield '500 is skipped' => [500, true];
+        yield '599 is skipped' => [599, true];
+        yield '600 is not skipped' => [600, false];
+    }
+
     // ========================================
     // OAS 3.0 tests
     // ========================================
@@ -319,6 +333,9 @@ class OpenApiResponseValidatorTest extends TestCase
     {
         // Anchoring matters: "50" must not match "500". Without anchors, a
         // pattern like "50" would accidentally skip any code starting with 50.
+        // Also assert that validation still proceeds normally — petstore-3.0
+        // defines 500 with an empty application/json schema, so the result is
+        // a regular success, not a skip.
         $validator = new OpenApiResponseValidator(skipResponseCodes: ['50']);
 
         $result = $validator->validate(
@@ -330,6 +347,69 @@ class OpenApiResponseValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isSkipped());
+        $this->assertTrue($result->isValid());
+    }
+
+    #[Test]
+    #[DataProvider('provideSkip_boundary_casesCases')]
+    public function skip_boundary_cases(int $statusCode, bool $expectSkipped): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            $statusCode,
+            null,
+        );
+
+        $this->assertSame($expectSkipped, $result->isSkipped());
+    }
+
+    #[Test]
+    public function v31_5xx_response_is_skipped_by_default(): void
+    {
+        // petstore-3.1 does NOT define 503; skip must still fire under OAS 3.1
+        // so a future move of the skip check past version-specific schema
+        // conversion doesn't silently regress.
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/pets',
+            503,
+            ['error' => 'service unavailable'],
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
+        $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function multiple_skip_patterns_are_ored(): void
+    {
+        // Regression guard: the foreach in matchingSkipPattern must try every
+        // configured pattern, not short-circuit on the first.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: ['4\d\d', '5\d\d']);
+
+        $result404 = $validator->validate('petstore-3.0', 'GET', '/v1/pets', 404, null);
+        $result500 = $validator->validate('petstore-3.0', 'GET', '/v1/pets', 500, null);
+
+        $this->assertTrue($result404->isSkipped());
+        $this->assertTrue($result500->isSkipped());
+    }
+
+    #[Test]
+    public function skip_reason_includes_matched_pattern(): void
+    {
+        // skipReason() carries enough detail to audit which configured pattern
+        // fired, not just which status code triggered — useful when running
+        // with multiple distinct patterns.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: ['4\d\d', '5\d\d']);
+
+        $result = $validator->validate('petstore-3.0', 'GET', '/v1/pets', 503, null);
+
+        $this->assertTrue($result->isSkipped());
+        $this->assertSame('status 503 matched skip pattern 5\d\d', $result->skipReason());
     }
 
     #[Test]
@@ -337,8 +417,38 @@ class OpenApiResponseValidatorTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('skipResponseCodes');
+        $this->expectExceptionMessage('(unclosed');
 
         new OpenApiResponseValidator(skipResponseCodes: ['(unclosed']);
+    }
+
+    #[Test]
+    public function invalid_skip_pattern_error_includes_preg_detail(): void
+    {
+        try {
+            new OpenApiResponseValidator(skipResponseCodes: ['(unclosed']);
+            $this->fail('Expected InvalidArgumentException was not thrown.');
+        } catch (InvalidArgumentException $e) {
+            // The message carries both the offending raw pattern and a
+            // preg_last_error_msg() trailer (wording varies across PHP
+            // versions — "Internal error", "missing )", etc.). Assert both
+            // structural pieces are present rather than locking to a
+            // specific PCRE wording.
+            $this->assertStringContainsString('(unclosed', $e->getMessage());
+            $this->assertMatchesRegularExpression('/: \S/', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function empty_skip_pattern_is_rejected(): void
+    {
+        // An empty pattern is never legitimate for status-code matching
+        // (status codes are always non-empty), so reject it at construction
+        // instead of silently accepting a regex that matches nothing.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('must not be an empty string');
+
+        new OpenApiResponseValidator(skipResponseCodes: ['']);
     }
 
     // ========================================

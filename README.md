@@ -263,9 +263,10 @@ $validator = new OpenApiResponseValidator(skipResponseCodes: ['5\d\d']);
 Notes:
 
 - Patterns are regex strings **without** `/` delimiters or `^$` anchors; they are anchored automatically, so `5\d\d` matches exactly `500`–`599` (not `5000`).
-- The skip check runs **before** the "Status code not defined" check, so a skipped code suppresses both missing-from-spec failures and schema mismatches. This makes the rule simple and predictable regardless of whether the code happens to be documented.
-- Skipped endpoints count as covered — the endpoint was exercised, just not schema-validated against the body. This mirrors how non-JSON content types and schema-less `204` responses are already handled.
-- `OpenApiValidationResult::isSkipped()` is exposed for callers who want to distinguish a skip from a genuine success.
+- The skip check sits **between** the "path / method not in spec" checks and the "status code not defined" / schema-validation checks. A skipped code therefore suppresses both status-code failure modes (undocumented code AND body mismatch for a documented code), but typos in the request path or method still fail loudly.
+- Skipped endpoints count as covered — the endpoint was exercised, just not schema-validated. Coverage semantics here match how non-JSON content types and schema-less `204` responses are handled, but `OpenApiValidationResult::isSkipped()` returns `true` **only** for status-code skips; the other no-body-validation branches still return a plain `success()`.
+- `OpenApiValidationResult::isSkipped()` is exposed for callers who want to distinguish a skip from a genuine success. `skipReason()` identifies the matched pattern.
+- **Observability trade-off**: a real regression that causes an unrelated `500` will not fail this assertion. Keep your HTTP-level assertions (`$response->assertOk()`, status-code expectations in the test) alongside the contract check so a stray 5xx still surfaces — the contract assertion alone is not a substitute for status-code assertions on happy paths.
 
 #### Auto-assert every response
 

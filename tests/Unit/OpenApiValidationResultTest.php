@@ -55,7 +55,7 @@ class OpenApiValidationResultTest extends TestCase
     #[Test]
     public function skipped_creates_skipped_result(): void
     {
-        $result = OpenApiValidationResult::skipped('/v1/pets', 'status 500 matched skip pattern');
+        $result = OpenApiValidationResult::skipped('/v1/pets', 'status 500 matched skip pattern 5\d\d');
 
         // isValid() remains true so the assertion surface does not fail the test,
         // but isSkipped() distinguishes the case from a genuine success.
@@ -64,7 +64,7 @@ class OpenApiValidationResultTest extends TestCase
         $this->assertSame([], $result->errors());
         $this->assertSame('', $result->errorMessage());
         $this->assertSame('/v1/pets', $result->matchedPath());
-        $this->assertSame('status 500 matched skip pattern', $result->skipReason());
+        $this->assertSame('status 500 matched skip pattern 5\d\d', $result->skipReason());
     }
 
     #[Test]

@@ -224,4 +224,42 @@ class ValidatesOpenApiSchemaAutoAssertTest extends TestCase
         $this->expectException(AssertionFailedError::class);
         $this->assertResponseMatchesOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
     }
+
+    #[Test]
+    public function auto_assert_does_not_fail_on_undocumented_5xx(): void
+    {
+        // End-to-end guard for the 5xx default skip under auto_assert: a
+        // production-style 503 that the spec does not document must pass
+        // through the full createTestResponse → maybeAutoAssert → validator
+        // chain without raising AssertionFailedError, and the endpoint must
+        // still be recorded as covered.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_assert'] = true;
+
+        $body = (string) json_encode(['error' => 'service unavailable'], JSON_THROW_ON_ERROR);
+        $response = $this->makeTestResponse($body, 503);
+
+        $this->maybeAutoAssertOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
+
+        $covered = OpenApiCoverageTracker::getCovered();
+        $this->assertArrayHasKey('petstore-3.0', $covered);
+        $this->assertArrayHasKey('GET /v1/pets', $covered['petstore-3.0']);
+    }
+
+    #[Test]
+    public function auto_assert_still_fails_5xx_when_skip_disabled(): void
+    {
+        // Opting out of skip via config restores the "not defined" failure
+        // under auto_assert — confirms the cache-key extension makes the
+        // config change observable without a manual cache reset.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_assert'] = true;
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.skip_response_codes'] = [];
+
+        $body = (string) json_encode(['error' => 'service unavailable'], JSON_THROW_ON_ERROR);
+        $response = $this->makeTestResponse($body, 503);
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('Status code 503 not defined');
+
+        $this->maybeAutoAssertOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
+    }
 }

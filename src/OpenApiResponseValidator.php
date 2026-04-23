@@ -15,6 +15,7 @@ use function array_is_list;
 use function array_keys;
 use function implode;
 use function is_array;
+use function preg_last_error_msg;
 use function preg_match;
 use function sprintf;
 use function str_ends_with;
@@ -36,7 +37,7 @@ final class OpenApiResponseValidator
     private Validator $opisValidator;
     private ErrorFormatter $errorFormatter;
 
-    /** @var string[] Anchored regex patterns ready for preg_match. */
+    /** @var array<string, string> Raw pattern (as supplied) => anchored pattern ready for preg_match. */
     private readonly array $skipPatterns;
 
     /**
@@ -102,13 +103,15 @@ final class OpenApiResponseValidator
         $responses = $pathSpec[$lowerMethod]['responses'] ?? [];
 
         // Skip-by-status-code: applied before the "Status code not defined"
-        // branch so that callers can suppress both outcomes (no-spec-entry AND
-        // schema mismatch) for codes they explicitly don't want to validate,
-        // e.g. production-only 5xx responses that aren't documented in the spec.
-        if ($this->matchesSkipPattern($statusCodeStr)) {
+        // branch so a configured skip suppresses both status-code-level failure
+        // modes — "this code isn't in the spec's responses map" AND "this code
+        // IS documented but the body doesn't match its schema". Earlier checks
+        // (path / method not in spec) still fail loudly so typos stay visible.
+        $matchingPattern = $this->matchingSkipPattern($statusCodeStr);
+        if ($matchingPattern !== null) {
             return OpenApiValidationResult::skipped(
                 $matchedPath,
-                sprintf('status %s matched skip pattern', $statusCodeStr),
+                sprintf('status %s matched skip pattern %s', $statusCodeStr, $matchingPattern),
             );
         }
 
@@ -198,25 +201,40 @@ final class OpenApiResponseValidator
     }
 
     /**
+     * Keys keyed by the user-provided pattern (raw, without delimiters/anchors)
+     * so skipReason can echo what the caller wrote rather than the internal
+     * anchored form.
+     *
      * @param string[] $patterns
      *
-     * @return string[]
+     * @return array<string, string> raw pattern => anchored pattern
      */
     private static function compileSkipPatterns(array $patterns): array
     {
         $compiled = [];
 
         foreach ($patterns as $index => $pattern) {
+            if ($pattern === '') {
+                throw new InvalidArgumentException(
+                    sprintf('skipResponseCodes[%s] must not be an empty string.', (string) $index),
+                );
+            }
+
             $anchored = '/^(?:' . $pattern . ')$/';
 
             $ok = @preg_match($anchored, '');
             if ($ok === false) {
                 throw new InvalidArgumentException(
-                    sprintf('skipResponseCodes[%s] is not a valid regex pattern: %s', (string) $index, $pattern),
+                    sprintf(
+                        'skipResponseCodes[%s] is not a valid regex pattern "%s": %s',
+                        (string) $index,
+                        $pattern,
+                        preg_last_error_msg(),
+                    ),
                 );
             }
 
-            $compiled[] = $anchored;
+            $compiled[$pattern] = $anchored;
         }
 
         return $compiled;
@@ -250,15 +268,22 @@ final class OpenApiResponseValidator
         return $object;
     }
 
-    private function matchesSkipPattern(string $statusCode): bool
+    /**
+     * Returns the raw pattern (as supplied by the caller) that matched, or
+     * null if no pattern matched. `preg_match` returning false (runtime
+     * failure) is impossible in practice because compileSkipPatterns already
+     * probed each pattern successfully against the empty string and the
+     * subject here is always a short status-code string.
+     */
+    private function matchingSkipPattern(string $statusCode): ?string
     {
-        foreach ($this->skipPatterns as $pattern) {
-            if (preg_match($pattern, $statusCode) === 1) {
-                return true;
+        foreach ($this->skipPatterns as $raw => $anchored) {
+            if (preg_match($anchored, $statusCode) === 1) {
+                return $raw;
             }
         }
 
-        return false;
+        return null;
     }
 
     /**

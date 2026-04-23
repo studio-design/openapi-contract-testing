@@ -213,9 +213,13 @@ class ValidatesOpenApiSchemaDefaultSpecTest extends TestCase
             '/v1/pets',
         );
 
-        // Skipped endpoints still count as covered — the endpoint was exercised
-        // even though the body wasn't schema-checked.
-        $this->assertArrayHasKey('petstore-3.0', OpenApiCoverageTracker::getCovered());
+        // Skipped endpoints still count as covered with the correct key — the
+        // endpoint was exercised even though the body wasn't schema-checked.
+        // Asserting the full "METHOD path" key (not just the spec name) guards
+        // against a regression where skipped() stops passing through matchedPath.
+        $covered = OpenApiCoverageTracker::getCovered();
+        $this->assertArrayHasKey('petstore-3.0', $covered);
+        $this->assertArrayHasKey('GET /v1/pets', $covered['petstore-3.0']);
     }
 
     #[Test]
@@ -267,6 +271,46 @@ class ValidatesOpenApiSchemaDefaultSpecTest extends TestCase
 
         $this->expectException(AssertionFailedError::class);
         $this->expectExceptionMessage('openapi-contract-testing.skip_response_codes must be an array');
+
+        $this->assertResponseMatchesOpenApiSchema(
+            $response,
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
+    public function non_string_skip_response_codes_entry_fails_with_clear_message(): void
+    {
+        // Integer status codes look tempting (`['skip_response_codes' => [500]]`)
+        // but would silently break the regex-matching contract. Fail loudly.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = 'petstore-3.0';
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.skip_response_codes'] = [500];
+
+        $response = $this->makeTestResponse('{}', 500);
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('openapi-contract-testing.skip_response_codes[0] must be a string regex pattern');
+
+        $this->assertResponseMatchesOpenApiSchema(
+            $response,
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
+    public function empty_string_skip_response_codes_entry_fails_with_clear_message(): void
+    {
+        // An empty pattern compiles to /^(?:)$/ which silently matches nothing —
+        // it should fail loudly at config time instead of becoming dead config.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = 'petstore-3.0';
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.skip_response_codes'] = [''];
+
+        $response = $this->makeTestResponse('{}', 500);
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('openapi-contract-testing.skip_response_codes[0] must not be an empty string');
 
         $this->assertResponseMatchesOpenApiSchema(
             $response,

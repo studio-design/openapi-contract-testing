@@ -9,9 +9,14 @@ use function implode;
 final class OpenApiValidationResult
 {
     /**
+     * Private so the three factories (success / failure / skipped) are the
+     * only way to construct a result. This prevents illegal combinations such
+     * as `valid=false, skipped=true` or `valid=true, errors=['x']` — the
+     * factories enforce every invariant the type depends on.
+     *
      * @param string[] $errors
      */
-    public function __construct(
+    private function __construct(
         private readonly bool $valid,
         private readonly array $errors = [],
         private readonly ?string $matchedPath = null,
@@ -33,8 +38,9 @@ final class OpenApiValidationResult
     /**
      * Represents a response whose body was intentionally not validated (e.g. a
      * 5xx production error that the spec does not document). isValid() stays
-     * true so the assertion does not fail the test; isSkipped() distinguishes
-     * the case from a genuine successful match for callers that care.
+     * true so callers that gate on it (e.g. PHPUnit assertions) treat the
+     * result as non-failing; isSkipped() distinguishes it from a genuine
+     * successful schema match.
      */
     public static function skipped(?string $matchedPath = null, ?string $reason = null): self
     {
