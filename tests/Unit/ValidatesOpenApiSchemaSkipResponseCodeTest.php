@@ -6,6 +6,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use const JSON_THROW_ON_ERROR;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -13,6 +14,7 @@ use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\SkipOpenApi;
 use Studio\OpenApiContractTesting\Tests\Helpers\CreatesTestResponse;
 
 use function json_encode;
@@ -21,17 +23,21 @@ use function json_encode;
 require_once __DIR__ . '/../Helpers/LaravelConfigMock.php';
 
 /**
- * Covers the per-request skipResponseCode() fluent API from issue #48.
+ * Covers the per-request skipResponseCode() fluent API.
  *
- * The flag rides on the #41 per-request consumption model: set before an HTTP
- * call, consumed (and reset) on the next auto-assert attempt. Here the "HTTP
- * call" is simulated by a direct call to maybeAutoAssertOpenApiSchema, which
- * is what createTestResponse delegates to under auto-assert.
+ * The flag shares the withoutValidation() per-request consumption model:
+ * set before an HTTP call, consumed (and reset) on the next auto-assert
+ * attempt. Here the "HTTP call" is simulated by a direct call to
+ * maybeAutoAssertOpenApiSchema, which is what createTestResponse delegates
+ * to under auto-assert.
  */
 class ValidatesOpenApiSchemaSkipResponseCodeTest extends TestCase
 {
     use CreatesTestResponse;
     use ValidatesOpenApiSchema;
+
+    /** @var string[] */
+    private array $capturedWarnings = [];
 
     protected function setUp(): void
     {
@@ -46,10 +52,18 @@ class ValidatesOpenApiSchemaSkipResponseCodeTest extends TestCase
             // without interference from the config-level skip set.
             'openapi-contract-testing.skip_response_codes' => [],
         ];
+        // Capture warnings so the explicit-assert warning path does not
+        // escalate E_USER_DEPRECATED during tests. Each test that asserts on
+        // warnings reads from $this->capturedWarnings.
+        $this->capturedWarnings = [];
+        self::$skipWarningHandler = function (string $message): void {
+            $this->capturedWarnings[] = $message;
+        };
     }
 
     protected function tearDown(): void
     {
+        self::$skipWarningHandler = null;
         self::resetValidatorCache();
         unset($GLOBALS['__openapi_testing_config']);
         OpenApiSpecLoader::reset();
@@ -249,6 +263,137 @@ class ValidatesOpenApiSchemaSkipResponseCodeTest extends TestCase
 
         $this->expectException(AssertionFailedError::class);
         $this->assertResponseMatchesOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
+    }
+
+    #[Test]
+    public function explicit_assert_with_pending_flag_emits_warning_and_consumes(): void
+    {
+        // When the user sets skipResponseCode() then calls explicit assert,
+        // the flag is discarded by design. A silent discard is a UX trap —
+        // assert the discard is loud (warning) and the flag is consumed so
+        // a later HTTP call doesn't silently skip the wrong response.
+        $invalidBody = (string) json_encode(['wrong_key' => 'x'], JSON_THROW_ON_ERROR);
+        $okResponse = $this->makeTestResponse(
+            (string) json_encode(
+                ['data' => [['id' => 1, 'name' => 'Fido', 'tag' => null]]],
+                JSON_THROW_ON_ERROR,
+            ),
+            200,
+        );
+
+        $this->skipResponseCode(503);
+        // Explicit call on a spec-compliant 200 succeeds, but the pending flag
+        // should trigger a warning and be consumed on the way out.
+        $this->assertResponseMatchesOpenApiSchema($okResponse, HttpMethod::GET, '/v1/pets');
+
+        $this->assertCount(1, $this->capturedWarnings);
+        $this->assertStringContainsString('skipResponseCode()', $this->capturedWarnings[0]);
+
+        // Flag was consumed; next auto-assert on an invalid 200 body fails.
+        $this->expectException(AssertionFailedError::class);
+        $this->maybeAutoAssertOpenApiSchema(
+            $this->makeTestResponse($invalidBody, 200),
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
+    public function skip_response_code_rejects_empty_variadic(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('skipResponseCode() requires at least one code');
+
+        $this->skipResponseCode();
+    }
+
+    #[Test]
+    public function skip_response_code_rejects_empty_array(): void
+    {
+        // skipResponseCode([]) is a silent no-op in the naive implementation —
+        // the inner foreach iterates zero times and no codes are appended.
+        // Reject it so a typo or unintended empty list surfaces loudly.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('all supplied arrays were empty');
+
+        $this->skipResponseCode([]);
+    }
+
+    #[Test]
+    public function skip_response_code_rejects_nested_array(): void
+    {
+        // Nested arrays would otherwise produce a raw TypeError from
+        // normalizeSkipCode() with no mention of skipResponseCode — unhelpful
+        // in a stack trace. Reject them explicitly with a friendly message.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Nested arrays are not supported');
+
+        // @phpstan-ignore-next-line argument.type — intentionally malformed
+        $this->skipResponseCode([[404, 503]]);
+    }
+
+    #[Test]
+    public function skip_response_code_invalid_regex_fails_at_http_call(): void
+    {
+        // Invalid regex is validated lazily (at validator construction, not
+        // at skipResponseCode() call time). Pin the failure mode so callers
+        // know where to look when a pattern is malformed.
+        $this->skipResponseCode('(unclosed');
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('not a valid regex pattern');
+
+        $this->maybeAutoAssertOpenApiSchema(
+            $this->makeTestResponse('{}', 503),
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
+    #[SkipOpenApi]
+    public function skip_response_code_with_skip_open_api_attribute_still_early_returns(): void
+    {
+        // #[SkipOpenApi] opts the whole test out of auto-assert. Adding
+        // skipResponseCode() on top must not turn auto-assert back on — the
+        // attribute takes precedence. No validation, no coverage, regardless
+        // of the flag.
+        $this->skipResponseCode(503);
+        $this->maybeAutoAssertOpenApiSchema(
+            $this->makeTestResponse('{}', 503),
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+
+        $this->assertArrayNotHasKey('petstore-3.0', OpenApiCoverageTracker::getCovered());
+    }
+
+    #[Test]
+    public function without_validation_composes_with_skip_response_code(): void
+    {
+        // Both set per-request state, both auto-reset. Pin the ordering:
+        // withoutValidation() takes precedence (nothing validates), and
+        // skipResponseCode()'s flag is harmlessly consumed alongside it.
+        // Without this test, a refactor could accidentally validate despite
+        // the withoutValidation() intent.
+        $this->withoutValidation()->skipResponseCode(503);
+        $this->maybeAutoAssertOpenApiSchema(
+            $this->makeTestResponse((string) json_encode(['wrong_key' => 'x'], JSON_THROW_ON_ERROR), 200),
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+
+        // withoutValidation() wins: no coverage recorded, no failure despite
+        // invalid 200 body.
+        $this->assertArrayNotHasKey('petstore-3.0', OpenApiCoverageTracker::getCovered());
+
+        // Both flags must be consumed; next invalid call fails.
+        $this->expectException(AssertionFailedError::class);
+        $this->maybeAutoAssertOpenApiSchema(
+            $this->makeTestResponse((string) json_encode(['wrong_key' => 'x'], JSON_THROW_ON_ERROR), 200),
+            HttpMethod::GET,
+            '/v1/pets',
+        );
     }
 
     #[Test]

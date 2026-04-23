@@ -10,6 +10,7 @@ use const FILTER_VALIDATE_BOOLEAN;
 use const STDERR;
 
 use Illuminate\Testing\TestResponse;
+use InvalidArgumentException;
 use JsonException;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
@@ -73,8 +74,8 @@ trait ValidatesOpenApiSchema
     // Per-request additional response-code skip patterns set by
     // skipResponseCode(). Merged with the config-level skip set when building
     // the validator, then consumed (reset) on the next auto-assert attempt.
-    // Patterns are stored raw (without delimiters/anchors) so the existing
-    // OpenApiResponseValidator::compileSkipPatterns() pipeline can anchor them.
+    // Patterns are stored raw (without delimiters/anchors); the validator
+    // anchors them when compiling.
     /** @var string[] */
     private array $skipNextResponseCodes = [];
 
@@ -136,28 +137,58 @@ trait ValidatesOpenApiSchema
      * then consumed (reset) after one call — matching the per-request
      * consumption model of withoutValidation().
      *
-     * - int: exact match (the existing skip-pattern compiler anchors it to
-     *   `^(?:500)$`, so `500` only matches `"500"`).
-     * - string: regex pattern (anchored by the compiler).
-     * - array: expanded one level; each element is treated as int or string
-     *   per the above.
+     * - int: exact match (anchored for exact match, so `500` matches only "500").
+     * - string: regex pattern (anchored automatically).
+     * - array: expanded one level; each element must be int or string.
+     *   Nested arrays are rejected with a clear error message rather than a
+     *   raw TypeError.
      *
-     * Scoped to auto-assert only, matching withoutValidation()'s convention.
-     * Explicit assertResponseMatchesOpenApiSchema() calls are the user's
-     * direct intent and ignore this flag.
+     * Scoped to auto-assert only. Explicit calls to
+     * assertResponseMatchesOpenApiSchema() emit an advisory warning because
+     * the per-request flag is silently ignored there.
      *
      * @param array<int|string>|int|string ...$codes
+     *
+     * @throws InvalidArgumentException when no codes are supplied, when an
+     *                                  array argument is nested, or when an
+     *                                  array element is not int|string.
      */
     public function skipResponseCode(array|int|string ...$codes): static
     {
-        foreach ($codes as $code) {
+        if ($codes === []) {
+            throw new InvalidArgumentException(
+                'skipResponseCode() requires at least one code.',
+            );
+        }
+
+        $normalized = [];
+        foreach ($codes as $index => $code) {
             if (is_array($code)) {
-                foreach ($code as $inner) {
-                    $this->skipNextResponseCodes[] = self::normalizeSkipCode($inner);
+                foreach ($code as $innerIndex => $inner) {
+                    if (!is_int($inner) && !is_string($inner)) {
+                        throw new InvalidArgumentException(sprintf(
+                            'skipResponseCode() array elements must be int or string; got %s at position [%d][%s]. '
+                            . 'Nested arrays are not supported.',
+                            get_debug_type($inner),
+                            $index,
+                            (string) $innerIndex,
+                        ));
+                    }
+                    $normalized[] = self::normalizeSkipCode($inner);
                 }
             } else {
-                $this->skipNextResponseCodes[] = self::normalizeSkipCode($code);
+                $normalized[] = self::normalizeSkipCode($code);
             }
+        }
+
+        if ($normalized === []) {
+            throw new InvalidArgumentException(
+                'skipResponseCode() requires at least one code, but all supplied arrays were empty.',
+            );
+        }
+
+        foreach ($normalized as $code) {
+            $this->skipNextResponseCodes[] = $code;
         }
 
         return $this;
@@ -237,12 +268,9 @@ trait ValidatesOpenApiSchema
     }
 
     /**
-     * @param string[] $extraSkipResponseCodes Additional skip patterns merged
-     *                                         into the validator's skip set for this call only. Populated by
-     *                                         maybeAutoAssertOpenApiSchema() from the per-request
-     *                                         skipResponseCode() flag. Empty for explicit user calls — the flag
-     *                                         is scoped to auto-assert only, matching withoutValidation()'s
-     *                                         convention.
+     * @param string[] $extraSkipResponseCodes Additional skip patterns for
+     *                                         this call only; populated by maybeAutoAssertOpenApiSchema().
+     *                                         Empty for explicit user calls.
      */
     protected function assertResponseMatchesOpenApiSchema(
         TestResponse $response,
@@ -253,6 +281,15 @@ trait ValidatesOpenApiSchema
         $skipAttribute = $this->findSkipOpenApiAttribute();
         if ($skipAttribute !== null) {
             $this->emitSkipOpenApiWarning($skipAttribute);
+        }
+
+        // Pending per-request skip codes with no auto-assert in sight: the
+        // user set skipResponseCode() but is calling explicit assert, which
+        // ignores the flag by design. Warn and consume so the flag doesn't
+        // leak into a later HTTP call and surprise the user.
+        if ($extraSkipResponseCodes === [] && $this->skipNextResponseCodes !== []) {
+            $this->emitSkipResponseCodeWarning();
+            $this->skipNextResponseCodes = [];
         }
 
         $resolvedMethod = $method !== null ? $method->value : app('request')->getMethod();
@@ -430,6 +467,24 @@ trait ValidatesOpenApiSchema
             $reason !== '' ? sprintf('(reason: %s)', var_export($reason, true)) : '',
         );
 
+        $this->dispatchSkipWarning($message);
+    }
+
+    private function emitSkipResponseCodeWarning(): void
+    {
+        $message = sprintf(
+            '%s::%s set skipResponseCode() before calling assertResponseMatchesOpenApiSchema() explicitly. '
+            . 'Per-request skip codes apply only to auto-assert; the explicit assertion ignores them. '
+            . 'Remove the skipResponseCode() call or rely on auto-assert to clarify intent.',
+            static::class,
+            $this->name(), // @phpstan-ignore method.notFound
+        );
+
+        $this->dispatchSkipWarning($message);
+    }
+
+    private function dispatchSkipWarning(string $message): void
+    {
         $handler = self::$skipWarningHandler;
         if ($handler !== null) {
             $handler($message);

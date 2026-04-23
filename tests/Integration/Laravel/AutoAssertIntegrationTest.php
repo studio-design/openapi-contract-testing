@@ -252,6 +252,43 @@ class AutoAssertIntegrationTest extends TestCase
         $this->withoutRequestValidation()->get('/v1/pets?bad=1');
     }
 
+    #[Test]
+    public function skip_response_code_suppresses_undocumented_status_end_to_end(): void
+    {
+        // End-to-end smoke test: fluent chain survives Laravel's HTTP
+        // dispatcher → createTestResponse hook. /v1/health defines only 200
+        // in the spec, so a 503 there would fail "Status code not defined"
+        // once config-level 5xx skipping is disabled. skipResponseCode(503)
+        // must suppress that. Unit tests exercise maybeAutoAssertOpenApiSchema
+        // directly — only this test proves the flag reaches the trait from
+        // the framework boundary.
+        config()->set('openapi-contract-testing.auto_assert', true);
+        config()->set('openapi-contract-testing.skip_response_codes', []);
+
+        $response = $this->skipResponseCode(503)->get('/v1/health');
+        $response->assertStatus(503);
+
+        $covered = OpenApiCoverageTracker::getCovered();
+        $this->assertArrayHasKey('GET /v1/health', $covered['petstore-3.0'] ?? []);
+    }
+
+    #[Test]
+    public function skip_response_code_flag_resets_end_to_end(): void
+    {
+        // Per-request semantics through the real framework path: first call
+        // consumes the flag, second identical call must fail because no
+        // config-level skip is in effect.
+        config()->set('openapi-contract-testing.auto_assert', true);
+        config()->set('openapi-contract-testing.skip_response_codes', []);
+
+        $this->skipResponseCode(503)->get('/v1/health')->assertStatus(503);
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('Status code 503 not defined');
+
+        $this->get('/v1/health');
+    }
+
     /** @return array<int, class-string> */
     protected function getPackageProviders($app): array
     {
@@ -273,6 +310,14 @@ class AutoAssertIntegrationTest extends TestCase
         Route::post('/v1/pets', static fn() => response()->json(
             ['data' => ['id' => 42, 'name' => 'Buddy', 'tag' => null]],
             201,
+        ));
+
+        // 503 on a path whose spec only defines 200 — exercises the
+        // "Status code not defined" suppression path through the real
+        // framework boundary for skipResponseCode() integration tests.
+        Route::get('/v1/health', static fn() => response()->json(
+            ['error' => 'service unavailable'],
+            503,
         ));
     }
 }
