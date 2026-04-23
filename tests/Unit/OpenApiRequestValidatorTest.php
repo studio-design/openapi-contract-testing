@@ -1869,8 +1869,35 @@ class OpenApiRequestValidatorTest extends TestCase
         $this->assertStringContainsString('/name', $message);
     }
 
+    #[Test]
+    public function path_query_header_body_and_security_errors_all_compose(): void
+    {
+        // POST /v1/secure/compose/{tenantId} bundles every validation channel the
+        // pipeline offers: path param (integer), query param (pattern), header
+        // (uuid), body (required 'name'), and security (bearerAuth). Inject a
+        // failing value per source so a refactor that short-circuits after any
+        // single channel fails would break this test.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/secure/compose/abc',
+            ['trace' => 'UPPER'],
+            ['X-Request-ID' => 'not-a-uuid'],
+            ['name' => 123],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[path.tenantId]', $message);
+        $this->assertStringContainsString('[query.trace]', $message);
+        $this->assertStringContainsString('[header.X-Request-ID]', $message);
+        $this->assertStringContainsString('[security]', $message);
+        $this->assertStringContainsString('/name', $message);
+    }
+
     // ========================================
-    // Security scheme validation (#46)
+    // Security scheme validation
     // ========================================
 
     #[Test]
@@ -1910,7 +1937,6 @@ class OpenApiRequestValidatorTest extends TestCase
     #[Test]
     public function v30_security_bearer_wrong_scheme_fails(): void
     {
-        // "Basic" is a valid HTTP scheme but the spec requires "Bearer".
         $result = $this->validator->validate(
             'petstore-3.0',
             'GET',
@@ -1929,7 +1955,6 @@ class OpenApiRequestValidatorTest extends TestCase
     #[Test]
     public function v30_security_bearer_empty_token_fails(): void
     {
-        // "Bearer" with no token part is not a valid bearer credential.
         $result = $this->validator->validate(
             'petstore-3.0',
             'GET',
@@ -1963,7 +1988,6 @@ class OpenApiRequestValidatorTest extends TestCase
     #[Test]
     public function v30_security_bearer_header_name_is_case_insensitive(): void
     {
-        // RFC 7230 — HTTP header names are case-insensitive.
         $result = $this->validator->validate(
             'petstore-3.0',
             'GET',
@@ -2014,7 +2038,6 @@ class OpenApiRequestValidatorTest extends TestCase
     #[Test]
     public function v30_security_apikey_header_empty_value_fails(): void
     {
-        // An empty-string apiKey header is not a credential; reject it.
         $result = $this->validator->validate(
             'petstore-3.0',
             'GET',
@@ -2187,7 +2210,6 @@ class OpenApiRequestValidatorTest extends TestCase
     #[Test]
     public function v30_security_explicit_opt_out_passes_with_no_auth(): void
     {
-        // security: [] on an operation explicitly disables any root-level security.
         $result = $this->validator->validate(
             'petstore-3.0',
             'GET',
@@ -2204,10 +2226,9 @@ class OpenApiRequestValidatorTest extends TestCase
     #[Test]
     public function v30_security_oauth2_only_silent_skips(): void
     {
-        // OAuth2 / OpenID Connect are out of scope for phase 1 (see issue #46).
-        // When every requirement entry contains only unsupported schemes, we have
-        // nothing we can validate — pass rather than block the test (false-negative
-        // avoidance).
+        // When every requirement entry contains only unsupported schemes
+        // (oauth2 / openIdConnect) we have nothing we can validate — pass
+        // rather than block the test (false-negative avoidance).
         $result = $this->validator->validate(
             'petstore-3.0',
             'GET',
@@ -2256,30 +2277,6 @@ class OpenApiRequestValidatorTest extends TestCase
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString('[security]', $result->errorMessage());
         $this->assertStringContainsString('bearerAuth', $result->errorMessage());
-    }
-
-    #[Test]
-    public function v30_security_reserved_header_parameter_ignored_but_security_validated(): void
-    {
-        // /v1/reports declares `Authorization` as a parameter (which per OpenAPI
-        // must be ignored). Adding a security requirement on top would be
-        // validated by the security path — but /v1/reports has no security set,
-        // so this specifically tests the reserved-header skip for parameter
-        // validation is unchanged.
-        $result = $this->validator->validate(
-            'petstore-3.0',
-            'GET',
-            '/v1/reports',
-            [],
-            [
-                'X-Request-ID' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
-                'Authorization' => 'anything',
-            ],
-            null,
-            null,
-        );
-
-        $this->assertTrue($result->isValid(), $result->errorMessage());
     }
 
     #[Test]
@@ -2337,7 +2334,9 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('security', strtolower($result->errorMessage()));
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[security]', $message);
+        $this->assertStringContainsString('index 0', $message);
     }
 
     #[Test]
@@ -2535,6 +2534,161 @@ class OpenApiRequestValidatorTest extends TestCase
             '/v1/secure/oauth2-only',
             [],
             [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_unknown_type_is_hard_spec_error(): void
+    {
+        // A typo like type: "htpp" must not silently fall through as "unsupported".
+        // If it did, every request for that endpoint would silently pass — which
+        // is exactly the drift this library exists to catch.
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/security-scheme-unknown-type',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('typoScheme', $result->errorMessage());
+        $this->assertStringContainsString('htpp', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_empty_type_is_hard_spec_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/security-scheme-empty-type',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('emptyTypeScheme', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_operation_level_scalar_is_hard_spec_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/security-root-scalar',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_numeric_scheme_name_is_hard_spec_error(): void
+    {
+        // Purely numeric JSON object keys (e.g. {"0": []}) become integer PHP
+        // array keys after json_decode. The guard at the top of the entry loop
+        // must catch this so a typo doesn't silently skip auth.
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/security-numeric-scheme-name',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+        $this->assertStringContainsString('scheme name must be a string', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_components_schemes_as_scalar_is_hard_spec_error(): void
+    {
+        // If `components.securitySchemes` itself is a scalar, don't silently
+        // treat every scheme reference as "undefined" — that misdirects the
+        // spec author. Surface a dedicated error pointing at the real cause.
+        $result = $this->validator->validate(
+            'security-schemes-scalar',
+            'GET',
+            '/needs-bearer',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('components.securitySchemes', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_two_unsupported_entries_silent_skip_to_pass(): void
+    {
+        // Two entries (oauth2 + oidc) are both unsupported. With no validatable
+        // entries remaining, overall result must be pass — prevents a regression
+        // where "no satisfied entry" is conflated with "no evaluable entry".
+        $result = $this->validator->validate(
+            'security-edge-cases',
+            'GET',
+            '/two-unsupported-entries',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_and_with_unsupported_scheme_skips_entry(): void
+    {
+        // Single entry AND-joining bearer with oauth2 — because the entry
+        // contains an unsupported scheme, phase-1 policy treats the whole entry
+        // as unevaluable (we cannot check oauth2, so we cannot confirm AND).
+        // Overall result: pass. Pins the documented tradeoff so a future policy
+        // change is an explicit decision, not an accidental regression.
+        $result = $this->validator->validate(
+            'security-edge-cases',
+            'GET',
+            '/and-with-unsupported',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_apikey_header_name_is_case_insensitive(): void
+    {
+        // RFC 9110 §5.1 — HTTP header names are case-insensitive. Spec declares
+        // 'X-API-Key'; request sends 'x-api-key'. Locks in the normalize-then-
+        // lookup behaviour.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/apikey-header',
+            [],
+            ['x-api-key' => 'k1'],
             null,
             null,
         );

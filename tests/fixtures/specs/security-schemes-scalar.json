@@ -1,0 +1,24 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "components.securitySchemes as scalar fixture",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/needs-bearer": {
+            "get": {
+                "summary": "Endpoint references a scheme but components.securitySchemes is a scalar",
+                "operationId": "needsBearer",
+                "security": [
+                    { "bearerAuth": [] }
+                ],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": "this should have been an object"
+    }
+}

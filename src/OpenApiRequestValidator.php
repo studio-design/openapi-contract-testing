@@ -8,6 +8,7 @@ use const FILTER_VALIDATE_INT;
 use const PHP_INT_MAX;
 
 use InvalidArgumentException;
+use LogicException;
 use Opis\JsonSchema\Errors\ErrorFormatter;
 use Opis\JsonSchema\Validator;
 use stdClass;
@@ -662,9 +663,6 @@ final class OpenApiRequestValidator
         array $queryParams,
         array $cookies,
     ): array {
-        // Operation-level `security` (including an explicit empty array) overrides
-        // root-level. Only fall back to root when the operation does not declare
-        // `security` at all.
         $security = array_key_exists('security', $operation)
             ? $operation['security']
             : ($spec['security'] ?? null);
@@ -684,14 +682,24 @@ final class OpenApiRequestValidator
             ];
         }
 
-        // Explicit `security: []` disables authentication for the operation.
         if ($security === []) {
             return [];
         }
 
         $schemes = $spec['components']['securitySchemes'] ?? [];
+        // A non-array `components.securitySchemes` is a malformed spec — without
+        // this hard error, every scheme reference below would be reported as
+        // "undefined scheme … add it under components.securitySchemes", which
+        // misdirects the spec author away from the real cause.
         if (!is_array($schemes)) {
-            $schemes = [];
+            return [
+                sprintf(
+                    '[security] %s %s: components.securitySchemes must be an object mapping scheme names to definitions, got %s.',
+                    $method,
+                    $matchedPath,
+                    get_debug_type($schemes),
+                ),
+            ];
         }
 
         $normalizedHeaders = self::normalizeHeaders($headers);
@@ -776,7 +784,6 @@ final class OpenApiRequestValidator
                 continue;
             }
 
-            // Within a single requirement entry, ALL schemes must be satisfied (AND).
             $entryFailures = [];
             foreach ($validatable as $schemeName => $info) {
                 $schemeErrors = $this->checkSchemeSatisfaction(
@@ -824,10 +831,16 @@ final class OpenApiRequestValidator
 
     /**
      * Classify a security scheme definition into one of:
-     * - `bearer`        — http + scheme=bearer (validatable)
-     * - `apiKey`        — apiKey in header|query|cookie (validatable)
-     * - `unsupported`   — oauth2 / openIdConnect / http+basic/digest / mutualTLS / unknown type (phase 1 skip)
-     * - `malformed`     — missing/invalid required fields (hard spec error)
+     * - `bearer`      — http + scheme=bearer (validatable)
+     * - `apiKey`      — apiKey in header|query|cookie (validatable)
+     * - `unsupported` — a spec-allowed type we intentionally defer (oauth2,
+     *                   openIdConnect, mutualTLS, or http with a non-bearer
+     *                   scheme). Phase 1 skip — false-negative avoidance.
+     * - `malformed`   — missing/invalid required fields, or a `type` that is
+     *                   not in the OpenAPI-enumerated set. A typo like
+     *                   `{"type": "htpp"}` MUST surface as a hard error
+     *                   rather than silently skipping — otherwise the
+     *                   library would pass every request for that endpoint.
      *
      * @param array<string, mixed> $schemeDef
      *
@@ -836,7 +849,7 @@ final class OpenApiRequestValidator
     private function classifySecurityScheme(array $schemeDef): array
     {
         $type = $schemeDef['type'] ?? null;
-        if (!is_string($type)) {
+        if (!is_string($type) || $type === '') {
             return ['kind' => 'malformed', 'reason' => "missing required 'type' field."];
         }
 
@@ -867,8 +880,14 @@ final class OpenApiRequestValidator
             return ['kind' => 'unsupported'];
         }
 
-        // oauth2 / openIdConnect / mutualTLS / unknown types fall through as "unsupported".
-        return ['kind' => 'unsupported'];
+        if ($type === 'oauth2' || $type === 'openIdConnect' || $type === 'mutualTLS') {
+            return ['kind' => 'unsupported'];
+        }
+
+        return [
+            'kind' => 'malformed',
+            'reason' => "unknown type '{$type}' — OpenAPI 3.x enumerates apiKey|http|oauth2|openIdConnect|mutualTLS.",
+        ];
     }
 
     /**
@@ -929,21 +948,20 @@ final class OpenApiRequestValidator
             return [];
         }
 
-        // Unreachable: classifySecurityScheme only returns 'bearer' / 'apiKey' / 'unsupported' / 'malformed',
-        // and the caller filters out 'unsupported' and 'malformed' before reaching this method.
-        return [];
+        throw new LogicException("checkSchemeSatisfaction received unexpected kind '{$kind}'.");
     }
 
     /**
-     * Normalize a header/query/cookie value (which may arrive as string, array
-     * of strings, or null) to a single string. Returns null when the value is
-     * absent, empty-array, or a non-string shape that cannot be coerced.
+     * Return the first element of an array, the value itself if it's a string,
+     * or `null` otherwise (absent, empty array, or non-string scalar like int
+     * or bool). No coercion is performed — a non-string first element still
+     * returns `null`.
      *
-     * Multi-value arrays collapse to the first element — security validation
-     * does not treat "multiple Authorization headers" as a hard error the way
-     * header-parameter validation does, because the security layer's job is
-     * "is a credential present" rather than "is the request well-formed". A
-     * duplicate Authorization header is already a framework-level concern.
+     * Unlike `validateHeaderParameters()` (which rejects multi-value arrays as
+     * a hard error to force the spec author to pick a canonical value), the
+     * security layer silently accepts the first element. Presence of a
+     * credential is all the security layer checks, and duplicate headers are
+     * a framework-level concern surfaced elsewhere.
      */
     private function extractSingleStringValue(mixed $value): ?string
     {

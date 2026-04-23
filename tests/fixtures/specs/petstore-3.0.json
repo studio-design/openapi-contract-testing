@@ -740,6 +740,50 @@
                     "200": { "description": "OK" }
                 }
             }
+        },
+        "/v1/secure/compose/{tenantId}": {
+            "post": {
+                "summary": "Composition endpoint: path + query + header + body + security",
+                "operationId": "secureCompose",
+                "parameters": [
+                    {
+                        "name": "tenantId",
+                        "in": "path",
+                        "required": true,
+                        "schema": { "type": "integer", "minimum": 1 }
+                    },
+                    {
+                        "name": "trace",
+                        "in": "query",
+                        "schema": { "type": "string", "pattern": "^[a-z]+$" }
+                    },
+                    {
+                        "name": "X-Request-ID",
+                        "in": "header",
+                        "schema": { "type": "string", "format": "uuid" }
+                    }
+                ],
+                "security": [
+                    { "bearerAuth": [] }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["name"],
+                                "properties": {
+                                    "name": { "type": "string" }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "204": { "description": "No content" }
+                }
+            }
         }
     },
     "components": {
