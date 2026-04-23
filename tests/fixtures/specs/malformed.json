@@ -32,22 +32,6 @@
                 }
             }
         },
-        "/ref-parameter": {
-            "get": {
-                "summary": "parameters list contains an unresolved $ref entry",
-                "operationId": "refParameter",
-                "parameters": [
-                    {
-                        "$ref": "#/components/parameters/UnresolvedLimit"
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No content"
-                    }
-                }
-            }
-        },
         "/scalar-parameter": {
             "get": {
                 "summary": "parameters list contains a non-array entry",
@@ -80,74 +64,6 @@
                 }
             }
         },
-        "/ref-request-body": {
-            "post": {
-                "summary": "requestBody is directly a $ref",
-                "operationId": "refRequestBody",
-                "requestBody": {
-                    "$ref": "#/components/requestBodies/PetBody"
-                },
-                "responses": {
-                    "204": {
-                        "description": "No content"
-                    }
-                }
-            }
-        },
-        "/ref-content-media-type": {
-            "post": {
-                "summary": "content[mediaType] is directly a $ref",
-                "operationId": "refContentMediaType",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "$ref": "#/components/schemas/Pet"
-                        }
-                    }
-                },
-                "responses": {
-                    "204": {
-                        "description": "No content"
-                    }
-                }
-            }
-        },
-        "/ref-content-schema": {
-            "post": {
-                "summary": "content[mediaType].schema is directly a $ref",
-                "operationId": "refContentSchema",
-                "requestBody": {
-                    "required": true,
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/Pet"
-                            }
-                        }
-                    }
-                },
-                "responses": {
-                    "204": {
-                        "description": "No content"
-                    }
-                }
-            }
-        },
-        "/non-string-ref-request-body": {
-            "post": {
-                "summary": "requestBody $ref value is not a string",
-                "operationId": "nonStringRefRequestBody",
-                "requestBody": {
-                    "$ref": ["not", "a", "string"]
-                },
-                "responses": {
-                    "204": {
-                        "description": "No content"
-                    }
-                }
-            }
-        },
         "/scalar-content-media-type": {
             "post": {
                 "summary": "content[mediaType] is a scalar (not an object)",
@@ -158,22 +74,6 @@
                         "application/json": "this should have been an object"
                     }
                 },
-                "responses": {
-                    "204": {
-                        "description": "No content"
-                    }
-                }
-            }
-        },
-        "/path-ref-parameter/{id}": {
-            "parameters": [
-                {
-                    "$ref": "#/components/parameters/UnresolvedId"
-                }
-            ],
-            "get": {
-                "summary": "in:path parameters list contains an unresolved $ref entry",
-                "operationId": "pathRefParameter",
                 "responses": {
                     "204": {
                         "description": "No content"

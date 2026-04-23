@@ -127,6 +127,74 @@ class OpenApiSpecLoaderTest extends TestCase
     }
 
     #[Test]
+    public function load_resolves_internal_refs(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $spec = OpenApiSpecLoader::load('refs-valid');
+
+        // The paths schema should no longer contain '$ref' after resolution.
+        $listSchema = $spec['paths']['/pets']['get']['responses']['200']['content']['application/json']['schema'];
+        $this->assertSame('array', $listSchema['type']);
+        $this->assertArrayNotHasKey('$ref', $listSchema['items']);
+        $this->assertSame('object', $listSchema['items']['type']);
+
+        // Transitive nested ref Pet -> Category -> Label should be fully resolved.
+        $this->assertSame(
+            ['type' => 'string', 'minLength' => 1],
+            $listSchema['items']['properties']['category']['properties']['label'],
+        );
+
+        // Path-level parameter $ref is resolved inline.
+        $pathParam = $spec['paths']['/pets/{petId}']['parameters'][0];
+        $this->assertArrayNotHasKey('$ref', $pathParam);
+        $this->assertSame('petId', $pathParam['name']);
+        $this->assertSame('path', $pathParam['in']);
+
+        // Response-level $ref is resolved.
+        $responseSpec = $spec['paths']['/pets/{petId}']['get']['responses']['200'];
+        $this->assertArrayNotHasKey('$ref', $responseSpec);
+        $this->assertSame('A single pet', $responseSpec['description']);
+    }
+
+    #[Test]
+    public function load_throws_on_circular_ref(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Circular $ref');
+
+        OpenApiSpecLoader::load('refs-circular');
+    }
+
+    #[Test]
+    public function load_throws_on_external_ref(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('External $ref');
+
+        OpenApiSpecLoader::load('refs-external');
+    }
+
+    #[Test]
+    public function load_throws_on_unresolvable_ref(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Unresolvable $ref');
+
+        OpenApiSpecLoader::load('refs-unresolvable');
+    }
+
+    #[Test]
     public function evict_removes_single_spec_from_cache(): void
     {
         $fixturesPath = __DIR__ . '/../fixtures/specs';

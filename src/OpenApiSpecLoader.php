@@ -74,9 +74,10 @@ final class OpenApiSpecLoader
 
         /** @var array<string, mixed> $decoded */
         $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
-        self::$cache[$specName] = $decoded;
+        $resolved = OpenApiRefResolver::resolve($decoded);
+        self::$cache[$specName] = $resolved;
 
-        return $decoded;
+        return $resolved;
     }
 
     /**
