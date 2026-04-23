@@ -10,6 +10,10 @@ use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
+use function array_filter;
+use function str_contains;
+use function strtolower;
+
 class OpenApiRequestValidatorTest extends TestCase
 {
     private OpenApiRequestValidator $validator;
@@ -434,5 +438,278 @@ class OpenApiRequestValidatorTest extends TestCase
 
         $this->assertTrue($result->isValid());
         $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    // ========================================
+    // Query parameter validation
+    // ========================================
+
+    #[Test]
+    public function query_params_all_valid_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '10', 'status' => 'available', 'tags' => ['a', 'b'], 'q' => 'abc'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+        $this->assertSame('/v1/pets/search', $result->matchedPath());
+    }
+
+    #[Test]
+    public function query_params_required_missing_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.limit]', $result->errors()[0]);
+        $this->assertStringContainsString('required', strtolower($result->errors()[0]));
+    }
+
+    #[Test]
+    public function query_params_enum_violation_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '10', 'status' => 'unknown'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.status', $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_type_mismatch_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => 'abc'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.limit', $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_array_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '10', 'tags' => ['a', 'b', 'c']],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_array_single_value_wrapped_passes(): void
+    {
+        // ?tags=a — frameworks may pass this as a scalar string for array-typed params.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '10', 'tags' => 'a'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_optional_missing_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '10'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_min_max_violation_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '999'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.limit', $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_pattern_violation_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '10', 'q' => 'hello world'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.q', $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_path_level_inherited(): void
+    {
+        // PATCH does not redeclare traceId, so the path-level rule (lowercase only) applies.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'PATCH',
+            '/v1/pets/123',
+            ['traceId' => 'ABC'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.traceId', $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_operation_overrides_path_level(): void
+    {
+        // GET redeclares traceId with uppercase-only pattern, overriding the path-level lowercase rule.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/123',
+            ['traceId' => 'ABC'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_params_operation_override_still_validates(): void
+    {
+        // GET's override requires uppercase; lowercase must fail (proves the override is checked,
+        // not silently bypassed).
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/123',
+            ['traceId' => 'abc'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.traceId', $result->errorMessage());
+    }
+
+    #[Test]
+    public function query_and_body_errors_are_combined(): void
+    {
+        // dryRun=maybe → query type-mismatch (not a boolean)
+        // body missing required "name" → body schema violation
+        // Both must surface in a single result so users see the full diagnostic in one run.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            ['dryRun' => 'maybe'],
+            [],
+            ['tag' => 'dog'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.dryRun', $result->errorMessage());
+        // Body errors use opis JSON pointer paths (no "query." prefix); assert at least one such entry.
+        $bodyErrors = array_filter(
+            $result->errors(),
+            static fn(string $err): bool => !str_contains($err, '[query.'),
+        );
+        $this->assertNotEmpty($bodyErrors, 'expected at least one body validation error in combined result');
+    }
+
+    // ========================================
+    // OAS 3.1 query parity
+    // ========================================
+
+    #[Test]
+    public function v31_query_params_valid_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '5', 'status' => 'pending', 'tags' => ['x']],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v31_query_params_enum_violation_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/pets/search',
+            ['limit' => '5', 'status' => 'unknown'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[query.status', $result->errorMessage());
     }
 }
