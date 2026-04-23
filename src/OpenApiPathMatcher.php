@@ -18,7 +18,7 @@ use function usort;
 
 final class OpenApiPathMatcher
 {
-    /** @var array{pattern: string, path: string, literalSegments: int}[] */
+    /** @var array{pattern: string, path: string, paramNames: string[], literalSegments: int}[] */
     private array $compiledPaths;
 
     /**
@@ -34,10 +34,12 @@ final class OpenApiPathMatcher
             $segments = explode('/', trim($specPath, '/'));
             $literalCount = 0;
             $regexSegments = [];
+            $paramNames = [];
 
             foreach ($segments as $segment) {
-                if (preg_match('/^\{.+\}$/', $segment)) {
-                    $regexSegments[] = '[^/]+';
+                if (preg_match('/^\{(.+)\}$/', $segment, $m)) {
+                    $regexSegments[] = '([^/]+)';
+                    $paramNames[] = $m[1];
                 } else {
                     $regexSegments[] = preg_quote($segment, '#');
                     $literalCount++;
@@ -48,6 +50,7 @@ final class OpenApiPathMatcher
             $compiled[] = [
                 'pattern' => $pattern,
                 'path' => $specPath,
+                'paramNames' => $paramNames,
                 'literalSegments' => $literalCount,
             ];
         }
@@ -59,6 +62,22 @@ final class OpenApiPathMatcher
     }
 
     public function match(string $requestPath): ?string
+    {
+        return $this->matchWithVariables($requestPath)['path'] ?? null;
+    }
+
+    /**
+     * Match a request path and return both the matched spec path template and
+     * the raw values captured for each `{placeholder}` segment.
+     *
+     * Values are returned **percent-encoded** (exactly as they appear in the
+     * request URI). Callers that need to validate the decoded value should
+     * apply `rawurldecode()` themselves — we don't decode here to keep the
+     * matcher a pure string operation and leave encoding policy to the caller.
+     *
+     * @return null|array{path: string, variables: array<string, string>}
+     */
+    public function matchWithVariables(string $requestPath): ?array
     {
         $normalizedPath = $requestPath;
 
@@ -75,9 +94,17 @@ final class OpenApiPathMatcher
         }
 
         foreach ($this->compiledPaths as $compiled) {
-            if (preg_match($compiled['pattern'], $normalizedPath)) {
-                return $compiled['path'];
+            if (preg_match($compiled['pattern'], $normalizedPath, $matches) !== 1) {
+                continue;
             }
+
+            $variables = [];
+            foreach ($compiled['paramNames'] as $i => $name) {
+                // $matches[0] is the full match; capture groups start at index 1.
+                $variables[$name] = $matches[$i + 1];
+            }
+
+            return ['path' => $compiled['path'], 'variables' => $variables];
         }
 
         return null;

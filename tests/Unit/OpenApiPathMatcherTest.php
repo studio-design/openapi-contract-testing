@@ -137,6 +137,75 @@ class OpenApiPathMatcherTest extends TestCase
         $this->assertNull($matcher->match('/api/v2/account'));
     }
 
+    #[Test]
+    public function match_with_variables_extracts_single_parameter(): void
+    {
+        $matcher = self::createMatcher();
+
+        $this->assertSame(
+            ['path' => '/v2/projects/{project_id}', 'variables' => ['project_id' => 'abc123']],
+            $matcher->matchWithVariables('/v2/projects/abc123'),
+        );
+    }
+
+    #[Test]
+    public function match_with_variables_extracts_multiple_parameters(): void
+    {
+        $matcher = self::createMatcher();
+
+        $this->assertSame(
+            [
+                'path' => '/v2/projects/{project_id}/assets/{asset_id}',
+                'variables' => ['project_id' => 'abc123', 'asset_id' => 'def456'],
+            ],
+            $matcher->matchWithVariables('/v2/projects/abc123/assets/def456'),
+        );
+    }
+
+    #[Test]
+    public function match_with_variables_returns_empty_variables_for_literal_path(): void
+    {
+        $matcher = self::createMatcher();
+
+        $this->assertSame(
+            ['path' => '/v2/account', 'variables' => []],
+            $matcher->matchWithVariables('/v2/account'),
+        );
+    }
+
+    #[Test]
+    public function match_with_variables_returns_null_when_no_match(): void
+    {
+        $matcher = self::createMatcher();
+
+        $this->assertNull($matcher->matchWithVariables('/v2/unknown/path'));
+    }
+
+    #[Test]
+    public function match_with_variables_preserves_percent_encoded_value(): void
+    {
+        $matcher = new OpenApiPathMatcher(['/v2/orders/{orderId}']);
+
+        $this->assertSame(
+            ['path' => '/v2/orders/{orderId}', 'variables' => ['orderId' => 'a1b2%2D3c4d']],
+            $matcher->matchWithVariables('/v2/orders/a1b2%2D3c4d'),
+        );
+    }
+
+    #[Test]
+    public function match_with_variables_honors_strip_prefix(): void
+    {
+        $matcher = new OpenApiPathMatcher(
+            ['/v2/projects/{project_id}'],
+            ['/api'],
+        );
+
+        $this->assertSame(
+            ['path' => '/v2/projects/{project_id}', 'variables' => ['project_id' => 'abc123']],
+            $matcher->matchWithVariables('/api/v2/projects/abc123'),
+        );
+    }
+
     private static function createMatcher(): OpenApiPathMatcher
     {
         return new OpenApiPathMatcher([
