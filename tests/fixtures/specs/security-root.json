@@ -1,0 +1,56 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Root-level security inheritance fixture",
+        "version": "1.0.0"
+    },
+    "security": [
+        { "bearerAuth": [] }
+    ],
+    "paths": {
+        "/inherits": {
+            "get": {
+                "summary": "Inherits root-level security (no operation-level override)",
+                "operationId": "inherits",
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        },
+        "/opts-out": {
+            "get": {
+                "summary": "Opts out via explicit empty security array",
+                "operationId": "optsOut",
+                "security": [],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        },
+        "/overrides": {
+            "get": {
+                "summary": "Overrides root with apiKey requirement",
+                "operationId": "overrides",
+                "security": [
+                    { "apiKeyHeader": [] }
+                ],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer"
+            },
+            "apiKeyHeader": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-API-Key"
+            }
+        }
+    }
+}

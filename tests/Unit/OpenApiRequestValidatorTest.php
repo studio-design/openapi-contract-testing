@@ -1868,4 +1868,831 @@ class OpenApiRequestValidatorTest extends TestCase
         $this->assertStringContainsString('[header.X-Request-ID]', $message);
         $this->assertStringContainsString('/name', $message);
     }
+
+    #[Test]
+    public function path_query_header_body_and_security_errors_all_compose(): void
+    {
+        // POST /v1/secure/compose/{tenantId} bundles every validation channel the
+        // pipeline offers: path param (integer), query param (pattern), header
+        // (uuid), body (required 'name'), and security (bearerAuth). Inject a
+        // failing value per source so a refactor that short-circuits after any
+        // single channel fails would break this test.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/secure/compose/abc',
+            ['trace' => 'UPPER'],
+            ['X-Request-ID' => 'not-a-uuid'],
+            ['name' => 123],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[path.tenantId]', $message);
+        $this->assertStringContainsString('[query.trace]', $message);
+        $this->assertStringContainsString('[header.X-Request-ID]', $message);
+        $this->assertStringContainsString('[security]', $message);
+        $this->assertStringContainsString('/name', $message);
+    }
+
+    // ========================================
+    // Security scheme validation
+    // ========================================
+
+    #[Test]
+    public function v30_security_bearer_present_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/bearer',
+            [],
+            ['Authorization' => 'Bearer abc123'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_bearer_missing_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/bearer',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+        $this->assertStringContainsString('bearerAuth', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_bearer_wrong_scheme_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/bearer',
+            [],
+            ['Authorization' => 'Basic dXNlcjpwYXNz'],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+        $this->assertStringContainsString('bearerAuth', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_bearer_empty_token_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/bearer',
+            [],
+            ['Authorization' => 'Bearer '],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_bearer_scheme_name_is_case_insensitive(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/bearer',
+            [],
+            ['Authorization' => 'bearer abc123'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_bearer_header_name_is_case_insensitive(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/bearer',
+            [],
+            ['authorization' => 'Bearer abc123'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_apikey_header_present_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/apikey-header',
+            [],
+            ['X-API-Key' => 'k1'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_apikey_header_missing_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/apikey-header',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+        $this->assertStringContainsString('apiKeyHeader', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_apikey_header_empty_value_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/apikey-header',
+            [],
+            ['X-API-Key' => ''],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+    }
+
+    #[Test]
+    public function v30_security_apikey_query_present_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/apikey-query',
+            ['api_key' => 'k1'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_apikey_query_missing_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/apikey-query',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+        $this->assertStringContainsString('apiKeyQuery', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_apikey_cookie_present_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/apikey-cookie',
+            [],
+            [],
+            null,
+            null,
+            ['session_id' => 'abc'],
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_apikey_cookie_missing_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/apikey-cookie',
+            [],
+            [],
+            null,
+            null,
+            [],
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+        $this->assertStringContainsString('apiKeyCookie', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_or_bearer_only_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/or',
+            [],
+            ['Authorization' => 'Bearer abc'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_or_apikey_only_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/or',
+            [],
+            ['X-API-Key' => 'k1'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_or_both_missing_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/or',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_and_both_satisfied_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/and',
+            [],
+            [
+                'Authorization' => 'Bearer abc',
+                'X-API-Key' => 'k1',
+            ],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_and_one_missing_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/and',
+            [],
+            ['Authorization' => 'Bearer abc'],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+        $this->assertStringContainsString('apiKeyHeader', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_explicit_opt_out_passes_with_no_auth(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/opt-out',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_oauth2_only_silent_skips(): void
+    {
+        // When every requirement entry contains only unsupported schemes
+        // (oauth2 / openIdConnect) we have nothing we can validate — pass
+        // rather than block the test (false-negative avoidance).
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/oauth2-only',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_bearer_or_oauth2_with_bearer_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/bearer-or-oauth2',
+            [],
+            ['Authorization' => 'Bearer abc'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_bearer_or_oauth2_with_nothing_fails(): void
+    {
+        // Bearer entry is validatable and fails; OAuth2 entry is skipped.
+        // Since the only validatable entry failed and no other entry passed,
+        // overall result is fail.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/bearer-or-oauth2',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+        $this->assertStringContainsString('bearerAuth', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_combines_with_other_errors(): void
+    {
+        // Bearer missing + no other issues — ensure the security error appears
+        // alongside any other errors the pipeline surfaces.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/bearer',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $errors = $result->errors();
+        $this->assertNotEmpty($errors);
+        $this->assertTrue(
+            array_filter($errors, static fn(string $e): bool => str_contains($e, '[security]')) !== [],
+            'expected at least one [security] error in: ' . $result->errorMessage(),
+        );
+    }
+
+    #[Test]
+    public function security_undefined_scheme_is_hard_spec_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/security-undefined-scheme',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('ghostScheme', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_scalar_entry_is_hard_spec_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/security-scalar-entry',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[security]', $message);
+        $this->assertStringContainsString('index 0', $message);
+    }
+
+    #[Test]
+    public function security_scheme_missing_type_is_hard_spec_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/security-scheme-missing-type',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('brokenScheme', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_scheme_http_without_scheme_field_is_hard_spec_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/security-scheme-http-no-scheme-field',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('httpNoScheme', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_scheme_apikey_missing_name_is_hard_spec_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/security-scheme-apikey-missing-name',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('apiKeyNoName', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_root_level_is_inherited_when_operation_omits_security(): void
+    {
+        $result = $this->validator->validate(
+            'security-root',
+            'GET',
+            '/inherits',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+        $this->assertStringContainsString('bearerAuth', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_root_level_is_inherited_and_satisfied(): void
+    {
+        $result = $this->validator->validate(
+            'security-root',
+            'GET',
+            '/inherits',
+            [],
+            ['Authorization' => 'Bearer abc'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_operation_empty_array_opts_out_of_root(): void
+    {
+        $result = $this->validator->validate(
+            'security-root',
+            'GET',
+            '/opts-out',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_operation_override_replaces_root(): void
+    {
+        // /overrides replaces root-level bearerAuth with apiKeyHeader.
+        // Passing a bearer should fail (because apiKey is now required).
+        $result = $this->validator->validate(
+            'security-root',
+            'GET',
+            '/overrides',
+            [],
+            ['Authorization' => 'Bearer abc'],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('apiKeyHeader', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_operation_override_satisfied_passes(): void
+    {
+        $result = $this->validator->validate(
+            'security-root',
+            'GET',
+            '/overrides',
+            [],
+            ['X-API-Key' => 'k1'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v31_security_bearer_present_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/secure/bearer',
+            [],
+            ['Authorization' => 'Bearer abc123'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v31_security_apikey_query_missing_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/secure/apikey-query',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('apiKeyQuery', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v31_security_or_both_missing_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/secure/or',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v31_security_oauth2_only_silent_skips(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/secure/oauth2-only',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_unknown_type_is_hard_spec_error(): void
+    {
+        // A typo like type: "htpp" must not silently fall through as "unsupported".
+        // If it did, every request for that endpoint would silently pass — which
+        // is exactly the drift this library exists to catch.
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/security-scheme-unknown-type',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('typoScheme', $result->errorMessage());
+        $this->assertStringContainsString('htpp', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_empty_type_is_hard_spec_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/security-scheme-empty-type',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('emptyTypeScheme', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_operation_level_scalar_is_hard_spec_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/security-root-scalar',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_numeric_scheme_name_is_hard_spec_error(): void
+    {
+        // Purely numeric JSON object keys (e.g. {"0": []}) become integer PHP
+        // array keys after json_decode. The guard at the top of the entry loop
+        // must catch this so a typo doesn't silently skip auth.
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/security-numeric-scheme-name',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[security]', $result->errorMessage());
+        $this->assertStringContainsString('scheme name must be a string', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_components_schemes_as_scalar_is_hard_spec_error(): void
+    {
+        // If `components.securitySchemes` itself is a scalar, don't silently
+        // treat every scheme reference as "undefined" — that misdirects the
+        // spec author. Surface a dedicated error pointing at the real cause.
+        $result = $this->validator->validate(
+            'security-schemes-scalar',
+            'GET',
+            '/needs-bearer',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('components.securitySchemes', $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_two_unsupported_entries_silent_skip_to_pass(): void
+    {
+        // Two entries (oauth2 + oidc) are both unsupported. With no validatable
+        // entries remaining, overall result must be pass — prevents a regression
+        // where "no satisfied entry" is conflated with "no evaluable entry".
+        $result = $this->validator->validate(
+            'security-edge-cases',
+            'GET',
+            '/two-unsupported-entries',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function security_and_with_unsupported_scheme_skips_entry(): void
+    {
+        // Single entry AND-joining bearer with oauth2 — because the entry
+        // contains an unsupported scheme, phase-1 policy treats the whole entry
+        // as unevaluable (we cannot check oauth2, so we cannot confirm AND).
+        // Overall result: pass. Pins the documented tradeoff so a future policy
+        // change is an explicit decision, not an accidental regression.
+        $result = $this->validator->validate(
+            'security-edge-cases',
+            'GET',
+            '/and-with-unsupported',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function v30_security_apikey_header_name_is_case_insensitive(): void
+    {
+        // RFC 9110 §5.1 — HTTP header names are case-insensitive. Spec declares
+        // 'X-API-Key'; request sends 'x-api-key'. Locks in the normalize-then-
+        // lookup behaviour.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/secure/apikey-header',
+            [],
+            ['x-api-key' => 'k1'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
 }

@@ -64,7 +64,7 @@ class ResponseValidationTest extends TestCase
 
         // Check coverage
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
-        $this->assertSame(13, $coverage['total']);
+        $this->assertSame(23, $coverage['total']);
         $this->assertSame(2, $coverage['coveredCount']);
         $this->assertContains('GET /v1/pets', $coverage['covered']);
         $this->assertContains('POST /v1/pets', $coverage['covered']);
@@ -94,7 +94,7 @@ class ResponseValidationTest extends TestCase
         }
 
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.1');
-        $this->assertSame(10, $coverage['total']);
+        $this->assertSame(19, $coverage['total']);
         $this->assertSame(1, $coverage['coveredCount']);
     }
 

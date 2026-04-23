@@ -1,0 +1,56 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Security edge-case fixtures",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/two-unsupported-entries": {
+            "get": {
+                "summary": "Two oauth2/oidc entries in OR — both skipped, overall pass",
+                "operationId": "twoUnsupportedEntries",
+                "security": [
+                    { "oauth2A": ["read"] },
+                    { "oidcB": [] }
+                ],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        },
+        "/and-with-unsupported": {
+            "get": {
+                "summary": "Single entry ANDs bearer with oauth2 — currently skipped per phase 1 policy",
+                "operationId": "andWithUnsupported",
+                "security": [
+                    { "bearerAuth": [], "oauth2A": ["read"] }
+                ],
+                "responses": {
+                    "200": { "description": "OK" }
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer"
+            },
+            "oauth2A": {
+                "type": "oauth2",
+                "flows": {
+                    "authorizationCode": {
+                        "authorizationUrl": "https://example.com/oauth/authorize",
+                        "tokenUrl": "https://example.com/oauth/token",
+                        "scopes": { "read": "Read" }
+                    }
+                }
+            },
+            "oidcB": {
+                "type": "openIdConnect",
+                "openIdConnectUrl": "https://example.com/.well-known/openid-configuration"
+            }
+        }
+    }
+}

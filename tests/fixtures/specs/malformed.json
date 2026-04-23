@@ -244,6 +244,151 @@
                     }
                 }
             }
+        },
+        "/security-undefined-scheme": {
+            "get": {
+                "summary": "security references a scheme not defined in components.securitySchemes",
+                "operationId": "securityUndefinedScheme",
+                "security": [
+                    { "ghostScheme": [] }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/security-scalar-entry": {
+            "get": {
+                "summary": "security entry is a scalar instead of an object",
+                "operationId": "securityScalarEntry",
+                "security": [
+                    "not-an-object"
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/security-scheme-missing-type": {
+            "get": {
+                "summary": "referenced scheme exists but has no 'type' field",
+                "operationId": "securitySchemeMissingType",
+                "security": [
+                    { "brokenScheme": [] }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/security-scheme-http-no-scheme-field": {
+            "get": {
+                "summary": "referenced http scheme missing 'scheme' field",
+                "operationId": "securityHttpNoSchemeField",
+                "security": [
+                    { "httpNoScheme": [] }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/security-scheme-apikey-missing-name": {
+            "get": {
+                "summary": "referenced apiKey scheme missing 'name' or 'in'",
+                "operationId": "securityApiKeyMissingName",
+                "security": [
+                    { "apiKeyNoName": [] }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/security-scheme-unknown-type": {
+            "get": {
+                "summary": "referenced scheme uses an unknown type (e.g. typo)",
+                "operationId": "securityUnknownType",
+                "security": [
+                    { "typoScheme": [] }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/security-scheme-empty-type": {
+            "get": {
+                "summary": "referenced scheme has an empty-string type",
+                "operationId": "securityEmptyType",
+                "security": [
+                    { "emptyTypeScheme": [] }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/security-root-scalar": {
+            "get": {
+                "summary": "operation-level security is a scalar instead of an array",
+                "operationId": "securityRootScalar",
+                "security": "should-be-an-array",
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/security-numeric-scheme-name": {
+            "get": {
+                "summary": "requirement entry has a purely numeric key (non-string after json_decode)",
+                "operationId": "securityNumericSchemeName",
+                "security": [
+                    { "0": [] }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "brokenScheme": {
+                "description": "no type field"
+            },
+            "httpNoScheme": {
+                "type": "http"
+            },
+            "apiKeyNoName": {
+                "type": "apiKey",
+                "in": "header"
+            },
+            "typoScheme": {
+                "type": "htpp",
+                "scheme": "bearer"
+            },
+            "emptyTypeScheme": {
+                "type": ""
+            }
         }
     }
 }
