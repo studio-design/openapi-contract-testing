@@ -1,0 +1,36 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Malformed specs for negative tests",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/scalar-request-body": {
+            "post": {
+                "summary": "requestBody is a scalar (e.g. unresolved $ref)",
+                "operationId": "scalarRequestBody",
+                "requestBody": "this should have been an object",
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/scalar-content": {
+            "post": {
+                "summary": "requestBody.content is a scalar",
+                "operationId": "scalarContent",
+                "requestBody": {
+                    "required": true,
+                    "content": "this should have been an object"
+                },
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        }
+    }
+}
