@@ -164,6 +164,68 @@
                     }
                 }
             }
+        },
+        "/path-ref-parameter/{id}": {
+            "parameters": [
+                {
+                    "$ref": "#/components/parameters/UnresolvedId"
+                }
+            ],
+            "get": {
+                "summary": "in:path parameters list contains an unresolved $ref entry",
+                "operationId": "pathRefParameter",
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/path-scalar-parameter/{id}": {
+            "parameters": [
+                "this should have been an object"
+            ],
+            "get": {
+                "summary": "in:path parameters list contains a non-array entry",
+                "operationId": "pathScalarParameter",
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/path-undeclared/{id}": {
+            "get": {
+                "summary": "placeholder in template without any matching parameter declaration",
+                "operationId": "pathUndeclared",
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/path-name-mismatch/{id}": {
+            "parameters": [
+                {
+                    "name": "wrongId",
+                    "in": "path",
+                    "required": true,
+                    "schema": {
+                        "type": "integer"
+                    }
+                }
+            ],
+            "get": {
+                "summary": "declared in:path parameter name does not match any template placeholder",
+                "operationId": "pathNameMismatch",
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
         }
     }
 }

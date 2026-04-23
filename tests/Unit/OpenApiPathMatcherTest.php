@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -204,6 +205,19 @@ class OpenApiPathMatcherTest extends TestCase
             ['path' => '/v2/projects/{project_id}', 'variables' => ['project_id' => 'abc123']],
             $matcher->matchWithVariables('/api/v2/projects/abc123'),
         );
+    }
+
+    #[Test]
+    public function constructor_rejects_duplicate_placeholder_names(): void
+    {
+        // OpenAPI forbids the same placeholder name appearing twice in one template.
+        // Silently overwriting earlier captures would let one of the two segments bypass
+        // contract validation entirely (direction-dependent silent pass), so the matcher
+        // refuses to compile such a template.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage("Duplicate path placeholder name 'id' in spec path '/a/{id}/b/{id}'");
+
+        new OpenApiPathMatcher(['/a/{id}/b/{id}']);
     }
 
     private static function createMatcher(): OpenApiPathMatcher

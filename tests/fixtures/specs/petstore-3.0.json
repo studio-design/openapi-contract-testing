@@ -495,6 +495,35 @@
                 }
             }
         },
+        "/v1/events/{eventTime}": {
+            "parameters": [
+                {
+                    "name": "eventTime",
+                    "in": "path",
+                    "required": true,
+                    "schema": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                }
+            ],
+            "get": {
+                "summary": "Fetch events at a given ISO-8601 date-time",
+                "operationId": "getEventAtTime",
+                "responses": {
+                    "200": {
+                        "description": "Event",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/v1/widgets/{widgetId}": {
             "parameters": [
                 {

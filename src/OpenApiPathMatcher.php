@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
+use InvalidArgumentException;
+
 use function explode;
 use function implode;
+use function in_array;
 use function preg_match;
 use function preg_quote;
 use function rtrim;
+use function sprintf;
 use function str_ends_with;
 use function str_starts_with;
 use function strlen;
@@ -38,6 +42,18 @@ final class OpenApiPathMatcher
 
             foreach ($segments as $segment) {
                 if (preg_match('/^\{(.+)\}$/', $segment, $m)) {
+                    // OpenAPI forbids duplicate placeholder names in a single template.
+                    // If we silently overwrote the earlier capture, one of the segments
+                    // would skip validation depending on position — a direction-dependent
+                    // silent pass. Refuse to compile instead.
+                    if (in_array($m[1], $paramNames, true)) {
+                        throw new InvalidArgumentException(sprintf(
+                            "Duplicate path placeholder name '%s' in spec path '%s'. OpenAPI requires unique placeholder names within a single template.",
+                            $m[1],
+                            $specPath,
+                        ));
+                    }
+
                     $regexSegments[] = '([^/]+)';
                     $paramNames[] = $m[1];
                 } else {
@@ -70,10 +86,13 @@ final class OpenApiPathMatcher
      * Match a request path and return both the matched spec path template and
      * the raw values captured for each `{placeholder}` segment.
      *
-     * Values are returned **percent-encoded** (exactly as they appear in the
-     * request URI). Callers that need to validate the decoded value should
-     * apply `rawurldecode()` themselves — we don't decode here to keep the
-     * matcher a pure string operation and leave encoding policy to the caller.
+     * Values are returned exactly as they appeared in `$requestPath` — no
+     * decoding is performed. When the caller passes the raw request URI (the
+     * intended use, e.g. via Symfony's `Request::getPathInfo()` which returns
+     * the un-decoded path), the captured values will be percent-encoded and
+     * the caller should apply `rawurldecode()` before validating. Keeping
+     * encoding policy in one place on the caller side avoids the double-decode
+     * hazard that would arise if we decoded here.
      *
      * @return null|array{path: string, variables: array<string, string>}
      */

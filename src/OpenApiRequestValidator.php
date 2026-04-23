@@ -23,6 +23,7 @@ use function is_array;
 use function is_int;
 use function is_numeric;
 use function is_string;
+use function preg_match;
 use function rawurldecode;
 use function sprintf;
 use function str_ends_with;
@@ -57,9 +58,10 @@ final class OpenApiRequestValidator
     /**
      * Validate an incoming request against the OpenAPI spec.
      *
-     * Composes two validation phases — query parameters and request body — and
-     * returns a single result. Errors from both phases are accumulated so a
-     * single test run surfaces every contract drift the request exhibits.
+     * Composes path-parameter, query-parameter, and request-body validation
+     * plus any spec-level errors surfaced while collecting merged parameters,
+     * and returns a single result. Errors from all sources are accumulated
+     * so a single test run surfaces every contract drift the request exhibits.
      *
      * @param array<string, mixed> $queryParams parsed query string (string|array<string> per key)
      * @param array<string, mixed> $headers currently ignored; placeholder for header validation
@@ -188,13 +190,27 @@ final class OpenApiRequestValidator
     }
 
     /**
-     * Coerce a query string to int, guarding against overflow. `filter_var`
-     * returns `false` for values exceeding PHP_INT_MAX/MIN or containing
-     * non-digit characters, so the original string falls through and opis
-     * reports a type mismatch instead of receiving a silently truncated value.
+     * Coerce a URL-sourced string to int.
+     *
+     * `filter_var(FILTER_VALIDATE_INT)` is too permissive for contract testing:
+     * it accepts leading/trailing whitespace (e.g. "5 " → 5) and a leading
+     * sign prefix ("+5" → 5). Combined with rawurldecode these laundering
+     * behaviours would silently pass non-canonical URLs — real servers
+     * typically reject them, creating silent drift between the test harness
+     * and production. Pre-filter with a strict canonical-integer regex:
+     * optional leading `-`, then either `0` or a digit string without a
+     * leading zero. Anything else falls through unchanged so opis can
+     * report a meaningful type error.
+     *
+     * Overflow is still handled by `filter_var` returning `false` for
+     * values exceeding PHP_INT_MAX/MIN.
      */
     private static function coerceToInt(string $value): int|string
     {
+        if (preg_match('/^-?(0|[1-9]\d*)$/', $value) !== 1) {
+            return $value;
+        }
+
         $result = filter_var($value, FILTER_VALIDATE_INT);
 
         return is_int($result) ? $result : $value;
@@ -339,8 +355,10 @@ final class OpenApiRequestValidator
      * before type coercion / schema validation — the matcher leaves values
      * raw so encoding policy stays in one place.
      *
-     * `format: uuid | date-time | date | email ...` is delegated to
-     * opis/json-schema's built-in FormatResolver.
+     * String-valued `format: uuid | date-time | date | email | ...` is
+     * delegated to opis/json-schema's built-in FormatResolver (registered on
+     * the `string` type by default). Numeric OAS formats (`int32`, `int64`,
+     * `float`, `double`) are advisory-only and are not validated.
      *
      * @param list<array<string, mixed>> $parameters pre-collected merged parameters
      * @param array<string, string> $pathVariables values extracted by OpenApiPathMatcher
@@ -355,6 +373,7 @@ final class OpenApiRequestValidator
         OpenApiVersion $version,
     ): array {
         $errors = [];
+        $declared = [];
 
         foreach ($parameters as $param) {
             if (($param['in'] ?? null) !== 'path') {
@@ -363,6 +382,7 @@ final class OpenApiRequestValidator
 
             /** @var string $name */
             $name = $param['name'];
+            $declared[$name] = true;
 
             // Defensive: every path placeholder in the matched template should have
             // been captured by the regex. A mismatch here means the spec template and
@@ -403,6 +423,16 @@ final class OpenApiRequestValidator
                 foreach ($messages as $message) {
                     $errors[] = "[path.{$name}{$suffix}] {$message}";
                 }
+            }
+        }
+
+        // Reverse check: every `{placeholder}` in the URL template MUST be declared
+        // as an `in: path` parameter per OpenAPI. A captured-but-not-declared name
+        // means the spec author forgot the declaration entirely, which would otherwise
+        // let any value pass silently — the drift this library exists to catch.
+        foreach ($pathVariables as $name => $_) {
+            if (!isset($declared[$name])) {
+                $errors[] = "[path.{$name}] placeholder in {$method} {$matchedPath} template is not declared as an 'in: path' parameter — malformed spec (OpenAPI requires every placeholder to be declared).";
             }
         }
 
