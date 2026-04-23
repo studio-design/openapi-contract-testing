@@ -1,0 +1,46 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Refs circular",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/nodes": {
+            "get": {
+                "operationId": "listNodes",
+                "responses": {
+                    "200": {
+                        "description": "List",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Node"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Node": {
+                "type": "object",
+                "properties": {
+                    "child": {
+                        "$ref": "#/components/schemas/Child"
+                    }
+                }
+            },
+            "Child": {
+                "type": "object",
+                "properties": {
+                    "parent": {
+                        "$ref": "#/components/schemas/Node"
+                    }
+                }
+            }
+        }
+    }
+}

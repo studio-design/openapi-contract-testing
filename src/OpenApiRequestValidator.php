@@ -124,8 +124,8 @@ final class OpenApiRequestValidator
         $operation = $pathSpec[$lowerMethod];
 
         // Collect merged path/operation parameters once so path + query validation
-        // share a single view of the spec and spec-level errors (malformed entries,
-        // unresolved $refs) are surfaced only once.
+        // share a single view of the spec and malformed-entry errors are surfaced
+        // only once.
         [$parameters, $specErrors] = $this->collectParameters($method, $matchedPath, $pathSpec, $operation);
 
         $pathErrors = $this->validatePathParameters(
@@ -989,8 +989,9 @@ final class OpenApiRequestValidator
      * Malformed entries are surfaced as errors rather than silently skipped,
      * because for a contract-testing tool the absence of an error means
      * "validated and OK" — silently dropping a parameter would leave drift
-     * invisible. `$ref` entries are flagged separately so users know the spec
-     * needs to be pre-bundled (we don't resolve refs).
+     * invisible. `$ref` entries never reach this method: `OpenApiSpecLoader`
+     * resolves internal refs and throws on external/circular/unresolvable ones
+     * at load time.
      *
      * @param array<string, mixed> $pathSpec
      * @param array<string, mixed> $operation
@@ -1010,13 +1011,6 @@ final class OpenApiRequestValidator
             foreach ($source as $param) {
                 if (!is_array($param)) {
                     $errors[] = "Malformed parameter entry for {$method} {$matchedPath}: expected object, got scalar.";
-
-                    continue;
-                }
-
-                if (array_key_exists('$ref', $param)) {
-                    $ref = is_string($param['$ref']) ? $param['$ref'] : '(non-string $ref)';
-                    $errors[] = "Parameter \$ref encountered for {$method} {$matchedPath} ('{$ref}') — \$ref resolution is not supported. Pre-bundle the spec (e.g. redocly bundle --dereference).";
 
                     continue;
                 }
@@ -1094,28 +1088,16 @@ final class OpenApiRequestValidator
             return [];
         }
 
-        // A present-but-non-array requestBody signals a malformed spec (e.g. unresolved $ref,
-        // stray scalar). Contract-testing tools should surface this, not mask it as "no body".
+        // A present-but-non-array requestBody signals a malformed spec (stray scalar).
+        // Contract-testing tools should surface this, not mask it as "no body".
         if (!is_array($operation['requestBody'])) {
             return [
-                "Malformed 'requestBody' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar. Likely an unresolved \$ref or broken spec.",
+                "Malformed 'requestBody' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
             ];
         }
 
         /** @var array<string, mixed> $requestBodySpec */
         $requestBodySpec = $operation['requestBody'];
-
-        // Unresolved $ref at requestBody level: PHP parses it as an assoc array, so the
-        // existing is_array guard lets it through. Without this check, the subsequent
-        // `isset($requestBodySpec['content'])` returns false and the method silently
-        // returns success — the worst possible outcome for a contract-testing tool.
-        if (array_key_exists('$ref', $requestBodySpec)) {
-            $ref = is_string($requestBodySpec['$ref']) ? $requestBodySpec['$ref'] : '(non-string $ref)';
-
-            return [
-                "RequestBody \$ref encountered for {$method} {$matchedPath} ('{$ref}') — \$ref resolution is not supported. Pre-bundle the spec (e.g. redocly bundle --dereference).",
-            ];
-        }
 
         $required = ($requestBodySpec['required'] ?? false) === true;
 
@@ -1125,46 +1107,21 @@ final class OpenApiRequestValidator
 
         if (!is_array($requestBodySpec['content'])) {
             return [
-                "Malformed 'requestBody.content' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar. Likely an unresolved \$ref or broken spec.",
+                "Malformed 'requestBody.content' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
             ];
         }
 
         /** @var array<string, mixed> $content */
         $content = $requestBodySpec['content'];
 
-        // Unresolved $ref at content[mediaType] or content[mediaType].schema level.
-        // Without these checks, (a) mediaType-level $ref silently returns success because
-        // the `schema` key is absent, and (b) schema-level $ref reaches opis and throws
-        // UnresolvedReferenceException with an unhelpful message. Flagging all entries
-        // (not just the JSON-compatible one) catches broken specs regardless of which
-        // Content-Type the caller uses.
         foreach ($content as $mediaType => $mediaTypeSpec) {
             // The @var on $content narrows values to array, but PHPDoc is unchecked at
             // runtime — a malformed spec like `content: {"application/json": "oops"}`
-            // would TypeError on array_key_exists below. Surface it as a loud spec error
-            // instead, matching the sibling guard on `requestBody.content` above.
+            // would TypeError on downstream array accesses. Surface it as a loud spec
+            // error instead, matching the sibling guard on `requestBody.content` above.
             if (!is_array($mediaTypeSpec)) {
                 return [
                     "Malformed 'requestBody.content[\"{$mediaType}\"]' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
-                ];
-            }
-
-            if (array_key_exists('$ref', $mediaTypeSpec)) {
-                $ref = is_string($mediaTypeSpec['$ref']) ? $mediaTypeSpec['$ref'] : '(non-string $ref)';
-
-                return [
-                    "RequestBody content['{$mediaType}'] \$ref encountered for {$method} {$matchedPath} ('{$ref}') — \$ref resolution is not supported. Pre-bundle the spec (e.g. redocly bundle --dereference).",
-                ];
-            }
-
-            if (isset($mediaTypeSpec['schema']) &&
-                is_array($mediaTypeSpec['schema']) &&
-                array_key_exists('$ref', $mediaTypeSpec['schema'])
-            ) {
-                $ref = is_string($mediaTypeSpec['schema']['$ref']) ? $mediaTypeSpec['schema']['$ref'] : '(non-string $ref)';
-
-                return [
-                    "RequestBody content['{$mediaType}'].schema \$ref encountered for {$method} {$matchedPath} ('{$ref}') — \$ref resolution is not supported. Pre-bundle the spec (e.g. redocly bundle --dereference).",
                 ];
             }
         }

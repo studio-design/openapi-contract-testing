@@ -16,6 +16,7 @@ use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
 use function array_map;
 use function count;
+use function implode;
 use function json_encode;
 use function range;
 
@@ -1066,6 +1067,26 @@ class OpenApiResponseValidatorTest extends TestCase
 
         $this->assertTrue($result->isValid());
         $this->assertSame('/v1/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function validates_response_body_against_ref_backed_schema(): void
+    {
+        // End-to-end: loader resolves Pet -> Category -> Label refs, converter
+        // drops OAS keys, opis validates the resolved schema. A bug in any
+        // layer of the chain surfaces as a failure here.
+        $result = $this->validator->validate(
+            'refs-valid',
+            'GET',
+            '/pets',
+            200,
+            [
+                ['id' => 1, 'name' => 'Fido', 'category' => ['id' => 7, 'label' => 'dog']],
+            ],
+        );
+
+        $this->assertTrue($result->isValid(), 'errors: ' . implode(' | ', $result->errors()));
+        $this->assertSame('/pets', $result->matchedPath());
     }
 
     #[Test]

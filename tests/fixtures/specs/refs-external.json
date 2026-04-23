@@ -1,0 +1,26 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Refs external",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/pets": {
+            "get": {
+                "operationId": "listPets",
+                "responses": {
+                    "200": {
+                        "description": "List",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "other-spec.json#/components/schemas/Pet"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

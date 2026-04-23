@@ -1,0 +1,33 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Refs unresolvable",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/pets": {
+            "get": {
+                "operationId": "listPets",
+                "responses": {
+                    "200": {
+                        "description": "List",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DoesNotExist"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Pet": {
+                "type": "object"
+            }
+        }
+    }
+}

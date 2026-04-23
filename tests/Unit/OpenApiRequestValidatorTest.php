@@ -11,6 +11,7 @@ use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
 use function array_filter;
+use function implode;
 use function str_contains;
 use function strtolower;
 
@@ -35,6 +36,45 @@ class OpenApiRequestValidatorTest extends TestCase
     // ========================================
     // Acceptance criteria: valid / invalid / spec 未定義
     // ========================================
+
+    #[Test]
+    public function validates_request_body_against_ref_backed_schema(): void
+    {
+        // End-to-end mirror of the response-side integration test: the spec's
+        // requestBody is a $ref to components.requestBodies.PetBody, whose
+        // schema is itself $ref'd. Loader -> resolver -> converter -> opis
+        // must all line up for a valid payload to pass.
+        $result = $this->validator->validate(
+            'refs-valid',
+            'POST',
+            '/pets',
+            [],
+            [],
+            ['id' => 1, 'name' => 'Fido', 'category' => ['id' => 7, 'label' => 'dog']],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid(), 'errors: ' . implode(' | ', $result->errors()));
+        $this->assertSame('/pets', $result->matchedPath());
+    }
+
+    #[Test]
+    public function rejects_invalid_request_body_against_ref_backed_schema(): void
+    {
+        // Negative path confirming the ref-backed schema actually enforces
+        // the Pet shape — a missing required `category` must fail.
+        $result = $this->validator->validate(
+            'refs-valid',
+            'POST',
+            '/pets',
+            [],
+            [],
+            ['id' => 1, 'name' => 'Fido'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+    }
 
     #[Test]
     public function v30_valid_request_body_passes(): void
@@ -365,7 +405,7 @@ class OpenApiRequestValidatorTest extends TestCase
 
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString("Malformed 'requestBody'", $result->errors()[0]);
-        $this->assertStringContainsString('unresolved $ref or broken spec', $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
     }
 
     #[Test]
@@ -383,82 +423,6 @@ class OpenApiRequestValidatorTest extends TestCase
 
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString("Malformed 'requestBody.content'", $result->errors()[0]);
-    }
-
-    #[Test]
-    public function request_body_ref_surfaces_error(): void
-    {
-        $result = $this->validator->validate(
-            'malformed',
-            'POST',
-            '/ref-request-body',
-            [],
-            [],
-            ['name' => 'Rex'],
-            'application/json',
-        );
-
-        $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('RequestBody $ref encountered', $result->errors()[0]);
-        $this->assertStringContainsString('#/components/requestBodies/PetBody', $result->errors()[0]);
-        $this->assertStringContainsString('redocly bundle --dereference', $result->errors()[0]);
-    }
-
-    #[Test]
-    public function request_body_content_media_type_ref_surfaces_error(): void
-    {
-        $result = $this->validator->validate(
-            'malformed',
-            'POST',
-            '/ref-content-media-type',
-            [],
-            [],
-            ['name' => 'Rex'],
-            'application/json',
-        );
-
-        $this->assertFalse($result->isValid());
-        $this->assertStringContainsString("RequestBody content['application/json'] \$ref encountered", $result->errors()[0]);
-        $this->assertStringContainsString('#/components/schemas/Pet', $result->errors()[0]);
-        $this->assertStringContainsString('redocly bundle --dereference', $result->errors()[0]);
-    }
-
-    #[Test]
-    public function request_body_content_schema_ref_surfaces_error(): void
-    {
-        $result = $this->validator->validate(
-            'malformed',
-            'POST',
-            '/ref-content-schema',
-            [],
-            [],
-            ['name' => 'Rex'],
-            'application/json',
-        );
-
-        $this->assertFalse($result->isValid());
-        $this->assertStringContainsString("RequestBody content['application/json'].schema \$ref encountered", $result->errors()[0]);
-        $this->assertStringContainsString('#/components/schemas/Pet', $result->errors()[0]);
-        $this->assertStringContainsString('redocly bundle --dereference', $result->errors()[0]);
-    }
-
-    #[Test]
-    public function request_body_non_string_ref_surfaces_error(): void
-    {
-        $result = $this->validator->validate(
-            'malformed',
-            'POST',
-            '/non-string-ref-request-body',
-            [],
-            [],
-            ['name' => 'Rex'],
-            'application/json',
-        );
-
-        $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('RequestBody $ref encountered', $result->errors()[0]);
-        $this->assertStringContainsString('(non-string $ref)', $result->errors()[0]);
-        $this->assertStringContainsString('redocly bundle --dereference', $result->errors()[0]);
     }
 
     #[Test]
@@ -964,24 +928,6 @@ class OpenApiRequestValidatorTest extends TestCase
     }
 
     #[Test]
-    public function query_params_ref_entry_surfaces_error(): void
-    {
-        $result = $this->validator->validate(
-            'malformed',
-            'GET',
-            '/ref-parameter',
-            [],
-            [],
-            null,
-            null,
-        );
-
-        $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('Parameter $ref encountered', $result->errors()[0]);
-        $this->assertStringContainsString('redocly bundle --dereference', $result->errors()[0]);
-    }
-
-    #[Test]
     public function query_params_scalar_entry_surfaces_error(): void
     {
         $result = $this->validator->validate(
@@ -1332,24 +1278,6 @@ class OpenApiRequestValidatorTest extends TestCase
 
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString('[path.petId]', $result->errorMessage());
-    }
-
-    #[Test]
-    public function path_params_ref_entry_surfaces_error(): void
-    {
-        $result = $this->validator->validate(
-            'malformed',
-            'GET',
-            '/path-ref-parameter/123',
-            [],
-            [],
-            null,
-            null,
-        );
-
-        $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('Parameter $ref encountered', $result->errors()[0]);
-        $this->assertStringContainsString('redocly bundle --dereference', $result->errors()[0]);
     }
 
     #[Test]
