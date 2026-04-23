@@ -408,6 +408,19 @@ final class OpenApiRequestValidator
 
         /** @var array<string, mixed> $requestBodySpec */
         $requestBodySpec = $operation['requestBody'];
+
+        // Unresolved $ref at requestBody level: PHP parses it as an assoc array, so the
+        // existing is_array guard lets it through. Without this check, the subsequent
+        // `isset($requestBodySpec['content'])` returns false and the method silently
+        // returns success — the worst possible outcome for a contract-testing tool.
+        if (array_key_exists('$ref', $requestBodySpec)) {
+            $ref = is_string($requestBodySpec['$ref']) ? $requestBodySpec['$ref'] : '(non-string $ref)';
+
+            return [
+                "RequestBody \$ref encountered for {$method} {$matchedPath} ('{$ref}') — \$ref resolution is not supported. Pre-bundle the spec (e.g. redocly bundle --dereference).",
+            ];
+        }
+
         $required = ($requestBodySpec['required'] ?? false) === true;
 
         if (!isset($requestBodySpec['content'])) {
@@ -422,6 +435,33 @@ final class OpenApiRequestValidator
 
         /** @var array<string, array<string, mixed>> $content */
         $content = $requestBodySpec['content'];
+
+        // Unresolved $ref at content[mediaType] or content[mediaType].schema level.
+        // Without these checks, (a) mediaType-level $ref silently returns success because
+        // the `schema` key is absent, and (b) schema-level $ref reaches opis and throws
+        // UnresolvedReferenceException with an unhelpful message. Flagging all entries
+        // (not just the JSON-compatible one) catches broken specs regardless of which
+        // Content-Type the caller uses.
+        foreach ($content as $mediaType => $mediaTypeSpec) {
+            if (array_key_exists('$ref', $mediaTypeSpec)) {
+                $ref = is_string($mediaTypeSpec['$ref']) ? $mediaTypeSpec['$ref'] : '(non-string $ref)';
+
+                return [
+                    "RequestBody content['{$mediaType}'] \$ref encountered for {$method} {$matchedPath} ('{$ref}') — \$ref resolution is not supported. Pre-bundle the spec (e.g. redocly bundle --dereference).",
+                ];
+            }
+
+            if (isset($mediaTypeSpec['schema']) &&
+                is_array($mediaTypeSpec['schema']) &&
+                array_key_exists('$ref', $mediaTypeSpec['schema'])
+            ) {
+                $ref = is_string($mediaTypeSpec['schema']['$ref']) ? $mediaTypeSpec['schema']['$ref'] : '(non-string $ref)';
+
+                return [
+                    "RequestBody content['{$mediaType}'].schema \$ref encountered for {$method} {$matchedPath} ('{$ref}') — \$ref resolution is not supported. Pre-bundle the spec (e.g. redocly bundle --dereference).",
+                ];
+            }
+        }
 
         // When the actual request Content-Type is provided, handle content negotiation:
         // non-JSON types are checked for spec presence only, while JSON-compatible types
