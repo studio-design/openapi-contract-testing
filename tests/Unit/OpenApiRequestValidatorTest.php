@@ -1435,4 +1435,437 @@ class OpenApiRequestValidatorTest extends TestCase
         $this->assertStringContainsString('[path.petId]', $result->errorMessage());
         $this->assertStringContainsString('[query.traceId]', $result->errorMessage());
     }
+
+    // ========================================
+    // Header parameter validation (in: header)
+    // ========================================
+
+    #[Test]
+    public function header_params_valid_uuid_passes(): void
+    {
+        // Lower-case request key ('x-request-id') against spec name 'X-Request-ID' —
+        // HTTP headers are case-insensitive (RFC 7230), so the match must hold.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['x-request-id' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+        $this->assertSame('/v1/reports', $result->matchedPath());
+    }
+
+    #[Test]
+    public function header_params_required_missing_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[header.X-Request-ID]', $result->errorMessage());
+        $this->assertStringContainsString('missing', $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_uuid_format_violation_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => 'not-a-uuid'],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[header.X-Request-ID]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_pattern_violation_fails(): void
+    {
+        // X-Trace-Id: ^[A-Z0-9-]+$ pattern — lower-case value must fail.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            [
+                'X-Request-ID' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+                'X-Trace-Id' => 'lower-case',
+            ],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[header.X-Trace-Id]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_integer_coerced_passes(): void
+    {
+        // HTTP headers are strings on the wire; string→int coercion must fire.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            [
+                'X-Request-ID' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+                'X-Page-Size' => '42',
+            ],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_integer_bad_value_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            [
+                'X-Request-ID' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+                'X-Page-Size' => 'abc',
+            ],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[header.X-Page-Size]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_optional_absent_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_reserved_accept_ignored(): void
+    {
+        // Per OAS 3.x: "If in is header and the name field is Accept, Content-Type
+        // or Authorization, the parameter definition SHALL be ignored." The fixture
+        // declares Accept with a deliberately unmatchable enum — if our code still
+        // validated it, the request would always fail. It does not, so pass.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_single_element_array_is_unwrapped(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => ['f47ac10b-58cc-4372-a567-0e02b2c3d479']],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_multi_value_array_surfaces_hard_error(): void
+    {
+        // Laravel picks first / Symfony picks last — silently choosing one would
+        // hide whichever value the framework under test actually uses. Refuse.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => ['f47ac10b-58cc-4372-a567-0e02b2c3d479', 'also-a-value']],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[header.X-Request-ID]', $result->errorMessage());
+        $this->assertStringContainsString('multiple values', $result->errorMessage());
+        $this->assertStringContainsString('count=2', $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_empty_array_treated_as_missing(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => []],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[header.X-Request-ID]', $result->errorMessage());
+        $this->assertStringContainsString('missing', $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_explicit_null_treated_as_missing(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => null],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[header.X-Request-ID]', $result->errorMessage());
+        $this->assertStringContainsString('missing', $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_enum_violation_fails(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            [
+                'X-Request-ID' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+                'X-Category' => 'delta',
+            ],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[header.X-Category]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_enum_valid_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            [
+                'X-Request-ID' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+                'X-Category' => 'beta',
+            ],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_reserved_content_type_ignored(): void
+    {
+        // The /v1/reports fixture declares Content-Type with an unmatchable enum.
+        // If the reserved-skip list ever regresses, the call would fail required /
+        // enum checks simultaneously. It does not, so pass.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_reserved_names_case_insensitive_ignored(): void
+    {
+        // Reserved-list comparison is lower-cased. Spec-declared `Accept` /
+        // `Content-Type` / `Authorization` are ignored regardless of casing,
+        // AND caller-supplied values at any casing are also ignored — nothing
+        // about them flows into validation.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            [
+                'X-Request-ID' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+                'ACCEPT' => 'x',
+                'content-type' => 'x',
+                'AUTHORIZATION' => 'x',
+            ],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_duplicate_case_variants_last_wins(): void
+    {
+        // HTTP headers are case-insensitive so two keys that fold to the same
+        // lower-case name refer to the same header. Later entries overwrite
+        // earlier ones — pinning behaviour so future refactors can't silently
+        // change which value gets validated.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            [
+                'X-Request-ID' => 'not-a-uuid',
+                'x-request-id' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+            ],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_non_string_key_skipped(): void
+    {
+        // Integer keys (rare, but possible for array literal casts) must not
+        // crash strtolower() — they are silently dropped because no spec name
+        // can ever match them.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            [
+                0 => 'junk',
+                'X-Request-ID' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+            ],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function header_params_no_schema_surfaces_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/header-required-no-schema',
+            [],
+            ['X-Api-Key' => 'anything'],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[header.X-Api-Key]', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function v31_header_params_uuid_format_violation_fails(): void
+    {
+        // OAS 3.1 parity: 3.1 fixture uses multi-type form (`type: ["string"]`).
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => 'still-not-a-uuid'],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[header.X-Request-ID]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v31_header_params_uuid_format_valid_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => 'f47ac10b-58cc-4372-a567-0e02b2c3d479'],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_query_header_and_body_errors_are_combined(): void
+    {
+        // PATCH /v1/pets/{petId} inherits path-level petId + traceId, declares an
+        // operation-level X-Request-ID header, and accepts an optional JSON body.
+        // Inject one failing value per source to prove all four error channels
+        // compose in a single result — the single regression guard that prevents
+        // any validate-and-return-early refactor from silently masking drift.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'PATCH',
+            '/v1/pets/abc',
+            ['traceId' => 'UPPER'],
+            ['X-Request-ID' => 'not-a-uuid'],
+            ['name' => 123],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[path.petId]', $message);
+        $this->assertStringContainsString('[query.traceId]', $message);
+        $this->assertStringContainsString('[header.X-Request-ID]', $message);
+        $this->assertStringContainsString('/name', $message);
+    }
 }

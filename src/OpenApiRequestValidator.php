@@ -14,11 +14,14 @@ use stdClass;
 
 use function array_is_list;
 use function array_key_exists;
+use function array_key_first;
 use function array_keys;
 use function array_map;
 use function array_values;
+use function count;
 use function filter_var;
 use function implode;
+use function in_array;
 use function is_array;
 use function is_int;
 use function is_numeric;
@@ -33,6 +36,15 @@ use function trim;
 
 final class OpenApiRequestValidator
 {
+    /**
+     * Per OpenAPI 3.x: "If `in` is `header` and the `name` field is `Accept`,
+     * `Content-Type` or `Authorization`, the parameter definition SHALL be
+     * ignored." These are controlled by content negotiation and security
+     * schemes; surfacing them through parameter validation would duplicate
+     * (and often disagree with) the framework's own handling.
+     */
+    private const RESERVED_HEADER_NAMES = ['accept', 'content-type', 'authorization'];
+
     /** @var array<string, OpenApiPathMatcher> */
     private array $pathMatchers = [];
     private Validator $opisValidator;
@@ -58,13 +70,14 @@ final class OpenApiRequestValidator
     /**
      * Validate an incoming request against the OpenAPI spec.
      *
-     * Composes path-parameter, query-parameter, and request-body validation
-     * plus any spec-level errors surfaced while collecting merged parameters,
-     * and returns a single result. Errors from all sources are accumulated
-     * so a single test run surfaces every contract drift the request exhibits.
+     * Composes path-parameter, query-parameter, header-parameter, and
+     * request-body validation plus any spec-level errors surfaced while
+     * collecting merged parameters, and returns a single result. Errors from
+     * all sources are accumulated so a single test run surfaces every
+     * contract drift the request exhibits.
      *
      * @param array<string, mixed> $queryParams parsed query string (string|array<string> per key)
-     * @param array<string, mixed> $headers currently ignored; placeholder for header validation
+     * @param array<array-key, mixed> $headers request headers (string|array<string> per key, case-insensitive name match; non-string keys are silently dropped)
      */
     public function validate(
         string $specName,
@@ -125,6 +138,13 @@ final class OpenApiRequestValidator
             $queryParams,
             $version,
         );
+        $headerErrors = $this->validateHeaderParameters(
+            $method,
+            $matchedPath,
+            $parameters,
+            $headers,
+            $version,
+        );
         $bodyErrors = $this->validateRequestBody(
             $specName,
             $method,
@@ -135,7 +155,7 @@ final class OpenApiRequestValidator
             $version,
         );
 
-        $errors = [...$specErrors, ...$pathErrors, ...$queryErrors, ...$bodyErrors];
+        $errors = [...$specErrors, ...$pathErrors, ...$queryErrors, ...$headerErrors, ...$bodyErrors];
 
         if ($errors === []) {
             return OpenApiValidationResult::success($matchedPath);
@@ -256,6 +276,37 @@ final class OpenApiRequestValidator
             },
             default => $value,
         };
+    }
+
+    /**
+     * Lower-case the keys of the caller-supplied headers map. Non-string keys
+     * are skipped — they cannot match any spec name and would cause a
+     * TypeError on strtolower(). Values are returned as-is; array/scalar
+     * discrimination happens in validateHeaderParameters() so the "how many
+     * values" decision is visible at the validation site.
+     *
+     * When two keys collapse to the same lower-case form (e.g. both
+     * `X-Foo` and `x-foo` are present), later entries overwrite earlier ones
+     * — HTTP treats these as the same header so the behaviour matches what
+     * most frameworks surface to application code.
+     *
+     * @param array<array-key, mixed> $headers
+     *
+     * @return array<string, mixed>
+     */
+    private static function normalizeHeaders(array $headers): array
+    {
+        $normalized = [];
+
+        foreach ($headers as $name => $value) {
+            if (!is_string($name)) {
+                continue;
+            }
+
+            $normalized[strtolower($name)] = $value;
+        }
+
+        return $normalized;
     }
 
     /**
@@ -433,6 +484,127 @@ final class OpenApiRequestValidator
         foreach ($pathVariables as $name => $_) {
             if (!isset($declared[$name])) {
                 $errors[] = "[path.{$name}] placeholder in {$method} {$matchedPath} template is not declared as an 'in: path' parameter — malformed spec (OpenAPI requires every placeholder to be declared).";
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Validate header parameters declared by the matched operation (or
+     * inherited from the path-level `parameters` block).
+     *
+     * HTTP header names are case-insensitive (RFC 7230) so both the spec
+     * `name` and the caller-supplied `$headers` keys are lower-cased before
+     * matching. Error messages keep the spec's original casing so users can
+     * grep the spec directly.
+     *
+     * Per OpenAPI 3.x, `Accept`, `Content-Type`, and `Authorization`
+     * declarations are ignored — these are controlled by content negotiation
+     * and security schemes, not arbitrary header parameters.
+     *
+     * Header values arriving as `array<string>` (Laravel's HeaderBag models
+     * repeated occurrences this way) are unwrapped to a single value when the
+     * array holds exactly one element. Multi-value arrays against scalar
+     * schemas produce a hard error — real frameworks disagree on which of
+     * the repeated values "wins" (Laravel picks first, Symfony picks last),
+     * so silently picking one would mask a drift the contract test exists to
+     * expose. Empty arrays are treated as missing. `style: simple` with
+     * `type: array | object` is out of scope.
+     *
+     * @param list<array<string, mixed>> $parameters pre-collected merged parameters
+     * @param array<string, mixed> $headers caller-supplied request headers
+     *
+     * @return string[]
+     */
+    private function validateHeaderParameters(
+        string $method,
+        string $matchedPath,
+        array $parameters,
+        array $headers,
+        OpenApiVersion $version,
+    ): array {
+        $errors = [];
+        $normalizedHeaders = self::normalizeHeaders($headers);
+
+        foreach ($parameters as $param) {
+            if (($param['in'] ?? null) !== 'header') {
+                continue;
+            }
+
+            /** @var string $name */
+            $name = $param['name'];
+            $lowerName = strtolower($name);
+
+            if (in_array($lowerName, self::RESERVED_HEADER_NAMES, true)) {
+                continue;
+            }
+
+            $required = ($param['required'] ?? false) === true;
+
+            // Same reasoning as query/path: a required parameter without a schema would
+            // silently pass every request, so surface it as a hard spec error. Optional
+            // entries without a schema have nothing to validate — let them through.
+            if (!isset($param['schema']) || !is_array($param['schema'])) {
+                if ($required) {
+                    $errors[] = "[header.{$name}] required parameter has no schema for {$method} {$matchedPath} — cannot validate.";
+                }
+
+                continue;
+            }
+
+            /** @var array<string, mixed> $schema */
+            $schema = $param['schema'];
+
+            $rawValue = $normalizedHeaders[$lowerName] ?? null;
+
+            // `null` and `[]` (empty repeated-header array) both collapse to "missing".
+            // A repeated header that was sent zero times is semantically absent.
+            if ($rawValue === null || $rawValue === []) {
+                if ($required) {
+                    $errors[] = "[header.{$name}] required header is missing.";
+                }
+
+                continue;
+            }
+
+            if (is_array($rawValue)) {
+                // HeaderBag shape: list<string>. Single-element arrays are the common
+                // case (Laravel always wraps) — unwrap. Multi-element means the client
+                // sent the header more than once; frameworks disagree on which value
+                // is "canonical" (Laravel: first, Symfony: last), so silently picking
+                // one would mask drift. Surface it so the spec author / client fixes
+                // the duplicate.
+                if (count($rawValue) > 1) {
+                    $errors[] = sprintf(
+                        '[header.%s] multiple values received (count=%d) but schema expects a single value; refusing to pick one silently.',
+                        $name,
+                        count($rawValue),
+                    );
+
+                    continue;
+                }
+
+                $rawValue = $rawValue[array_key_first($rawValue)];
+            }
+
+            $coerced = self::coercePrimitiveValue($rawValue, $schema);
+            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version);
+
+            $schemaObject = self::toObject($jsonSchema);
+            $dataObject = self::toObject($coerced);
+
+            $result = $this->opisValidator->validate($dataObject, $schemaObject);
+            if ($result->isValid()) {
+                continue;
+            }
+
+            $formatted = $this->errorFormatter->format($result->error());
+            foreach ($formatted as $path => $messages) {
+                $suffix = $path === '/' ? '' : $path;
+                foreach ($messages as $message) {
+                    $errors[] = "[header.{$name}{$suffix}] {$message}";
+                }
             }
         }
 
