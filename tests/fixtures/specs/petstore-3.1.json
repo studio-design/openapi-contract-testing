@@ -248,6 +248,21 @@
                         "description": "Pet updated"
                     }
                 }
+            },
+            "put": {
+                "summary": "Replace a pet (schema-less JSON body)",
+                "operationId": "replacePet",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {}
+                    }
+                },
+                "responses": {
+                    "204": {
+                        "description": "Pet replaced"
+                    }
+                }
             }
         }
     }

@@ -173,6 +173,7 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/pets/{petId}', $result->matchedPath());
     }
 
     #[Test]
@@ -189,6 +190,9 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
+        $this->assertNotEmpty($result->errors());
+        // Must reach schema validation, not short-circuit via the required-but-empty branch.
+        $this->assertStringNotContainsString('Request body is empty', $result->errorMessage());
     }
 
     // ========================================
@@ -198,6 +202,24 @@ class OpenApiRequestValidatorTest extends TestCase
     #[Test]
     public function v30_non_json_content_type_with_spec_match_succeeds(): void
     {
+        // Body intentionally violates the JSON pet schema (integer, not an object with "name").
+        // If the non-JSON short-circuit ever regresses into schema validation this will fail.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            [],
+            [],
+            12345,
+            'text/plain',
+        );
+
+        $this->assertTrue($result->isValid());
+    }
+
+    #[Test]
+    public function v30_non_json_content_type_spec_match_is_case_insensitive(): void
+    {
         $result = $this->validator->validate(
             'petstore-3.0',
             'POST',
@@ -205,7 +227,7 @@ class OpenApiRequestValidatorTest extends TestCase
             [],
             [],
             'raw pet body',
-            'text/plain',
+            'TEXT/PLAIN',
         );
 
         $this->assertTrue($result->isValid());
@@ -296,6 +318,67 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
+        $this->assertNotEmpty($result->errors());
+    }
+
+    // ========================================
+    // Schema-less JSON content type
+    // ========================================
+
+    #[Test]
+    public function v30_json_content_type_without_schema_skips_validation(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'PUT',
+            '/v1/pets/123',
+            [],
+            [],
+            ['anything' => 'goes'],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('/v1/pets/{petId}', $result->matchedPath());
+    }
+
+    // ========================================
+    // Malformed spec guards
+    // ========================================
+
+    #[Test]
+    public function malformed_request_body_returns_failure(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'POST',
+            '/scalar-request-body',
+            [],
+            [],
+            ['foo' => 'bar'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString("Malformed 'requestBody'", $result->errors()[0]);
+        $this->assertStringContainsString('unresolved $ref or broken spec', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function malformed_content_returns_failure(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'POST',
+            '/scalar-content',
+            [],
+            [],
+            ['foo' => 'bar'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString("Malformed 'requestBody.content'", $result->errors()[0]);
     }
 
     // ========================================
@@ -309,6 +392,24 @@ class OpenApiRequestValidatorTest extends TestCase
         $this->expectExceptionMessage('maxErrors must be 0 (unlimited) or a positive integer, got -1.');
 
         new OpenApiRequestValidator(maxErrors: -1);
+    }
+
+    #[Test]
+    public function max_errors_one_limits_to_single_error(): void
+    {
+        $validator = new OpenApiRequestValidator(maxErrors: 1);
+        $result = $validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            [],
+            [],
+            ['name' => 123, 'tag' => 456],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertCount(1, $result->errors());
     }
 
     // ========================================

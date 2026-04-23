@@ -86,17 +86,31 @@ final class OpenApiRequestValidator
 
         $operation = $pathSpec[$lowerMethod];
 
-        // Operations without a requestBody entry do not require a body (per AC of issue #42).
-        if (!isset($operation['requestBody']) || !is_array($operation['requestBody'])) {
+        // OpenAPI: a missing requestBody means the operation accepts no body — treat as success.
+        if (!isset($operation['requestBody'])) {
             return OpenApiValidationResult::success($matchedPath);
+        }
+
+        // A present-but-non-array requestBody signals a malformed spec (e.g. unresolved $ref,
+        // stray scalar). Contract-testing tools should surface this, not mask it as "no body".
+        if (!is_array($operation['requestBody'])) {
+            return OpenApiValidationResult::failure([
+                "Malformed 'requestBody' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar. Likely an unresolved \$ref or broken spec.",
+            ], $matchedPath);
         }
 
         /** @var array<string, mixed> $requestBodySpec */
         $requestBodySpec = $operation['requestBody'];
         $required = ($requestBodySpec['required'] ?? false) === true;
 
-        if (!isset($requestBodySpec['content']) || !is_array($requestBodySpec['content'])) {
+        if (!isset($requestBodySpec['content'])) {
             return OpenApiValidationResult::success($matchedPath);
+        }
+
+        if (!is_array($requestBodySpec['content'])) {
+            return OpenApiValidationResult::failure([
+                "Malformed 'requestBody.content' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar. Likely an unresolved \$ref or broken spec.",
+            ], $matchedPath);
         }
 
         /** @var array<string, array<string, mixed>> $content */
@@ -119,13 +133,18 @@ final class OpenApiRequestValidator
                     "Request Content-Type '{$normalizedType}' is not defined for {$method} {$matchedPath} in '{$specName}' spec. Defined content types: {$defined}",
                 ], $matchedPath);
             }
+
+            // JSON-compatible request: fall through to existing JSON schema validation.
+            // JSON types are treated as interchangeable (e.g. application/vnd.api+json
+            // validates against an application/json spec entry) because the schema is
+            // the same regardless of the specific JSON media type.
         }
 
         $jsonContentType = $this->findJsonContentType($content);
 
         // If no JSON-compatible content type is defined, skip body validation.
-        // This validator only handles JSON schemas; non-JSON types (e.g. text/plain,
-        // application/xml) are outside its scope.
+        // This validator only handles JSON schemas; non-JSON types (e.g. application/xml,
+        // application/octet-stream) are outside its scope.
         if ($jsonContentType === null) {
             return OpenApiValidationResult::success($matchedPath);
         }
