@@ -101,7 +101,13 @@ trait ValidatesOpenApiSchema
         return $this;
     }
 
-    /** Skips response validation for the next HTTP call only. */
+    /**
+     * Skips response validation for the next HTTP call only. The flag
+     * self-resets after one auto-assert attempt.
+     *
+     * Scoped to auto-assert only, matching the convention established by
+     * #[SkipOpenApi] and `withoutValidation()`.
+     */
     public function withoutResponseValidation(): static
     {
         $this->skipNextResponseValidation = true;

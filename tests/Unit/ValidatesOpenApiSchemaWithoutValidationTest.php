@@ -13,6 +13,7 @@ use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\SkipOpenApi;
 use Studio\OpenApiContractTesting\Tests\Helpers\CreatesTestResponse;
 
 use function json_encode;
@@ -158,6 +159,54 @@ class ValidatesOpenApiSchemaWithoutValidationTest extends TestCase
 
         $this->expectException(AssertionFailedError::class);
         $this->assertResponseMatchesOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
+    }
+
+    #[Test]
+    public function explicit_assert_after_without_validation_skip_still_validates_and_records(): void
+    {
+        // The skip flag suppresses auto-assert (including markValidated), so
+        // a later explicit assertResponseMatchesOpenApiSchema() on the same
+        // TestResponse must run validation from scratch and record coverage.
+        // Without this, the WeakMap idempotency check could mistakenly swallow
+        // the explicit call if the auto-assert path had silently marked the
+        // response as validated despite skipping.
+        $body = (string) json_encode(
+            ['data' => [['id' => 1, 'name' => 'Fido', 'tag' => null]]],
+            JSON_THROW_ON_ERROR,
+        );
+        $response = $this->makeTestResponse($body, 200);
+
+        $this->withoutValidation();
+        $this->maybeAutoAssertOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
+
+        // Coverage not recorded by the skip.
+        $this->assertArrayNotHasKey('petstore-3.0', OpenApiCoverageTracker::getCovered());
+
+        // Explicit call runs validation and records coverage.
+        $this->assertResponseMatchesOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
+
+        $covered = OpenApiCoverageTracker::getCovered();
+        $this->assertArrayHasKey('petstore-3.0', $covered);
+        $this->assertArrayHasKey('GET /v1/pets', $covered['petstore-3.0']);
+    }
+
+    #[Test]
+    #[SkipOpenApi]
+    public function without_validation_combined_with_skip_attribute_both_agree_to_skip(): void
+    {
+        // Both the per-request flag and the class/method-level attribute
+        // express "skip this". The flag is consumed before the attribute
+        // check, so the attribute branch is never exercised — but the
+        // observable result (no validation, no coverage) is identical. This
+        // pins the ordering invariant: combining the two switches must not
+        // produce divergent or surprising behavior.
+        $body = (string) json_encode(['wrong_key' => 'value'], JSON_THROW_ON_ERROR);
+        $response = $this->makeTestResponse($body, 200);
+
+        $this->withoutValidation();
+        $this->maybeAutoAssertOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
+
+        $this->assertArrayNotHasKey('petstore-3.0', OpenApiCoverageTracker::getCovered());
     }
 
     #[Test]
