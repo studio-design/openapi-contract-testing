@@ -23,6 +23,7 @@ use function is_array;
 use function is_int;
 use function is_numeric;
 use function is_string;
+use function rawurldecode;
 use function sprintf;
 use function str_ends_with;
 use function strstr;
@@ -79,13 +80,16 @@ final class OpenApiRequestValidator
         /** @var string[] $specPaths */
         $specPaths = array_keys($spec['paths'] ?? []);
         $matcher = $this->getPathMatcher($specName, $specPaths);
-        $matchedPath = $matcher->match($requestPath);
+        $matched = $matcher->matchWithVariables($requestPath);
 
-        if ($matchedPath === null) {
+        if ($matched === null) {
             return OpenApiValidationResult::failure([
                 "No matching path found in '{$specName}' spec for: {$requestPath}",
             ]);
         }
+
+        $matchedPath = $matched['path'];
+        $pathVariables = $matched['variables'];
 
         $lowerMethod = strtolower($method);
         /** @var array<string, mixed> $pathSpec */
@@ -100,11 +104,22 @@ final class OpenApiRequestValidator
         /** @var array<string, mixed> $operation */
         $operation = $pathSpec[$lowerMethod];
 
+        // Collect merged path/operation parameters once so path + query validation
+        // share a single view of the spec and spec-level errors (malformed entries,
+        // unresolved $refs) are surfaced only once.
+        [$parameters, $specErrors] = $this->collectParameters($method, $matchedPath, $pathSpec, $operation);
+
+        $pathErrors = $this->validatePathParameters(
+            $method,
+            $matchedPath,
+            $parameters,
+            $pathVariables,
+            $version,
+        );
         $queryErrors = $this->validateQueryParameters(
             $method,
             $matchedPath,
-            $pathSpec,
-            $operation,
+            $parameters,
             $queryParams,
             $version,
         );
@@ -118,7 +133,7 @@ final class OpenApiRequestValidator
             $version,
         );
 
-        $errors = [...$queryErrors, ...$bodyErrors];
+        $errors = [...$specErrors, ...$pathErrors, ...$queryErrors, ...$bodyErrors];
 
         if ($errors === []) {
             return OpenApiValidationResult::success($matchedPath);
@@ -186,6 +201,48 @@ final class OpenApiRequestValidator
     }
 
     /**
+     * Scalar-only variant used for path parameters. Path segments arrive as
+     * single strings (OpenAPI default `style: simple`) so array handling is
+     * never appropriate — a spec declaring `type: array` for a path param
+     * would be rejected by opis because the request value is still scalar.
+     *
+     * @param array<string, mixed> $schema
+     */
+    private static function coercePrimitiveValue(mixed $value, array $schema): mixed
+    {
+        $type = $schema['type'] ?? null;
+
+        if (is_array($type)) {
+            $type = self::firstPrimitiveType($type);
+        }
+
+        return self::coercePrimitiveFromType($value, $type);
+    }
+
+    /**
+     * Shared scalar coercion: string → int/float/bool when the target type is
+     * clean, otherwise the original value passes through so opis can report a
+     * meaningful type mismatch.
+     */
+    private static function coercePrimitiveFromType(mixed $value, mixed $type): mixed
+    {
+        if (!is_string($value) || !is_string($type)) {
+            return $value;
+        }
+
+        return match ($type) {
+            'integer' => self::coerceToInt($value),
+            'number' => is_numeric($value) ? (float) $value : $value,
+            'boolean' => match (strtolower($value)) {
+                'true' => true,
+                'false' => false,
+                default => $value,
+            },
+            default => $value,
+        };
+    }
+
+    /**
      * @param string[] $specPaths
      */
     private function getPathMatcher(string $specName, array $specPaths): OpenApiPathMatcher
@@ -202,8 +259,7 @@ final class OpenApiRequestValidator
      * PHP arrays from the framework. Other styles (`form`+`explode:false`,
      * `pipeDelimited`, `spaceDelimited`) are out of scope.
      *
-     * @param array<string, mixed> $pathSpec
-     * @param array<string, mixed> $operation
+     * @param list<array<string, mixed>> $parameters pre-collected merged parameters (path + operation level)
      * @param array<string, mixed> $queryParams
      *
      * @return string[]
@@ -211,12 +267,11 @@ final class OpenApiRequestValidator
     private function validateQueryParameters(
         string $method,
         string $matchedPath,
-        array $pathSpec,
-        array $operation,
+        array $parameters,
         array $queryParams,
         OpenApiVersion $version,
     ): array {
-        [$parameters, $errors] = $this->collectParameters($method, $matchedPath, $pathSpec, $operation);
+        $errors = [];
 
         foreach ($parameters as $param) {
             if (($param['in'] ?? null) !== 'query') {
@@ -266,6 +321,87 @@ final class OpenApiRequestValidator
                 $suffix = $path === '/' ? '' : $path;
                 foreach ($messages as $message) {
                     $errors[] = "[query.{$name}{$suffix}] {$message}";
+                }
+            }
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Validate path parameters declared by the matched operation (or
+     * inherited from the path-level `parameters` block) against the values
+     * extracted by the path matcher.
+     *
+     * Path parameters are always required in OpenAPI, so a declared `in: path`
+     * entry without a `schema` is treated as a hard spec error rather than a
+     * silent pass. Percent-encoded segments are decoded via `rawurldecode()`
+     * before type coercion / schema validation — the matcher leaves values
+     * raw so encoding policy stays in one place.
+     *
+     * `format: uuid | date-time | date | email ...` is delegated to
+     * opis/json-schema's built-in FormatResolver.
+     *
+     * @param list<array<string, mixed>> $parameters pre-collected merged parameters
+     * @param array<string, string> $pathVariables values extracted by OpenApiPathMatcher
+     *
+     * @return string[]
+     */
+    private function validatePathParameters(
+        string $method,
+        string $matchedPath,
+        array $parameters,
+        array $pathVariables,
+        OpenApiVersion $version,
+    ): array {
+        $errors = [];
+
+        foreach ($parameters as $param) {
+            if (($param['in'] ?? null) !== 'path') {
+                continue;
+            }
+
+            /** @var string $name */
+            $name = $param['name'];
+
+            // Defensive: every path placeholder in the matched template should have
+            // been captured by the regex. A mismatch here means the spec template and
+            // the compiled matcher disagree — surface it loudly rather than skipping.
+            if (!array_key_exists($name, $pathVariables)) {
+                $errors[] = "[path.{$name}] declared in {$method} {$matchedPath} spec but not captured by path matcher.";
+
+                continue;
+            }
+
+            if (!isset($param['schema']) || !is_array($param['schema'])) {
+                // Path parameters are implicitly required (OpenAPI spec), so a schema-less
+                // entry means every value passes — exactly the silent-drift outcome this
+                // library exists to prevent.
+                $errors[] = "[path.{$name}] parameter has no schema for {$method} {$matchedPath} — cannot validate.";
+
+                continue;
+            }
+
+            /** @var array<string, mixed> $schema */
+            $schema = $param['schema'];
+
+            $decoded = rawurldecode($pathVariables[$name]);
+            $coerced = self::coercePrimitiveValue($decoded, $schema);
+            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version);
+
+            $schemaObject = self::toObject($jsonSchema);
+            $dataObject = self::toObject($coerced);
+
+            $result = $this->opisValidator->validate($dataObject, $schemaObject);
+            if ($result->isValid()) {
+                continue;
+            }
+
+            $formatted = $this->errorFormatter->format($result->error());
+            foreach ($formatted as $path => $messages) {
+                $suffix = $path === '/' ? '' : $path;
+                foreach ($messages as $message) {
+                    $errors[] = "[path.{$name}{$suffix}] {$message}";
                 }
             }
         }
@@ -356,20 +492,7 @@ final class OpenApiRequestValidator
             return $value;
         }
 
-        if (!is_string($value) || !is_string($type)) {
-            return $value;
-        }
-
-        return match ($type) {
-            'integer' => self::coerceToInt($value),
-            'number' => is_numeric($value) ? (float) $value : $value,
-            'boolean' => match (strtolower($value)) {
-                'true' => true,
-                'false' => false,
-                default => $value,
-            },
-            default => $value,
-        };
+        return self::coercePrimitiveFromType($value, $type);
     }
 
     /**

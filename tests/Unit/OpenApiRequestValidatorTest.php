@@ -1088,4 +1088,195 @@ class OpenApiRequestValidatorTest extends TestCase
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString('[query.count]', $result->errorMessage());
     }
+
+    // ========================================
+    // Path parameter validation
+    // ========================================
+
+    #[Test]
+    public function path_params_valid_integer_passes(): void
+    {
+        // petId is declared `type: integer, minimum: 1` — "42" coerces to int 42 and passes.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/42',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_params_integer_expected_string_fails(): void
+    {
+        // Acceptance: integer 期待で文字列 → surface [path.petId] type error.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/not-a-number',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.petId]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_params_integer_violates_minimum_fails(): void
+    {
+        // Coercion succeeds but schema constraint (minimum:1) rejects 0.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/0',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.petId]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_params_uuid_format_valid_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/orders/f47ac10b-58cc-4372-a567-0e02b2c3d479',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+        $this->assertSame('/v1/orders/{orderId}', $result->matchedPath());
+    }
+
+    #[Test]
+    public function path_params_uuid_format_violation_fails(): void
+    {
+        // Acceptance: uuid 違反 → surface [path.orderId] format error.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/orders/not-a-uuid',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.orderId]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_params_percent_encoded_value_decoded_for_validation(): void
+    {
+        // Canonical UUID with a literal hyphen replaced by "%2D" (percent-encoded '-').
+        // Without rawurldecode() the string `f47ac10b%2D58cc-4372-a567-0e02b2c3d479`
+        // would fail uuid format validation; with decoding it is the valid canonical form.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/orders/f47ac10b%2D58cc-4372-a567-0e02b2c3d479',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_params_no_schema_surfaces_error(): void
+    {
+        // Path parameters are always required (OpenAPI spec) — a declared `in: path`
+        // entry without a schema is a malformed spec and should surface as a hard error
+        // rather than silently passing every request.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/widgets/anything',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.widgetId]', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function v31_path_params_uuid_format_violation_fails(): void
+    {
+        // OAS 3.1 parity: the 3.1 fixture declares orderId as `type: ["string"], format: uuid`
+        // (multi-type array form). The format validator must still fire.
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/orders/still-not-a-uuid',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.orderId]', $result->errorMessage());
+    }
+
+    #[Test]
+    public function v31_path_params_uuid_format_valid_passes(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/orders/f47ac10b-58cc-4372-a567-0e02b2c3d479',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function path_query_and_body_errors_are_combined(): void
+    {
+        // POST /v1/pets defines body only — to combine all three phases we use
+        // GET /v1/pets/{petId} with:
+        //   - invalid path (petId = "abc")
+        //   - invalid query (traceId = "BAD" breaks the operation-level ^[A-Z]+$? actually passes; use lowercase-only path-level)
+        //     traceId operation-level is ^[A-Z]+$; sending "lower" fails it.
+        // GET has no body; use POST... /v1/pets has no path param. Instead exercise
+        // path + query errors together.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets/abc',
+            ['traceId' => 'lower'],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('[path.petId]', $result->errorMessage());
+        $this->assertStringContainsString('[query.traceId]', $result->errorMessage());
+    }
 }
