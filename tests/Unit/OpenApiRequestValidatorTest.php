@@ -385,6 +385,100 @@ class OpenApiRequestValidatorTest extends TestCase
         $this->assertStringContainsString("Malformed 'requestBody.content'", $result->errors()[0]);
     }
 
+    #[Test]
+    public function request_body_ref_surfaces_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'POST',
+            '/ref-request-body',
+            [],
+            [],
+            ['name' => 'Rex'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('RequestBody $ref encountered', $result->errors()[0]);
+        $this->assertStringContainsString('#/components/requestBodies/PetBody', $result->errors()[0]);
+        $this->assertStringContainsString('redocly bundle --dereference', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function request_body_content_media_type_ref_surfaces_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'POST',
+            '/ref-content-media-type',
+            [],
+            [],
+            ['name' => 'Rex'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString("RequestBody content['application/json'] \$ref encountered", $result->errors()[0]);
+        $this->assertStringContainsString('#/components/schemas/Pet', $result->errors()[0]);
+        $this->assertStringContainsString('redocly bundle --dereference', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function request_body_content_schema_ref_surfaces_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'POST',
+            '/ref-content-schema',
+            [],
+            [],
+            ['name' => 'Rex'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString("RequestBody content['application/json'].schema \$ref encountered", $result->errors()[0]);
+        $this->assertStringContainsString('#/components/schemas/Pet', $result->errors()[0]);
+        $this->assertStringContainsString('redocly bundle --dereference', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function request_body_non_string_ref_surfaces_error(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'POST',
+            '/non-string-ref-request-body',
+            [],
+            [],
+            ['name' => 'Rex'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('RequestBody $ref encountered', $result->errors()[0]);
+        $this->assertStringContainsString('(non-string $ref)', $result->errors()[0]);
+        $this->assertStringContainsString('redocly bundle --dereference', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function scalar_content_media_type_returns_failure(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'POST',
+            '/scalar-content-media-type',
+            [],
+            [],
+            ['foo' => 'bar'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString("Malformed 'requestBody.content[\"application/json\"]'", $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+    }
+
     // ========================================
     // Constructor validation (mirrors response validator)
     // ========================================
