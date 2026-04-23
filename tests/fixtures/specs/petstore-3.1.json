@@ -71,6 +71,30 @@
             "post": {
                 "summary": "Create a pet",
                 "operationId": "createPet",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["name"],
+                                "properties": {
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "tag": {
+                                        "type": ["string", "null"]
+                                    }
+                                }
+                            }
+                        },
+                        "text/plain": {
+                            "schema": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
                 "responses": {
                     "201": {
                         "description": "Pet created",
@@ -195,6 +219,33 @@
                 "responses": {
                     "204": {
                         "description": "Pet deleted"
+                    }
+                }
+            },
+            "patch": {
+                "summary": "Update a pet",
+                "operationId": "updatePet",
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "tag": {
+                                        "type": ["string", "null"]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "204": {
+                        "description": "Pet updated"
                     }
                 }
             }
