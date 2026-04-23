@@ -100,6 +100,15 @@
             "post": {
                 "summary": "Create a pet",
                 "operationId": "createPet",
+                "parameters": [
+                    {
+                        "name": "dryRun",
+                        "in": "query",
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
                 "requestBody": {
                     "required": true,
                     "content": {
@@ -189,6 +198,89 @@
                 }
             }
         },
+        "/v1/pets/search": {
+            "get": {
+                "summary": "Search pets",
+                "operationId": "searchPets",
+                "parameters": [
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": ["available", "pending", "sold"]
+                        }
+                    },
+                    {
+                        "name": "tags",
+                        "in": "query",
+                        "style": "form",
+                        "explode": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    {
+                        "name": "q",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9]+$",
+                            "minLength": 1
+                        }
+                    },
+                    {
+                        "name": "score",
+                        "in": "query",
+                        "schema": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                        }
+                    },
+                    {
+                        "name": "category",
+                        "in": "query",
+                        "schema": {
+                            "enum": ["dog", "cat", "bird"]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Search results",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object"
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/v1/logout": {
             "get": {
                 "summary": "Logout page",
@@ -219,9 +311,29 @@
             }
         },
         "/v1/pets/{petId}": {
+            "parameters": [
+                {
+                    "name": "traceId",
+                    "in": "query",
+                    "schema": {
+                        "type": "string",
+                        "pattern": "^[a-z]+$"
+                    }
+                }
+            ],
             "get": {
                 "summary": "Info for a specific pet",
                 "operationId": "showPetById",
+                "parameters": [
+                    {
+                        "name": "traceId",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^[A-Z]+$"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "Expected response to a valid request",
