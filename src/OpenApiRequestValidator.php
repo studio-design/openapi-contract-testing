@@ -433,7 +433,7 @@ final class OpenApiRequestValidator
             ];
         }
 
-        /** @var array<string, array<string, mixed>> $content */
+        /** @var array<string, mixed> $content */
         $content = $requestBodySpec['content'];
 
         // Unresolved $ref at content[mediaType] or content[mediaType].schema level.
@@ -443,6 +443,16 @@ final class OpenApiRequestValidator
         // (not just the JSON-compatible one) catches broken specs regardless of which
         // Content-Type the caller uses.
         foreach ($content as $mediaType => $mediaTypeSpec) {
+            // The @var on $content narrows values to array, but PHPDoc is unchecked at
+            // runtime — a malformed spec like `content: {"application/json": "oops"}`
+            // would TypeError on array_key_exists below. Surface it as a loud spec error
+            // instead, matching the sibling guard on `requestBody.content` above.
+            if (!is_array($mediaTypeSpec)) {
+                return [
+                    "Malformed 'requestBody.content[\"{$mediaType}\"]' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
+                ];
+            }
+
             if (array_key_exists('$ref', $mediaTypeSpec)) {
                 $ref = is_string($mediaTypeSpec['$ref']) ? $mediaTypeSpec['$ref'] : '(non-string $ref)';
 
@@ -542,7 +552,7 @@ final class OpenApiRequestValidator
      * syntax suffix (RFC 6838), such as "application/problem+json" and
      * "application/vnd.api+json". Matching is case-insensitive.
      *
-     * @param array<string, array<string, mixed>> $content
+     * @param array<string, mixed> $content
      */
     private function findJsonContentType(array $content): ?string
     {
@@ -575,7 +585,7 @@ final class OpenApiRequestValidator
      * type matches any content type key defined in the spec. Spec keys are
      * lower-cased before comparison.
      *
-     * @param array<string, array<string, mixed>> $content
+     * @param array<string, mixed> $content
      */
     private function isContentTypeInSpec(string $requestContentType, array $content): bool
     {

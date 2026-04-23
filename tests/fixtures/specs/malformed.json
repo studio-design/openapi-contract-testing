@@ -133,6 +133,37 @@
                     }
                 }
             }
+        },
+        "/non-string-ref-request-body": {
+            "post": {
+                "summary": "requestBody $ref value is not a string",
+                "operationId": "nonStringRefRequestBody",
+                "requestBody": {
+                    "$ref": ["not", "a", "string"]
+                },
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/scalar-content-media-type": {
+            "post": {
+                "summary": "content[mediaType] is a scalar (not an object)",
+                "operationId": "scalarContentMediaType",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": "this should have been an object"
+                    }
+                },
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
         }
     }
 }
