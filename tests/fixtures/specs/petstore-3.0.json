@@ -425,6 +425,16 @@
             "patch": {
                 "summary": "Update a pet",
                 "operationId": "updatePet",
+                "parameters": [
+                    {
+                        "name": "X-Request-ID",
+                        "in": "header",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        }
+                    }
+                ],
                 "requestBody": {
                     "required": false,
                     "content": {
@@ -580,6 +590,32 @@
                         "schema": {
                             "type": "string",
                             "enum": ["never-match"]
+                        }
+                    },
+                    {
+                        "name": "Content-Type",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": ["never-match"]
+                        }
+                    },
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": ["never-match"]
+                        }
+                    },
+                    {
+                        "name": "X-Category",
+                        "in": "header",
+                        "schema": {
+                            "type": "string",
+                            "enum": ["alpha", "beta", "gamma"]
                         }
                     }
                 ],

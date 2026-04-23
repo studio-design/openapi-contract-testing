@@ -18,6 +18,7 @@ use function array_key_first;
 use function array_keys;
 use function array_map;
 use function array_values;
+use function count;
 use function filter_var;
 use function implode;
 use function in_array;
@@ -76,7 +77,7 @@ final class OpenApiRequestValidator
      * contract drift the request exhibits.
      *
      * @param array<string, mixed> $queryParams parsed query string (string|array<string> per key)
-     * @param array<string, mixed> $headers request headers (string|array<string> per key, case-insensitive name match)
+     * @param array<array-key, mixed> $headers request headers (string|array<string> per key, case-insensitive name match; non-string keys are silently dropped)
      */
     public function validate(
         string $specName,
@@ -278,10 +279,16 @@ final class OpenApiRequestValidator
     }
 
     /**
-     * Lower-case the keys of the caller-supplied headers map, and reduce
-     * array-shaped values (Laravel HeaderBag's representation of repeated
-     * headers) to their first element. Non-string keys are skipped — they
-     * cannot match any spec name and would cause a TypeError on strtolower().
+     * Lower-case the keys of the caller-supplied headers map. Non-string keys
+     * are skipped — they cannot match any spec name and would cause a
+     * TypeError on strtolower(). Values are returned as-is; array/scalar
+     * discrimination happens in validateHeaderParameters() so the "how many
+     * values" decision is visible at the validation site.
+     *
+     * When two keys collapse to the same lower-case form (e.g. both
+     * `X-Foo` and `x-foo` are present), later entries overwrite earlier ones
+     * — HTTP treats these as the same header so the behaviour matches what
+     * most frameworks surface to application code.
      *
      * @param array<array-key, mixed> $headers
      *
@@ -296,15 +303,7 @@ final class OpenApiRequestValidator
                 continue;
             }
 
-            $key = strtolower($name);
-
-            if (is_array($value)) {
-                $normalized[$key] = $value === [] ? null : $value[array_key_first($value)];
-
-                continue;
-            }
-
-            $normalized[$key] = $value;
+            $normalized[strtolower($name)] = $value;
         }
 
         return $normalized;
@@ -505,9 +504,13 @@ final class OpenApiRequestValidator
      * and security schemes, not arbitrary header parameters.
      *
      * Header values arriving as `array<string>` (Laravel's HeaderBag models
-     * repeated occurrences this way) are reduced to their first element for
-     * primitive coercion. `style: simple` with `type: array | object` is out
-     * of scope here; #45 covers required / type / pattern only.
+     * repeated occurrences this way) are unwrapped to a single value when the
+     * array holds exactly one element. Multi-value arrays against scalar
+     * schemas produce a hard error — real frameworks disagree on which of
+     * the repeated values "wins" (Laravel picks first, Symfony picks last),
+     * so silently picking one would mask a drift the contract test exists to
+     * expose. Empty arrays are treated as missing. `style: simple` with
+     * `type: array | object` is out of scope.
      *
      * @param list<array<string, mixed>> $parameters pre-collected merged parameters
      * @param array<string, mixed> $headers caller-supplied request headers
@@ -553,8 +556,11 @@ final class OpenApiRequestValidator
             /** @var array<string, mixed> $schema */
             $schema = $param['schema'];
 
-            $present = array_key_exists($lowerName, $normalizedHeaders) && $normalizedHeaders[$lowerName] !== null;
-            if (!$present) {
+            $rawValue = $normalizedHeaders[$lowerName] ?? null;
+
+            // `null` and `[]` (empty repeated-header array) both collapse to "missing".
+            // A repeated header that was sent zero times is semantically absent.
+            if ($rawValue === null || $rawValue === []) {
                 if ($required) {
                     $errors[] = "[header.{$name}] required header is missing.";
                 }
@@ -562,7 +568,27 @@ final class OpenApiRequestValidator
                 continue;
             }
 
-            $coerced = self::coercePrimitiveValue($normalizedHeaders[$lowerName], $schema);
+            if (is_array($rawValue)) {
+                // HeaderBag shape: list<string>. Single-element arrays are the common
+                // case (Laravel always wraps) — unwrap. Multi-element means the client
+                // sent the header more than once; frameworks disagree on which value
+                // is "canonical" (Laravel: first, Symfony: last), so silently picking
+                // one would mask drift. Surface it so the spec author / client fixes
+                // the duplicate.
+                if (count($rawValue) > 1) {
+                    $errors[] = sprintf(
+                        '[header.%s] multiple values received (count=%d) but schema expects a single value; refusing to pick one silently.',
+                        $name,
+                        count($rawValue),
+                    );
+
+                    continue;
+                }
+
+                $rawValue = $rawValue[array_key_first($rawValue)];
+            }
+
+            $coerced = self::coercePrimitiveValue($rawValue, $schema);
             $jsonSchema = OpenApiSchemaConverter::convert($schema, $version);
 
             $schemaObject = self::toObject($jsonSchema);
