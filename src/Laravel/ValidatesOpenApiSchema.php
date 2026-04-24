@@ -7,17 +7,24 @@ namespace Studio\OpenApiContractTesting\Laravel;
 use const E_USER_DEPRECATED;
 use const FILTER_NULL_ON_FAILURE;
 use const FILTER_VALIDATE_BOOLEAN;
+use const JSON_THROW_ON_ERROR;
 use const STDERR;
 
 use Illuminate\Testing\TestResponse;
 use InvalidArgumentException;
 use JsonException;
+use RuntimeException;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\OpenApiPathMatcher;
+use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\OpenApiSpecResolver;
 use Studio\OpenApiContractTesting\SkipOpenApi;
 use Studio\OpenApiContractTesting\SkipOpenApiResolver;
+use Studio\OpenApiContractTesting\Validation\Request\SecuritySchemeIntrospector;
+use Studio\OpenApiContractTesting\Validation\Support\HeaderNormalizer;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use WeakMap;
@@ -30,6 +37,7 @@ use function is_array;
 use function is_int;
 use function is_numeric;
 use function is_string;
+use function json_decode;
 use function sprintf;
 use function str_contains;
 use function strtolower;
@@ -41,8 +49,18 @@ trait ValidatesOpenApiSchema
 {
     use OpenApiSpecResolver;
     use SkipOpenApiResolver;
+
+    // Fixed dummy token injected when auto_inject_dummy_bearer is enabled and
+    // the endpoint spec requires bearerAuth but the test did not set one.
+    // A fixed string is sufficient because the value is never evaluated by
+    // anything downstream — the inject only silences the spec's security
+    // check. Making it configurable is a deliberate separate discussion.
+    private const DUMMY_BEARER_TOKEN = 'test-token';
     private static ?OpenApiResponseValidator $cachedValidator = null;
     private static ?int $cachedMaxErrors = null;
+    private static ?OpenApiRequestValidator $cachedRequestValidator = null;
+    private static ?int $cachedRequestMaxErrors = null;
+    private static ?SecuritySchemeIntrospector $cachedSecuritySchemeIntrospector = null;
 
     /** @var null|string[] */
     private static ?array $cachedSkipResponseCodes = null;
@@ -84,6 +102,9 @@ trait ValidatesOpenApiSchema
         self::$cachedValidator = null;
         self::$cachedMaxErrors = null;
         self::$cachedSkipResponseCodes = null;
+        self::$cachedRequestValidator = null;
+        self::$cachedRequestMaxErrors = null;
+        self::$cachedSecuritySchemeIntrospector = null;
         self::$validatedResponses = null;
     }
 
@@ -105,10 +126,10 @@ trait ValidatesOpenApiSchema
     }
 
     /**
-     * Skips request validation for the next HTTP call only. Currently a
-     * forward-looking hook: request validation itself lands in #43, and this
-     * method wires up the flag ahead of time so callers can already write the
-     * intended API surface.
+     * Skips request validation for the next HTTP call only. The flag
+     * self-resets after one auto-validate-request attempt. Scoped to
+     * auto-validate only — the request validator is otherwise only exercised
+     * from user code (no explicit-assertion counterpart on the request side).
      */
     public function withoutRequestValidation(): static
     {
@@ -213,9 +234,118 @@ trait ValidatesOpenApiSchema
         $method = $request !== null ? HttpMethod::tryFrom(strtoupper($request->getMethod())) : null;
         $path = $request?->getPathInfo();
 
+        // Request-side runs first so that the skipNextRequestValidation flag is
+        // consumed at the HTTP boundary before the response hook gets a chance
+        // to (defensively) clear it.
+        $this->maybeAutoValidateOpenApiRequest($request, $method, $path);
         $this->maybeAutoAssertOpenApiSchema($testResponse, $method, $path);
 
         return $testResponse;
+    }
+
+    /**
+     * Request-side counterpart to {@see self::maybeAutoAssertOpenApiSchema()}.
+     * Invokes {@see OpenApiRequestValidator} against the Laravel-dispatched
+     * Request when `auto_validate_request` is enabled, mirroring the
+     * per-request opt-out (withoutRequestValidation / #[SkipOpenApi]) and
+     * coverage-recording behavior already in place for responses.
+     *
+     * Auto-inject-dummy-bearer is a view-only rewrite: the Authorization
+     * header is injected into the headers array we hand to the validator, not
+     * into the Symfony Request itself. Laravel has already dispatched by the
+     * time this method runs, so mutating the Request would be pointless — the
+     * rewrite exists purely to keep the security check from false-failing on
+     * tests that authenticate via actingAs() or middleware bypass.
+     */
+    protected function maybeAutoValidateOpenApiRequest(
+        ?Request $request,
+        ?HttpMethod $method = null,
+        ?string $path = null,
+    ): void {
+        // Consume the per-request skip flag unconditionally at the HTTP call
+        // boundary — see the analogous comment in maybeAutoAssertOpenApiSchema().
+        $skipRequest = $this->skipNextRequestValidation;
+        $this->skipNextRequestValidation = false;
+
+        if (!$this->isAutoValidateRequestEnabled()) {
+            return;
+        }
+
+        if ($skipRequest) {
+            return;
+        }
+
+        // No request object or unrecognizable HTTP verb → nothing meaningful
+        // to validate. Stay silent rather than fabricating an error; Laravel
+        // only passes null/unknown in edge cases (direct TestResponse
+        // construction outside MakesHttpRequests).
+        if ($request === null || $method === null) {
+            return;
+        }
+
+        if ($this->findSkipOpenApiAttribute() !== null) {
+            return;
+        }
+
+        $specName = $this->resolveOpenApiSpec();
+        if ($specName === '') {
+            $this->fail(
+                'openApiSpec() must return a non-empty spec name, but an empty string was returned. '
+                . 'Either add #[OpenApiSpec(\'your-spec\')] to your test class or method, '
+                . 'override openApiSpec() in your test class, or set the "default_spec" key '
+                . 'in config/openapi-contract-testing.php.',
+            );
+        }
+
+        $resolvedMethod = $method->value;
+        $resolvedPath = $path ?? $request->getPathInfo();
+
+        /** @var array<string, mixed> $queryParams */
+        $queryParams = $request->query->all();
+        /** @var array<string, array<int, null|string>> $headers */
+        $headers = $request->headers->all();
+        /** @var array<string, mixed> $cookies */
+        $cookies = $request->cookies->all();
+        $rawContentType = $request->headers->get('Content-Type');
+        $contentType = is_string($rawContentType) ? $rawContentType : '';
+
+        $body = $this->extractRequestBody($request, $contentType);
+
+        if ($this->shouldAutoInjectDummyBearer($specName, $resolvedMethod, $resolvedPath, $headers)) {
+            // Inject under the canonical framework key (Symfony lowercases) so
+            // both any existing "Authorization" and the validator's
+            // case-insensitive lookup see the same value.
+            $headers['authorization'] = ['Bearer ' . self::DUMMY_BEARER_TOKEN];
+        }
+
+        $validator = $this->getOrCreateRequestValidator();
+        $result = $validator->validate(
+            $specName,
+            $resolvedMethod,
+            $resolvedPath,
+            $queryParams,
+            $headers,
+            $body,
+            $contentType !== '' ? $contentType : null,
+            $cookies,
+        );
+
+        // Record coverage when the request matched a spec path, same
+        // tracking semantics as the response-side hook. The tracker is a set,
+        // so this does not double-count when response auto-assert also fires.
+        if ($result->matchedPath() !== null) {
+            OpenApiCoverageTracker::record(
+                $specName,
+                $resolvedMethod,
+                $result->matchedPath(),
+            );
+        }
+
+        $this->assertTrue(
+            $result->isValid(),
+            "OpenAPI request validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"
+            . $result->errorMessage(),
+        );
     }
 
     protected function maybeAutoAssertOpenApiSchema(
@@ -380,6 +510,125 @@ trait ValidatesOpenApiSchema
         return is_int($code) ? (string) $code : $code;
     }
 
+    private function getOrCreateRequestValidator(): OpenApiRequestValidator
+    {
+        $resolvedMaxErrors = $this->resolveMaxErrors();
+
+        if (
+            self::$cachedRequestValidator === null ||
+            self::$cachedRequestMaxErrors !== $resolvedMaxErrors
+        ) {
+            self::$cachedRequestValidator = new OpenApiRequestValidator($resolvedMaxErrors);
+            self::$cachedRequestMaxErrors = $resolvedMaxErrors;
+        }
+
+        return self::$cachedRequestValidator;
+    }
+
+    private function getSecuritySchemeIntrospector(): SecuritySchemeIntrospector
+    {
+        return self::$cachedSecuritySchemeIntrospector ??= new SecuritySchemeIntrospector();
+    }
+
+    /**
+     * Decide whether to rewrite the validator's view of the request with a
+     * dummy Authorization header. True only when: (1) the inject feature is
+     * enabled, (2) no Authorization is already present (any case), and (3)
+     * the matched operation's spec security accepts a bearer credential (see
+     * {@see SecuritySchemeIntrospector}).
+     *
+     * Callers are expected to have already confirmed auto-validate-request
+     * is on — this method is reached only from {@see self::maybeAutoValidateOpenApiRequest()},
+     * which gates on that flag. Calling it from a new code path without the
+     * same gate would silently load the spec even when request validation is
+     * disabled.
+     *
+     * Errors walking the spec (unreadable file, no matching path, missing
+     * operation) fall through as "do not inject" — the validator will surface
+     * the real error. We stay silent here so a broken spec produces exactly
+     * one failure, not a confusing cascade.
+     *
+     * @param array<string, mixed> $headers
+     */
+    private function shouldAutoInjectDummyBearer(
+        string $specName,
+        string $method,
+        string $path,
+        array $headers,
+    ): bool {
+        if (!$this->isAutoInjectDummyBearerEnabled()) {
+            return false;
+        }
+
+        $normalized = HeaderNormalizer::normalize($headers);
+        if (isset($normalized['authorization']) && $normalized['authorization'] !== '' && $normalized['authorization'] !== []) {
+            return false;
+        }
+
+        try {
+            $spec = OpenApiSpecLoader::load($specName);
+        } catch (RuntimeException) {
+            // OpenApiSpecLoader throws RuntimeException on unreadable files,
+            // malformed JSON/YAML, unsupported extensions, etc. Swallow those
+            // and decline to inject — the validator re-loads the same spec
+            // immediately after and will surface the real error. Broader
+            // Throwable (TypeError, AssertionError, ...) keeps bubbling so
+            // programmer bugs are not silently downgraded to "missing auth".
+            return false;
+        }
+
+        $paths = $spec['paths'] ?? null;
+        if (!is_array($paths)) {
+            return false;
+        }
+
+        $matchedOperation = $this->findOperationForRequest($paths, $method, $path);
+        if ($matchedOperation === null) {
+            return false;
+        }
+
+        return $this->getSecuritySchemeIntrospector()->endpointAcceptsBearer($spec, $matchedOperation);
+    }
+
+    /**
+     * Locate the spec operation for (method, path) without re-running
+     * OpenApiPathMatcher — the validator will match again internally when it
+     * runs, and one extra literal lookup here avoids exposing its cache.
+     * Only spec-declared paths are consulted; prefix stripping matches the
+     * validator's behavior via OpenApiSpecLoader.
+     *
+     * @param array<string, mixed> $paths
+     *
+     * @return null|array<string, mixed>
+     */
+    private function findOperationForRequest(array $paths, string $method, string $path): ?array
+    {
+        $specPaths = [];
+        foreach ($paths as $specPath => $_definition) {
+            if (is_string($specPath)) {
+                $specPaths[] = $specPath;
+            }
+        }
+
+        $matcher = new OpenApiPathMatcher(
+            $specPaths,
+            OpenApiSpecLoader::getStripPrefixes(),
+        );
+        $matched = $matcher->match($path);
+        if ($matched === null) {
+            return null;
+        }
+
+        $pathSpec = $paths[$matched] ?? null;
+        if (!is_array($pathSpec)) {
+            return null;
+        }
+
+        $operation = $pathSpec[strtolower($method)] ?? null;
+
+        return is_array($operation) ? $operation : null;
+    }
+
     private function getOrCreateValidator(): OpenApiResponseValidator
     {
         $resolvedMaxErrors = $this->resolveMaxErrors();
@@ -504,7 +753,29 @@ trait ValidatesOpenApiSchema
 
     private function isAutoAssertEnabled(): bool
     {
-        $raw = config('openapi-contract-testing.auto_assert', false);
+        return $this->resolveBoolConfig('auto_assert');
+    }
+
+    private function isAutoValidateRequestEnabled(): bool
+    {
+        return $this->resolveBoolConfig('auto_validate_request');
+    }
+
+    private function isAutoInjectDummyBearerEnabled(): bool
+    {
+        return $this->resolveBoolConfig('auto_inject_dummy_bearer');
+    }
+
+    /**
+     * Three-way coercion for a config flag: real bool passes through, null
+     * coerces to false, string passes through FILTER_VALIDATE_BOOLEAN so
+     * `'auto_X' => env('X')` (strings like "true" / "1") works without an
+     * explicit cast. Anything else raises a loud PHPUnit failure so a typo
+     * is not silently read as "off".
+     */
+    private function resolveBoolConfig(string $key): bool
+    {
+        $raw = config('openapi-contract-testing.' . $key, false);
 
         if ($raw === true) {
             return true;
@@ -516,14 +787,45 @@ trait ValidatesOpenApiSchema
         $parsed = filter_var($raw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
         if ($parsed === null) {
             $this->fail(sprintf(
-                'openapi-contract-testing.auto_assert must be a boolean (or a boolean-compatible value '
+                'openapi-contract-testing.%s must be a boolean (or a boolean-compatible value '
                 . 'like "true"/"false"/"1"/"0"), got %s: %s.',
+                $key,
                 get_debug_type($raw),
                 var_export($raw, true),
             ));
         }
 
         return $parsed;
+    }
+
+    /**
+     * Extract the request body in the shape OpenApiRequestValidator expects.
+     * Mirrors {@see self::extractJsonBody()} for the request side: parse JSON
+     * only when the Content-Type claims it, stay `null` on empty or non-JSON
+     * bodies so the validator decides whether the spec required one.
+     */
+    private function extractRequestBody(Request $request, string $contentType): mixed
+    {
+        $content = $request->getContent();
+        if ($content === '') {
+            return null;
+        }
+
+        if ($contentType !== '' && !str_contains(strtolower($contentType), 'json')) {
+            return null;
+        }
+
+        try {
+            /** @var mixed $decoded */
+            $decoded = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            $this->fail(
+                'Request body could not be parsed as JSON: ' . $e->getMessage()
+                . ($contentType === '' ? ' (no Content-Type header was present on the request)' : ''),
+            );
+        }
+
+        return $decoded;
     }
 
     /** @return null|array<string, mixed> */
