@@ -19,6 +19,39 @@ Validate your API responses against your OpenAPI specification during testing, a
 - **Laravel adapter** — Optional trait for seamless integration with Laravel's `TestResponse`
 - **Zero runtime overhead** — Only used in test suites
 
+## Why this library?
+
+This library fills a gap left by existing PHP OpenAPI testing tools: **endpoint coverage tracking** and **first-class OpenAPI 3.1 support**, combined with Laravel auto-assert DX. If you already use Spectator and don't need coverage reports, this library won't offer much. If you want to see which endpoints your test suite actually exercises, or you're writing OpenAPI 3.1 specs, this is likely the best choice today.
+
+### Feature comparison (as of 2026-04)
+
+|  | **This library** | [Spectator][spectator] | [league/psr7][league] | [osteel][osteel] | [kirschbaum][kirschbaum] |
+| --- | :---: | :---: | :---: | :---: | :---: |
+| OpenAPI 3.0 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OpenAPI 3.1 | ✅ | ⚠️ | ❌ | ⚠️ | ⚠️ |
+| Response body validation | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Request validation (body + params) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Response header validation | ❌ | ⚠️ | ✅ | ✅ | ✅ |
+| **Endpoint coverage tracking** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Skip-by-status-code (default 5xx)** | ✅ | ❌ | ❌ | ❌ | ✅ |
+| PHPUnit integration | ✅ | ✅ | ❌ | ⚠️ | ✅ |
+| Pest plugin | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Laravel auto-assert | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Symfony HttpFoundation | ❌ | ❌ | ⚠️ | ✅ | ❌ |
+| External `$ref` auto-resolution | ❌ | ✅ | ✅ | ✅ | ✅ |
+| YAML spec loading | ✅ | ⚠️ | ✅ | ✅ | ✅ |
+| **Auto-inject dummy bearer** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **GitHub Step Summary output** | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+**Legend**: ✅ fully supported · ⚠️ partial, delegated to an underlying library, or not explicitly documented · ❌ not supported
+
+**Methodology**: Cells reflect what each library's public documentation and source explicitly guarantee as of 2026-04-25. Competitor versions checked: Spectator v2.2.0, league/openapi-psr7-validator v0.22, osteel/openapi-httpfoundation-testing v0.14, kirschbaum-development/laravel-openapi-validator v2.0.
+
+[spectator]: https://github.com/hotmeteor/spectator
+[league]: https://github.com/thephpleague/openapi-psr7-validator
+[osteel]: https://github.com/osteel/openapi-httpfoundation-testing
+[kirschbaum]: https://github.com/kirschbaum-development/laravel-openapi-validator
+
 ## Requirements
 
 - PHP 8.2+
