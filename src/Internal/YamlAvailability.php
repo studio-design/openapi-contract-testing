@@ -21,6 +21,8 @@ final class YamlAvailability
 {
     private static ?bool $override = null;
 
+    private function __construct() {}
+
     public static function isAvailable(): bool
     {
         return self::$override ?? class_exists(Yaml::class);
@@ -30,15 +32,12 @@ final class YamlAvailability
      * Force the availability check to return the given value, for tests that
      * need to exercise the missing-dependency error path. Pass null to
      * restore the real `class_exists()` lookup.
-     *
-     * @internal
      */
     public static function overrideForTesting(?bool $available): void
     {
         self::$override = $available;
     }
 
-    /** @internal */
     public static function reset(): void
     {
         self::$override = null;
