@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\OpenApiVersion;
+use Studio\OpenApiContractTesting\SchemaContext;
 
 class OpenApiSchemaConverterTest extends TestCase
 {
@@ -340,6 +341,195 @@ class OpenApiSchemaConverterTest extends TestCase
         OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
 
         $this->assertSame($original, $schema);
+    }
+
+    // ========================================
+    // SchemaContext (readOnly / writeOnly enforcement) tests
+    // ========================================
+
+    #[Test]
+    public function response_context_write_only_property_becomes_false_subschema(): void
+    {
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'id' => ['type' => 'integer'],
+                'password' => ['type' => 'string', 'writeOnly' => true],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response);
+
+        $this->assertFalse($result['properties']['password']);
+        $this->assertSame(['type' => 'integer'], $result['properties']['id']);
+    }
+
+    #[Test]
+    public function response_context_write_only_property_removed_from_required(): void
+    {
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'id' => ['type' => 'integer'],
+                'name' => ['type' => 'string'],
+                'password' => ['type' => 'string', 'writeOnly' => true],
+            ],
+            'required' => ['id', 'name', 'password'],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response);
+
+        $this->assertSame(['id', 'name'], $result['required']);
+    }
+
+    #[Test]
+    public function response_context_required_key_dropped_when_it_becomes_empty(): void
+    {
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'password' => ['type' => 'string', 'writeOnly' => true],
+            ],
+            'required' => ['password'],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response);
+
+        $this->assertArrayNotHasKey('required', $result);
+    }
+
+    #[Test]
+    public function response_context_read_only_property_is_not_forbidden(): void
+    {
+        // readOnly is allowed in responses — it should pass through, and in 3.0 mode
+        // the keyword itself is scrubbed as an OAS-only key (existing behaviour).
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'id' => ['type' => 'integer', 'readOnly' => true],
+            ],
+            'required' => ['id'],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response);
+
+        $this->assertSame(['type' => 'integer'], $result['properties']['id']);
+        $this->assertSame(['id'], $result['required']);
+    }
+
+    #[Test]
+    public function request_context_read_only_property_becomes_false_subschema(): void
+    {
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'id' => ['type' => 'integer', 'readOnly' => true],
+                'name' => ['type' => 'string'],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Request);
+
+        $this->assertFalse($result['properties']['id']);
+        $this->assertSame(['type' => 'string'], $result['properties']['name']);
+    }
+
+    #[Test]
+    public function request_context_read_only_property_removed_from_required(): void
+    {
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'id' => ['type' => 'integer', 'readOnly' => true],
+                'name' => ['type' => 'string'],
+            ],
+            'required' => ['id', 'name'],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Request);
+
+        $this->assertSame(['name'], $result['required']);
+    }
+
+    #[Test]
+    public function request_context_write_only_property_is_not_forbidden(): void
+    {
+        // writeOnly is allowed in requests — it should pass through.
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'password' => ['type' => 'string', 'writeOnly' => true],
+            ],
+            'required' => ['password'],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Request);
+
+        $this->assertSame(['type' => 'string'], $result['properties']['password']);
+        $this->assertSame(['password'], $result['required']);
+    }
+
+    #[Test]
+    public function response_context_write_only_enforced_on_nested_properties(): void
+    {
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'user' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'password' => ['type' => 'string', 'writeOnly' => true],
+                        'name' => ['type' => 'string'],
+                    ],
+                    'required' => ['password', 'name'],
+                ],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response);
+
+        $this->assertFalse($result['properties']['user']['properties']['password']);
+        $this->assertSame(['name'], $result['properties']['user']['required']);
+    }
+
+    #[Test]
+    public function v31_write_only_property_still_enforced_in_response_context(): void
+    {
+        // In 3.1 the keyword is Draft-07-valid and normally preserved, but Response
+        // context must still reject the property from appearing in a response body.
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'password' => ['type' => 'string', 'writeOnly' => true],
+                'name' => ['type' => 'string', 'readOnly' => true],
+            ],
+            'required' => ['password'],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1, SchemaContext::Response);
+
+        $this->assertFalse($result['properties']['password']);
+        // The non-forbidden branch keeps the Draft-07-valid keyword in 3.1.
+        $this->assertTrue($result['properties']['name']['readOnly']);
+        $this->assertArrayNotHasKey('required', $result);
+    }
+
+    #[Test]
+    public function default_context_is_response(): void
+    {
+        // Default context should mirror the validator most call sites came from
+        // historically — Response — so writeOnly in an unspecified call now
+        // enforces the leak guard.
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'password' => ['type' => 'string', 'writeOnly' => true],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
+
+        $this->assertFalse($result['properties']['password']);
     }
 
     #[Test]
