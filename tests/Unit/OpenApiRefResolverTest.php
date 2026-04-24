@@ -503,6 +503,40 @@ class OpenApiRefResolverTest extends TestCase
     }
 
     #[Test]
+    public function throws_on_unresolvable_ref_under_non_json_media_type(): void
+    {
+        // Pins the invariant that resolution is media-type-agnostic: a future
+        // "skip non-JSON branches to save walk cost" optimization must not
+        // silently mask broken $refs hiding under application/xml, text/plain,
+        // multipart/*, etc. A broken spec is broken regardless of Content-Type.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Pet' => ['type' => 'object'],
+                ],
+            ],
+            'paths' => [
+                '/x' => [
+                    'post' => [
+                        'requestBody' => [
+                            'content' => [
+                                'application/xml' => [
+                                    'schema' => ['$ref' => '#/components/schemas/DoesNotExist'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Unresolvable $ref');
+
+        OpenApiRefResolver::resolve($spec);
+    }
+
+    #[Test]
     public function throws_on_non_string_ref(): void
     {
         $spec = [
@@ -646,5 +680,82 @@ class OpenApiRefResolverTest extends TestCase
         $expected = ['type' => 'object', 'properties' => ['id' => ['type' => 'integer']]];
         $this->assertSame($expected, $resolved['paths']['/a']['get']['responses']['200']['content']['application/json']['schema']);
         $this->assertSame($expected, $resolved['paths']['/b']['get']['responses']['200']['content']['application/json']['schema']);
+    }
+
+    #[Test]
+    public function resolves_refs_across_mixed_json_and_non_json_content(): void
+    {
+        // Pins first-match-wins independence: when a single content map
+        // declares multiple media types, every sibling $ref must be resolved,
+        // not just the first JSON-compatible one. Guards against a future
+        // "resolve the JSON branch and stop" optimization leaving non-JSON
+        // refs untouched — downstream code must never observe a half-inlined
+        // content map.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Pet' => ['type' => 'object', 'required' => ['name']],
+                ],
+            ],
+            'paths' => [
+                '/pets' => [
+                    'post' => [
+                        'requestBody' => [
+                            'content' => [
+                                'application/json' => [
+                                    'schema' => ['$ref' => '#/components/schemas/Pet'],
+                                ],
+                                'application/xml' => [
+                                    'schema' => ['$ref' => '#/components/schemas/Pet'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $expectedSchema = ['type' => 'object', 'required' => ['name']];
+        $content = $resolved['paths']['/pets']['post']['requestBody']['content'];
+        $this->assertSame($expectedSchema, $content['application/json']['schema']);
+        $this->assertSame($expectedSchema, $content['application/xml']['schema']);
+    }
+
+    #[Test]
+    public function resolves_refs_under_non_json_response_content(): void
+    {
+        // Symmetric counterpart of the requestBody test above: non-JSON $refs
+        // in response content must also resolve. Without this pin, a future
+        // "walk only requestBody.content" optimization could ship undetected
+        // because the sibling test above wouldn't exercise the responses tree.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Pet' => ['type' => 'object', 'required' => ['id']],
+                ],
+            ],
+            'paths' => [
+                '/pets' => [
+                    'get' => [
+                        'responses' => [
+                            '200' => [
+                                'content' => [
+                                    'application/xml' => [
+                                        'schema' => ['$ref' => '#/components/schemas/Pet'],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $schema = $resolved['paths']['/pets']['get']['responses']['200']['content']['application/xml']['schema'];
+        $this->assertSame(['type' => 'object', 'required' => ['id']], $schema);
     }
 }
