@@ -154,14 +154,55 @@ class MixedApiTest extends TestCase
 }
 ```
 
-Resolution priority (highest to lowest):
+Resolution priority (highest to lowest) — the first match wins:
 
-1. Method-level `#[OpenApiSpec]` attribute
-2. Class-level `#[OpenApiSpec]` attribute
-3. `openApiSpec()` method override
-4. `config('openapi-contract-testing.default_spec')`
+| # | Layer | Typical use |
+|---|---|---|
+| 1 | Method-level `#[OpenApiSpec]` attribute | Per-test override inside a class whose other tests target a different spec |
+| 2 | Class-level `#[OpenApiSpec]` attribute  | Default spec for a class whose tests all hit the same API surface |
+| 3 | `openApiSpec()` method override          | Class-specific spec without the attribute (e.g. dynamically chosen at runtime) |
+| 4 | `config('openapi-contract-testing.default_spec')` | Project-wide default set once in `config/openapi-contract-testing.php` |
 
-> **Note:** You can still override `openApiSpec()` as before — it remains fully backward-compatible.
+Concrete example where all four layers are populated (class name differs from the earlier `MixedApiTest` example so both snippets can coexist in one project):
+
+```php
+use Studio\OpenApiContractTesting\OpenApiSpec;
+
+// config/openapi-contract-testing.php → ['default_spec' => 'front']   (layer 4)
+
+#[OpenApiSpec('admin')]                                             // layer 2
+class AllLayersPriorityTest extends TestCase
+{
+    use ValidatesOpenApiSchema;
+
+    protected function openApiSpec(): string                        // layer 3
+    {
+        return 'internal';
+    }
+
+    public function test_uses_class_attr(): void
+    {
+        // Resolves to 'admin' — layer 2 wins over layer 3 and layer 4.
+    }
+
+    #[OpenApiSpec('experimental')]                                  // layer 1
+    public function test_uses_method_attr(): void
+    {
+        // Resolves to 'experimental' — layer 1 wins over all lower layers.
+    }
+}
+```
+
+If every layer is absent (no attributes, `openApiSpec()` not overridden, and `default_spec` empty), the assertion fails with a message that points at each opt-in location:
+
+```
+openApiSpec() must return a non-empty spec name, but an empty string was returned.
+Either add #[OpenApiSpec('your-spec')] to your test class or method,
+override openApiSpec() in your test class, or set the "default_spec" key
+in config/openapi-contract-testing.php.
+```
+
+> **Note:** `openApiSpec()` remains the original extension hook and is fully backward-compatible — overriding it works exactly as before.
 
 #### Framework-agnostic
 

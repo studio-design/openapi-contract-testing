@@ -7,6 +7,32 @@ namespace Studio\OpenApiContractTesting;
 use ReflectionClass;
 use ReflectionMethod;
 
+/**
+ * Resolves which OpenAPI spec name a test case should validate against.
+ *
+ * The resolver itself evaluates three layers. When a framework adapter (e.g.
+ * the Laravel `ValidatesOpenApiSchema` trait) overrides `openApiSpecFallback()`
+ * to delegate to its own user-overridable hook, the last layer splits into
+ * two — producing the four-layer priority documented in README (highest first;
+ * first match wins):
+ *
+ *   1. Method-level `#[OpenApiSpec]` attribute on the running test method.
+ *   2. Class-level `#[OpenApiSpec]` attribute on the test class.
+ *   3. Adapter's user-overridable hook. For the Laravel adapter this is
+ *      `openApiSpec()`; a host test class may override it to inject a
+ *      class-specific spec without using the attribute.
+ *   4. Adapter's ultimate default. For the Laravel adapter this is
+ *      `config('openapi-contract-testing.default_spec')`, returned by the
+ *      trait's own `openApiSpec()` implementation when not overridden.
+ *
+ * Adapters that don't override `openApiSpecFallback()` collapse layers 3 and 4
+ * into a single fallback and remain three-layer.
+ *
+ * Attribute layers return the attribute's raw `name` as-is. `#[OpenApiSpec('')]`
+ * is still "set" and short-circuits resolution to the empty string — the
+ * consumer treats that as an error with a helpful message (see
+ * `ValidatesOpenApiSchema::assertResponseMatchesOpenApiSchema`).
+ */
 trait OpenApiSpecResolver
 {
     protected function openApiSpecFallback(): string
