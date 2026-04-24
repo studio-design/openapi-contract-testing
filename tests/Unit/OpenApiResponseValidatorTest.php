@@ -1043,6 +1043,29 @@ class OpenApiResponseValidatorTest extends TestCase
         $this->assertSame('/pets', $result->matchedPath());
     }
 
+    #[Test]
+    public function validates_response_body_with_ref_as_property_name(): void
+    {
+        // End-to-end: a spec that models a JSON Patch payload legally names a
+        // property `$ref`. The resolver must not misread it as a Reference
+        // Object, and the downstream converter + opis must accept a response
+        // body that carries a `$ref` field.
+        $result = $this->validator->validate(
+            'refs-property-name',
+            'GET',
+            '/patches',
+            200,
+            [
+                'op' => 'replace',
+                'path' => '/a/b',
+                '$ref' => '#/definitions/Foo',
+            ],
+        );
+
+        $this->assertTrue($result->isValid(), 'errors: ' . implode(' | ', $result->errors()));
+        $this->assertSame('/patches', $result->matchedPath());
+    }
+
     // ========================================
     // readOnly / writeOnly enforcement
     // ========================================
