@@ -7,10 +7,10 @@ namespace Studio\OpenApiContractTesting;
 use const JSON_THROW_ON_ERROR;
 
 use JsonException;
+use Studio\OpenApiContractTesting\Internal\YamlAvailability;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
-use function class_exists;
 use function file_exists;
 use function file_get_contents;
 use function get_debug_type;
@@ -36,12 +36,6 @@ final class OpenApiSpecLoader
 
     /** @var array<string, array<string, mixed>> */
     private static array $cache = [];
-
-    /**
-     * Test-only override for the `symfony/yaml` availability check.
-     * null means "ask the real class_exists()". true/false forces the answer.
-     */
-    private static ?bool $yamlAvailableOverride = null;
 
     /**
      * Configure the spec loader with a base path and optional strip prefixes.
@@ -127,18 +121,7 @@ final class OpenApiSpecLoader
         self::$basePath = null;
         self::$stripPrefixes = [];
         self::$cache = [];
-        self::$yamlAvailableOverride = null;
-    }
-
-    /**
-     * Force `symfony/yaml` to appear installed / missing, for tests that cover
-     * the missing-dependency error path. Pass null to restore the real check.
-     *
-     * @internal
-     */
-    public static function overrideYamlAvailabilityForTesting(?bool $available): void
-    {
-        self::$yamlAvailableOverride = $available;
+        YamlAvailability::reset();
     }
 
     /** @return array{path: string, extension: string} */
@@ -208,7 +191,7 @@ final class OpenApiSpecLoader
     /** @return array<string, mixed> */
     private static function decodeYamlSpec(string $path, string $specName): array
     {
-        if (!self::isYamlLibraryAvailable()) {
+        if (!YamlAvailability::isAvailable()) {
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::YamlLibraryMissing,
                 'Loading YAML OpenAPI specs requires symfony/yaml. '
@@ -240,10 +223,5 @@ final class OpenApiSpecLoader
 
         /** @var array<string, mixed> $decoded */
         return $decoded;
-    }
-
-    private static function isYamlLibraryAvailable(): bool
-    {
-        return self::$yamlAvailableOverride ?? class_exists(Yaml::class);
     }
 }

@@ -6,6 +6,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Internal\YamlAvailability;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
@@ -428,7 +429,7 @@ class OpenApiSpecLoaderTest extends TestCase
     {
         $fixturesPath = __DIR__ . '/../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
-        OpenApiSpecLoader::overrideYamlAvailabilityForTesting(false);
+        YamlAvailability::overrideForTesting(false);
 
         try {
             OpenApiSpecLoader::load('petstore-yaml');
@@ -438,6 +439,26 @@ class OpenApiSpecLoaderTest extends TestCase
             $this->assertStringContainsString('symfony/yaml', $e->getMessage());
             $this->assertStringContainsString('composer require', $e->getMessage());
         }
+    }
+
+    #[Test]
+    public function reset_clears_yaml_availability_override_to_prevent_leaks_between_tests(): void
+    {
+        YamlAvailability::overrideForTesting(false);
+        $this->assertFalse(
+            YamlAvailability::isAvailable(),
+            'sanity: override(false) should force isAvailable() to false',
+        );
+
+        OpenApiSpecLoader::reset();
+
+        // symfony/yaml is a require-dev dependency, so once the override is
+        // cleared the real class_exists() lookup must report it as available.
+        $this->assertTrue(
+            YamlAvailability::isAvailable(),
+            'OpenApiSpecLoader::reset() must clear the YAML availability override '
+            . 'so it cannot leak into other tests via the shared static state.',
+        );
     }
 
     #[Test]
