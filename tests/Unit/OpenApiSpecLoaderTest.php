@@ -9,6 +9,9 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
+use function file_put_contents;
+use function unlink;
+
 class OpenApiSpecLoaderTest extends TestCase
 {
     protected function setUp(): void
@@ -267,5 +270,120 @@ class OpenApiSpecLoaderTest extends TestCase
 
         $second = OpenApiSpecLoader::load('refs-valid');
         $this->assertSame('Refs valid', $second['info']['title']);
+    }
+
+    #[Test]
+    public function load_parses_yaml_spec(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $spec = OpenApiSpecLoader::load('petstore-yaml');
+
+        $this->assertSame('3.0.3', $spec['openapi']);
+        $this->assertSame('Petstore YAML', $spec['info']['title']);
+        $this->assertArrayHasKey('/v1/pets', $spec['paths']);
+    }
+
+    #[Test]
+    public function load_parses_yml_spec(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $spec = OpenApiSpecLoader::load('petstore-yml');
+
+        $this->assertSame('3.0.3', $spec['openapi']);
+        $this->assertSame('Petstore YML', $spec['info']['title']);
+    }
+
+    #[Test]
+    public function load_caches_yaml_spec(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $first = OpenApiSpecLoader::load('petstore-yaml');
+        $second = OpenApiSpecLoader::load('petstore-yaml');
+
+        $this->assertSame($first, $second);
+    }
+
+    #[Test]
+    public function load_prefers_json_when_both_json_and_yaml_exist(): void
+    {
+        // petstore-3.0 has a .json fixture; drop an inert .yaml beside it for
+        // this test to prove the loader picks JSON first for back-compat.
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $yamlDuplicate = $fixturesPath . '/petstore-3.0.yaml';
+
+        file_put_contents(
+            $yamlDuplicate,
+            "openapi: 3.0.3\ninfo:\n  title: YAML wins (should not happen)\n  version: 1.0.0\npaths: {}\n",
+        );
+
+        try {
+            OpenApiSpecLoader::configure($fixturesPath);
+            $spec = OpenApiSpecLoader::load('petstore-3.0');
+
+            $this->assertSame('Petstore', $spec['info']['title']);
+        } finally {
+            unlink($yamlDuplicate);
+        }
+    }
+
+    #[Test]
+    public function load_throws_when_yaml_is_malformed(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Failed to parse YAML');
+
+        OpenApiSpecLoader::load('malformed-yaml');
+    }
+
+    #[Test]
+    public function load_throws_when_yaml_root_is_not_an_array(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('YAML OpenAPI spec must decode to a mapping');
+
+        OpenApiSpecLoader::load('non-array-root');
+    }
+
+    #[Test]
+    public function load_yaml_throws_with_install_hint_when_symfony_yaml_missing(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+        OpenApiSpecLoader::overrideYamlAvailabilityForTesting(false);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('symfony/yaml');
+        $this->expectExceptionMessage('composer require');
+
+        OpenApiSpecLoader::load('petstore-yaml');
+    }
+
+    #[Test]
+    public function load_error_lists_all_searched_extensions_when_no_file_exists(): void
+    {
+        OpenApiSpecLoader::configure('/nonexistent/path');
+
+        try {
+            OpenApiSpecLoader::load('nowhere');
+            $this->fail('expected RuntimeException');
+        } catch (RuntimeException $e) {
+            $message = $e->getMessage();
+            $this->assertStringContainsString('.json', $message);
+            $this->assertStringContainsString('.yaml', $message);
+            $this->assertStringContainsString('.yml', $message);
+            $this->assertStringContainsString('nowhere', $message);
+        }
     }
 }

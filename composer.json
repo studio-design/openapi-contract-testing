@@ -13,10 +13,12 @@
         "friendsofphp/php-cs-fixer": "^3.94",
         "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
         "phpstan/phpstan": "^2.0",
-        "symfony/http-foundation": "^6.4 || ^7.0 || ^8.0"
+        "symfony/http-foundation": "^6.4 || ^7.0 || ^8.0",
+        "symfony/yaml": "^6.4 || ^7.0"
     },
     "suggest": {
-        "illuminate/testing": "Required for the Laravel adapter (ValidatesOpenApiSchema trait)"
+        "illuminate/testing": "Required for the Laravel adapter (ValidatesOpenApiSchema trait)",
+        "symfony/yaml": "Required to load OpenAPI specs directly from .yaml / .yml files"
     },
     "autoload": {
         "psr-4": {
