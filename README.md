@@ -569,7 +569,7 @@ The package auto-detects the OAS version from the `openapi` field and handles sc
 | `prefixItems` | N/A | Converted to `items` array (Draft 07 tuple) |
 | `$dynamicRef` / `$dynamicAnchor` | N/A | Removed (not in Draft 07) |
 | `examples` (array) | N/A | Removed (OAS extension) |
-| `readOnly` / `writeOnly` | Semantic enforcement (see below); keyword scrubbed from converted schema | Semantic enforcement (see below); keyword preserved where it survives conversion |
+| `readOnly` / `writeOnly` | Semantic enforcement (see below). Forbidden properties become boolean `false` subschemas; the keyword is dropped as OAS-only on surviving properties | Semantic enforcement (see below). Forbidden properties become boolean `false` subschemas; the keyword is preserved on surviving properties (valid in Draft 07) |
 
 ### `readOnly` / `writeOnly` enforcement
 

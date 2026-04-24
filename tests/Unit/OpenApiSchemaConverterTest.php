@@ -344,7 +344,7 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     // ========================================
-    // SchemaContext (readOnly / writeOnly enforcement) tests
+    // SchemaContext: readOnly / writeOnly enforcement
     // ========================================
 
     #[Test]
@@ -517,9 +517,8 @@ class OpenApiSchemaConverterTest extends TestCase
     #[Test]
     public function default_context_is_response(): void
     {
-        // Default context should mirror the validator most call sites came from
-        // historically — Response — so writeOnly in an unspecified call now
-        // enforces the leak guard.
+        // Default is Response so callers that don't pass a context still get
+        // the response-leak guard on writeOnly properties.
         $schema = [
             'type' => 'object',
             'properties' => [
@@ -530,6 +529,77 @@ class OpenApiSchemaConverterTest extends TestCase
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
 
         $this->assertFalse($result['properties']['password']);
+    }
+
+    #[Test]
+    public function response_context_write_only_enforced_inside_array_items(): void
+    {
+        // Array-of-object is the most common list-endpoint shape. The recursion
+        // into `items` must carry the context so a writeOnly property inside an
+        // element is still replaced.
+        $schema = [
+            'type' => 'array',
+            'items' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer'],
+                    'password' => ['type' => 'string', 'writeOnly' => true],
+                ],
+                'required' => ['id', 'password'],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response);
+
+        $this->assertFalse($result['items']['properties']['password']);
+        $this->assertSame(['id'], $result['items']['required']);
+    }
+
+    #[Test]
+    public function convert_does_not_mutate_input_schema_with_forbidden_properties(): void
+    {
+        // Immutability regression guard specifically for the enforcement path,
+        // which writes to $schema['properties'] and $schema['required'].
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'id' => ['type' => 'integer', 'readOnly' => true],
+                'password' => ['type' => 'string', 'writeOnly' => true],
+                'name' => ['type' => 'string'],
+            ],
+            'required' => ['id', 'password', 'name'],
+        ];
+        $original = $schema;
+
+        OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response);
+        OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Request);
+
+        $this->assertSame($original, $schema);
+    }
+
+    #[Test]
+    public function marker_inside_combiner_child_is_not_enforced_known_limitation(): void
+    {
+        // Characterisation test pinning the documented limitation: detection
+        // only looks at the property's own top-level readOnly/writeOnly, not
+        // at markers buried inside allOf/oneOf/anyOf children. If this test
+        // ever starts failing, the limitation has been lifted — update the
+        // README and the enforceContextOnProperties docblock accordingly.
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'password' => [
+                    'allOf' => [
+                        ['type' => 'string', 'writeOnly' => true],
+                    ],
+                ],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1, SchemaContext::Response);
+
+        $this->assertNotFalse($result['properties']['password']);
+        $this->assertArrayHasKey('allOf', $result['properties']['password']);
     }
 
     #[Test]

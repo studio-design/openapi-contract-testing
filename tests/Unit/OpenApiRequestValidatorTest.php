@@ -2625,14 +2625,13 @@ class OpenApiRequestValidatorTest extends TestCase
     }
 
     // ========================================
-    // readOnly / writeOnly enforcement (issue #52)
+    // readOnly / writeOnly enforcement
     // ========================================
 
     #[Test]
     public function request_body_containing_read_only_property_fails_validation(): void
     {
-        // The spec marks `id` as readOnly — clients must not send it. Pre-#52 the
-        // converter stripped the marker and this request silently passed.
+        // The spec marks `id` as readOnly — clients must not send it.
         $result = $this->validator->validate(
             'readwrite',
             'POST',

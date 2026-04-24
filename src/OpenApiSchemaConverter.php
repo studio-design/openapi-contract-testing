@@ -73,9 +73,11 @@ final class OpenApiSchemaConverter
         self::removeKeys($schema, self::OPENAPI_COMMON_KEYS);
 
         // Enforce readOnly/writeOnly on this object's own `properties` before
-        // recursing so a forbidden property is replaced wholesale (no need to
-        // descend into a schema that's been turned into boolean `false`), and
-        // before the 3.0 key scrub so `isForbidden()` can still see the marker.
+        // recursing: the recursive call's 3.0 key scrub will strip the child's
+        // top-level marker, so an enforcement pass that looks at child
+        // subschemas only sees the keyword while we are still at the parent.
+        // It also avoids needlessly descending into a subtree we're about to
+        // replace with boolean `false`.
         if (isset($schema['properties']) && is_array($schema['properties'])) {
             self::enforceContextOnProperties($schema, $context);
         }
@@ -141,6 +143,7 @@ final class OpenApiSchemaConverter
     {
         /** @var array<string, mixed> $properties */
         $properties = $schema['properties'];
+        $forbiddenKeyword = $context->forbiddenKeyword();
         $forbiddenNames = [];
 
         foreach ($properties as $name => $property) {
@@ -148,7 +151,7 @@ final class OpenApiSchemaConverter
                 continue;
             }
 
-            if (!self::isForbidden($property, $context)) {
+            if (($property[$forbiddenKeyword] ?? null) !== true) {
                 continue;
             }
 
@@ -183,17 +186,6 @@ final class OpenApiSchemaConverter
         }
 
         $schema['required'] = $filtered;
-    }
-
-    /**
-     * @param array<string, mixed> $propertySchema
-     */
-    private static function isForbidden(array $propertySchema, SchemaContext $context): bool
-    {
-        return match ($context) {
-            SchemaContext::Request => ($propertySchema['readOnly'] ?? null) === true,
-            SchemaContext::Response => ($propertySchema['writeOnly'] ?? null) === true,
-        };
     }
 
     /**

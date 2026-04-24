@@ -1090,15 +1090,14 @@ class OpenApiResponseValidatorTest extends TestCase
     }
 
     // ========================================
-    // readOnly / writeOnly enforcement (issue #52)
+    // readOnly / writeOnly enforcement
     // ========================================
 
     #[Test]
     public function response_body_containing_write_only_property_fails_validation(): void
     {
-        // The spec marks `password` as writeOnly — the server must not include it
-        // in a response. Pre-#52 the converter stripped the marker and this body
-        // silently passed.
+        // The spec marks `password` as writeOnly — the server must not include
+        // it in a response.
         $result = $this->validator->validate(
             'readwrite',
             'POST',
