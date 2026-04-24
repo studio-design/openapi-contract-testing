@@ -93,13 +93,13 @@ final class OpenApiRequestValidator
         // Collect merged path/operation parameters once so path + query + header
         // validation share a single view of the spec and malformed-entry errors
         // are surfaced only once.
-        [$parameters, $specErrors] = ParameterCollector::collect($method, $matchedPath, $pathSpec, $operation);
+        $collected = ParameterCollector::collect($method, $matchedPath, $pathSpec, $operation);
 
         $errors = [
-            ...$specErrors,
-            ...$this->pathValidator->validate($method, $matchedPath, $parameters, $pathVariables, $version),
-            ...$this->queryValidator->validate($method, $matchedPath, $parameters, $queryParams, $version),
-            ...$this->headerValidator->validate($method, $matchedPath, $parameters, $headers, $version),
+            ...$collected->specErrors,
+            ...$this->pathValidator->validate($method, $matchedPath, $collected->parameters, $pathVariables, $version),
+            ...$this->queryValidator->validate($method, $matchedPath, $collected->parameters, $queryParams, $version),
+            ...$this->headerValidator->validate($method, $matchedPath, $collected->parameters, $headers, $version),
             ...$this->securityValidator->validate($method, $matchedPath, $spec, $operation, $headers, $queryParams, $cookies),
             ...$this->bodyValidator->validate($specName, $method, $matchedPath, $operation, $requestBody, $contentType, $version),
         ];

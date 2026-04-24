@@ -88,6 +88,51 @@ class RequestBodyValidatorTest extends TestCase
     }
 
     #[Test]
+    public function validate_flags_malformed_non_array_request_body(): void
+    {
+        $operation = ['requestBody' => 'oops'];
+
+        $errors = $this->validator->validate(
+            'spec',
+            'POST',
+            '/pets',
+            $operation,
+            null,
+            null,
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertCount(1, $errors);
+        $this->assertStringContainsString("Malformed 'requestBody'", $errors[0]);
+    }
+
+    #[Test]
+    public function validate_flags_malformed_media_type_schema(): void
+    {
+        $operation = [
+            'requestBody' => [
+                'content' => [
+                    'application/json' => ['schema' => 'not-an-array'],
+                ],
+            ],
+        ];
+
+        $errors = $this->validator->validate(
+            'spec',
+            'POST',
+            '/pets',
+            $operation,
+            null,
+            null,
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertCount(1, $errors);
+        $this->assertStringContainsString('.schema\'', $errors[0]);
+        $this->assertStringContainsString('expected object, got scalar', $errors[0]);
+    }
+
+    #[Test]
     public function validate_validates_json_body_against_schema(): void
     {
         $operation = [

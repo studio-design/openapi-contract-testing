@@ -28,7 +28,8 @@ final class RequestBodyValidator
      * Returns an empty list when the body is acceptable (including when the
      * spec defines no body, no content, no JSON content type, or no schema).
      * Hard spec-level errors (malformed `requestBody` / `content`) are
-     * reported as standard error entries so they compose with query errors.
+     * reported as standard error entries so the orchestrator can accumulate
+     * them alongside other validators' errors.
      *
      * @param array<string, mixed> $operation
      *

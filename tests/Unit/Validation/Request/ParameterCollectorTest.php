@@ -24,12 +24,12 @@ class ParameterCollectorTest extends TestCase
             ],
         ];
 
-        [$parameters, $errors] = ParameterCollector::collect('GET', '/pets/{id}', $pathSpec, $operation);
+        $result = ParameterCollector::collect('GET', '/pets/{id}', $pathSpec, $operation);
 
-        $this->assertSame([], $errors);
-        $this->assertCount(2, $parameters);
-        $this->assertSame('id', $parameters[0]['name']);
-        $this->assertSame('format', $parameters[1]['name']);
+        $this->assertSame([], $result->specErrors);
+        $this->assertCount(2, $result->parameters);
+        $this->assertSame('id', $result->parameters[0]['name']);
+        $this->assertSame('format', $result->parameters[1]['name']);
     }
 
     #[Test]
@@ -46,21 +46,21 @@ class ParameterCollectorTest extends TestCase
             ],
         ];
 
-        [$parameters, $errors] = ParameterCollector::collect('GET', '/pets', $pathSpec, $operation);
+        $result = ParameterCollector::collect('GET', '/pets', $pathSpec, $operation);
 
-        $this->assertSame([], $errors);
-        $this->assertCount(1, $parameters);
-        $this->assertSame(100, $parameters[0]['schema']['maximum']);
+        $this->assertSame([], $result->specErrors);
+        $this->assertCount(1, $result->parameters);
+        $this->assertSame(100, $result->parameters[0]['schema']['maximum']);
     }
 
     #[Test]
     public function collect_flags_malformed_scalar_parameter_entry(): void
     {
-        [$parameters, $errors] = ParameterCollector::collect('GET', '/pets', [], ['parameters' => ['oops']]);
+        $result = ParameterCollector::collect('GET', '/pets', [], ['parameters' => ['oops']]);
 
-        $this->assertSame([], $parameters);
-        $this->assertCount(1, $errors);
-        $this->assertStringContainsString('expected object, got scalar', $errors[0]);
+        $this->assertSame([], $result->parameters);
+        $this->assertCount(1, $result->specErrors);
+        $this->assertStringContainsString('expected object, got scalar', $result->specErrors[0]);
     }
 
     #[Test]
@@ -72,12 +72,12 @@ class ParameterCollectorTest extends TestCase
             ],
         ];
 
-        [$parameters, $errors] = ParameterCollector::collect('POST', '/pets', [], $operation);
+        $result = ParameterCollector::collect('POST', '/pets', [], $operation);
 
-        $this->assertSame([], $parameters);
-        $this->assertCount(1, $errors);
-        $this->assertStringContainsString('Reserved in:header parameter', $errors[0]);
-        $this->assertStringContainsString('§4.7.12.1', $errors[0]);
+        $this->assertSame([], $result->parameters);
+        $this->assertCount(1, $result->specErrors);
+        $this->assertStringContainsString('Reserved in:header parameter', $result->specErrors[0]);
+        $this->assertStringContainsString('§4.7.12.1', $result->specErrors[0]);
     }
 
     #[Test]
@@ -91,9 +91,9 @@ class ParameterCollectorTest extends TestCase
             ],
         ];
 
-        [$parameters, $errors] = ParameterCollector::collect('GET', '/pets', [], $operation);
+        $result = ParameterCollector::collect('GET', '/pets', [], $operation);
 
-        $this->assertSame([], $errors);
-        $this->assertCount(1, $parameters);
+        $this->assertSame([], $result->specErrors);
+        $this->assertCount(1, $result->parameters);
     }
 }

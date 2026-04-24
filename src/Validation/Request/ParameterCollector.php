@@ -35,10 +35,8 @@ final class ParameterCollector
      *
      * @param array<string, mixed> $pathSpec
      * @param array<string, mixed> $operation
-     *
-     * @return array{0: list<array<string, mixed>>, 1: string[]}
      */
-    public static function collect(string $method, string $matchedPath, array $pathSpec, array $operation): array
+    public static function collect(string $method, string $matchedPath, array $pathSpec, array $operation): CollectionResult
     {
         $merged = [];
         $errors = [];
@@ -86,6 +84,6 @@ final class ParameterCollector
             }
         }
 
-        return [array_values($merged), $errors];
+        return new CollectionResult(array_values($merged), $errors);
     }
 }

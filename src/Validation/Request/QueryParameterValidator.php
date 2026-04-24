@@ -54,7 +54,7 @@ final class QueryParameterValidator
 
             // A required parameter with no schema is a clearly malformed spec — surface it
             // rather than silently passing every request. Optional parameters with no schema
-            // have nothing to validate, so we let them through (matches the body validator).
+            // have nothing to validate, so we let them through (matches {@see RequestBodyValidator}).
             if (!isset($param['schema']) || !is_array($param['schema'])) {
                 if ($required) {
                     $errors[] = "[query.{$name}] required parameter has no schema for {$method} {$matchedPath} — cannot validate.";

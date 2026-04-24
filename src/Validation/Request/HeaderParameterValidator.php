@@ -75,9 +75,10 @@ final class HeaderParameterValidator
 
             $required = ($param['required'] ?? false) === true;
 
-            // Same reasoning as query/path: a required parameter without a schema would
-            // silently pass every request, so surface it as a hard spec error. Optional
-            // entries without a schema have nothing to validate — let them through.
+            // Same reasoning as {@see QueryParameterValidator} / {@see PathParameterValidator}:
+            // a required parameter without a schema would silently pass every request, so
+            // surface it as a hard spec error. Optional entries without a schema have
+            // nothing to validate — let them through.
             if (!isset($param['schema']) || !is_array($param['schema'])) {
                 if ($required) {
                     $errors[] = "[header.{$name}] required parameter has no schema for {$method} {$matchedPath} — cannot validate.";

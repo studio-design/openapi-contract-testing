@@ -21,6 +21,27 @@ class HeaderParameterValidatorTest extends TestCase
     }
 
     #[Test]
+    public function validate_unwraps_single_element_array_from_headerbag(): void
+    {
+        // Laravel's HeaderBag surfaces even a single occurrence of a header as
+        // a 1-element array. The validator must unwrap it before matching the
+        // scalar schema; a regression here would TypeError or falsely reject.
+        $parameters = [
+            ['name' => 'X-Request-Id', 'in' => 'header', 'required' => true, 'schema' => ['type' => 'string']],
+        ];
+
+        $errors = $this->validator->validate(
+            'GET',
+            '/pets',
+            $parameters,
+            ['X-Request-Id' => ['abc']],
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $errors);
+    }
+
+    #[Test]
     public function validate_matches_headers_case_insensitively(): void
     {
         $parameters = [

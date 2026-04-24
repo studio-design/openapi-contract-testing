@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Validation\Request;
 
-use LogicException;
 use Studio\OpenApiContractTesting\Validation\Support\HeaderNormalizer;
 
 use function array_key_exists;
@@ -119,7 +118,7 @@ final class SecurityValidator
 
             $entryHasHardError = false;
             $entryHasUnsupported = false;
-            /** @var array<string, array{kind: string, def: array<string, mixed>}> $validatable */
+            /** @var array<string, array{kind: SchemeKind, def: array<string, mixed>}> $validatable */
             $validatable = [];
 
             foreach ($entry as $schemeName => $_scopes) {
@@ -150,26 +149,26 @@ final class SecurityValidator
 
                 $classification = $this->classifyScheme($schemeDef);
 
-                if ($classification['kind'] === 'malformed') {
+                if ($classification->kind === SchemeKind::Malformed) {
                     $hardErrors[] = sprintf(
                         "[security] %s %s: security scheme '%s' is malformed: %s",
                         $method,
                         $matchedPath,
                         $schemeName,
-                        $classification['reason'],
+                        $classification->reason,
                     );
                     $entryHasHardError = true;
 
                     continue;
                 }
 
-                if ($classification['kind'] === 'unsupported') {
+                if ($classification->kind === SchemeKind::Unsupported) {
                     $entryHasUnsupported = true;
 
                     continue;
                 }
 
-                $validatable[$schemeName] = ['kind' => $classification['kind'], 'def' => $schemeDef];
+                $validatable[$schemeName] = ['kind' => $classification->kind, 'def' => $schemeDef];
             }
 
             if ($entryHasHardError) {
@@ -226,70 +225,65 @@ final class SecurityValidator
     }
 
     /**
-     * Classify a security scheme definition into one of:
-     * - `bearer`      — http + scheme=bearer (validatable)
-     * - `apiKey`      — apiKey in header|query|cookie (validatable)
-     * - `unsupported` — a spec-allowed type we intentionally defer (oauth2,
-     *                   openIdConnect, mutualTLS, or http with a non-bearer
-     *                   scheme). Phase 1 skip — false-negative avoidance.
-     * - `malformed`   — missing/invalid required fields, or a `type` that is
-     *                   not in the OpenAPI-enumerated set. A typo like
-     *                   `{"type": "htpp"}` MUST surface as a hard error
-     *                   rather than silently skipping — otherwise the
-     *                   library would pass every request for that endpoint.
+     * Classify a security scheme definition. {@see SchemeKind} documents the
+     * four outcomes; the `$reason` field of the returned classification is
+     * populated only for `Malformed` to explain which spec field is broken.
      *
      * @param array<string, mixed> $schemeDef
-     *
-     * @return array{kind: string, reason?: string}
      */
-    private function classifyScheme(array $schemeDef): array
+    private function classifyScheme(array $schemeDef): SchemeClassification
     {
         $type = $schemeDef['type'] ?? null;
         if (!is_string($type) || $type === '') {
-            return ['kind' => 'malformed', 'reason' => "missing required 'type' field."];
+            return new SchemeClassification(SchemeKind::Malformed, "missing required 'type' field.");
         }
 
         if ($type === 'apiKey') {
             $in = $schemeDef['in'] ?? null;
             $name = $schemeDef['name'] ?? null;
             if (!is_string($in) || !is_string($name)) {
-                return ['kind' => 'malformed', 'reason' => "apiKey scheme requires string 'in' and 'name' fields."];
+                return new SchemeClassification(SchemeKind::Malformed, "apiKey scheme requires string 'in' and 'name' fields.");
             }
             if (!in_array($in, ['header', 'query', 'cookie'], true)) {
-                return ['kind' => 'malformed', 'reason' => "apiKey scheme 'in' must be one of header|query|cookie, got '{$in}'."];
+                return new SchemeClassification(SchemeKind::Malformed, "apiKey scheme 'in' must be one of header|query|cookie, got '{$in}'.");
             }
 
-            return ['kind' => 'apiKey'];
+            return new SchemeClassification(SchemeKind::ApiKey);
         }
 
         if ($type === 'http') {
             $scheme = $schemeDef['scheme'] ?? null;
             if (!is_string($scheme)) {
-                return ['kind' => 'malformed', 'reason' => "http scheme requires a string 'scheme' field (e.g. 'bearer', 'basic')."];
+                return new SchemeClassification(SchemeKind::Malformed, "http scheme requires a string 'scheme' field (e.g. 'bearer', 'basic').");
             }
 
             if (strtolower($scheme) === 'bearer') {
-                return ['kind' => 'bearer'];
+                return new SchemeClassification(SchemeKind::Bearer);
             }
 
             // http + basic / digest / etc. are well-formed but phase 1 cannot validate them.
-            return ['kind' => 'unsupported'];
+            return new SchemeClassification(SchemeKind::Unsupported);
         }
 
         if ($type === 'oauth2' || $type === 'openIdConnect' || $type === 'mutualTLS') {
-            return ['kind' => 'unsupported'];
+            return new SchemeClassification(SchemeKind::Unsupported);
         }
 
-        return [
-            'kind' => 'malformed',
-            'reason' => "unknown type '{$type}' — OpenAPI 3.x enumerates apiKey|http|oauth2|openIdConnect|mutualTLS.",
-        ];
+        return new SchemeClassification(
+            SchemeKind::Malformed,
+            "unknown type '{$type}' — OpenAPI 3.x enumerates apiKey|http|oauth2|openIdConnect|mutualTLS.",
+        );
     }
 
     /**
      * Check whether a single (already-classified, well-formed) security scheme
      * is satisfied by the request. Returns an empty list when satisfied, or
      * one or more error strings explaining why not.
+     *
+     * Only `Bearer` and `ApiKey` reach this method — `Malformed` and
+     * `Unsupported` classifications are short-circuited by the caller in
+     * {@see SecurityValidator::validate()} — so the `match` is exhaustive on
+     * the two validatable cases.
      *
      * @param array<string, mixed> $schemeDef
      * @param array<string, mixed> $normalizedHeaders lower-cased header map
@@ -299,52 +293,75 @@ final class SecurityValidator
      * @return string[]
      */
     private function checkSchemeSatisfaction(
-        string $kind,
+        SchemeKind $kind,
         array $schemeDef,
         array $normalizedHeaders,
         array $queryParams,
         array $cookies,
     ): array {
-        if ($kind === 'bearer') {
-            $raw = $normalizedHeaders['authorization'] ?? null;
-            $value = $this->extractSingleStringValue($raw);
-            if ($value === null || $value === '') {
-                return ['Authorization header is missing.'];
-            }
+        return match ($kind) {
+            SchemeKind::Bearer => $this->checkBearerSatisfied($normalizedHeaders),
+            SchemeKind::ApiKey => $this->checkApiKeySatisfied($schemeDef, $normalizedHeaders, $queryParams, $cookies),
+            SchemeKind::Malformed, SchemeKind::Unsupported => [],
+        };
+    }
 
-            // RFC 6750 §2.1: `Bearer <token>`. Scheme name is case-insensitive
-            // per RFC 7235 §2.1, so we accept "Bearer" / "bearer" / "BEARER" etc.
-            // Require a non-empty token portion; "Bearer" alone or "Bearer " is
-            // not a valid credential.
-            if (preg_match('/^bearer\s+(\S+)/i', $value) !== 1) {
-                return ["Authorization header does not contain a 'Bearer <token>' credential."];
-            }
-
-            return [];
+    /**
+     * @param array<string, mixed> $normalizedHeaders
+     *
+     * @return string[]
+     */
+    private function checkBearerSatisfied(array $normalizedHeaders): array
+    {
+        $raw = $normalizedHeaders['authorization'] ?? null;
+        $value = $this->extractSingleStringValue($raw);
+        if ($value === null || $value === '') {
+            return ['Authorization header is missing.'];
         }
 
-        if ($kind === 'apiKey') {
-            /** @var string $in */
-            $in = $schemeDef['in'];
-            /** @var string $name */
-            $name = $schemeDef['name'];
-
-            $raw = match ($in) {
-                'header' => $normalizedHeaders[strtolower($name)] ?? null,
-                'query' => $queryParams[$name] ?? null,
-                'cookie' => $cookies[$name] ?? null,
-                default => null,
-            };
-
-            $value = $this->extractSingleStringValue($raw);
-            if ($value === null || $value === '') {
-                return [sprintf("api key '%s' is missing from the %s.", $name, $in)];
-            }
-
-            return [];
+        // RFC 6750 §2.1: `Bearer <token>`. Scheme name is case-insensitive
+        // per RFC 7235 §2.1, so we accept "Bearer" / "bearer" / "BEARER" etc.
+        // Require a non-empty token portion; "Bearer" alone or "Bearer " is
+        // not a valid credential.
+        if (preg_match('/^bearer\s+(\S+)/i', $value) !== 1) {
+            return ["Authorization header does not contain a 'Bearer <token>' credential."];
         }
 
-        throw new LogicException("checkSchemeSatisfaction received unexpected kind '{$kind}'.");
+        return [];
+    }
+
+    /**
+     * @param array<string, mixed> $schemeDef
+     * @param array<string, mixed> $normalizedHeaders
+     * @param array<string, mixed> $queryParams
+     * @param array<string, mixed> $cookies
+     *
+     * @return string[]
+     */
+    private function checkApiKeySatisfied(
+        array $schemeDef,
+        array $normalizedHeaders,
+        array $queryParams,
+        array $cookies,
+    ): array {
+        /** @var string $in */
+        $in = $schemeDef['in'];
+        /** @var string $name */
+        $name = $schemeDef['name'];
+
+        $raw = match ($in) {
+            'header' => $normalizedHeaders[strtolower($name)] ?? null,
+            'query' => $queryParams[$name] ?? null,
+            'cookie' => $cookies[$name] ?? null,
+            default => null,
+        };
+
+        $value = $this->extractSingleStringValue($raw);
+        if ($value === null || $value === '') {
+            return [sprintf("api key '%s' is missing from the %s.", $name, $in)];
+        }
+
+        return [];
     }
 
     /**
