@@ -6,6 +6,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\OpenApiValidationOutcome;
 use Studio\OpenApiContractTesting\OpenApiValidationResult;
 
 class OpenApiValidationResultTest extends TestCase
@@ -15,6 +16,7 @@ class OpenApiValidationResultTest extends TestCase
     {
         $result = OpenApiValidationResult::success('/v1/pets');
 
+        $this->assertSame(OpenApiValidationOutcome::Success, $result->outcome());
         $this->assertTrue($result->isValid());
         $this->assertFalse($result->isSkipped());
         $this->assertSame([], $result->errors());
@@ -27,6 +29,7 @@ class OpenApiValidationResultTest extends TestCase
     {
         $result = OpenApiValidationResult::success();
 
+        $this->assertSame(OpenApiValidationOutcome::Success, $result->outcome());
         $this->assertTrue($result->isValid());
         $this->assertFalse($result->isSkipped());
         $this->assertNull($result->matchedPath());
@@ -38,6 +41,7 @@ class OpenApiValidationResultTest extends TestCase
         $errors = ['Error 1', 'Error 2'];
         $result = OpenApiValidationResult::failure($errors);
 
+        $this->assertSame(OpenApiValidationOutcome::Failure, $result->outcome());
         $this->assertFalse($result->isValid());
         $this->assertFalse($result->isSkipped());
         $this->assertSame($errors, $result->errors());
@@ -59,6 +63,7 @@ class OpenApiValidationResultTest extends TestCase
 
         // isValid() remains true so the assertion surface does not fail the test,
         // but isSkipped() distinguishes the case from a genuine success.
+        $this->assertSame(OpenApiValidationOutcome::Skipped, $result->outcome());
         $this->assertTrue($result->isValid());
         $this->assertTrue($result->isSkipped());
         $this->assertSame([], $result->errors());
@@ -72,6 +77,7 @@ class OpenApiValidationResultTest extends TestCase
     {
         $result = OpenApiValidationResult::skipped('/v1/pets');
 
+        $this->assertSame(OpenApiValidationOutcome::Skipped, $result->outcome());
         $this->assertTrue($result->isValid());
         $this->assertTrue($result->isSkipped());
         $this->assertSame('/v1/pets', $result->matchedPath());
@@ -83,9 +89,31 @@ class OpenApiValidationResultTest extends TestCase
     {
         $result = OpenApiValidationResult::skipped();
 
+        $this->assertSame(OpenApiValidationOutcome::Skipped, $result->outcome());
         $this->assertTrue($result->isValid());
         $this->assertTrue($result->isSkipped());
         $this->assertNull($result->matchedPath());
         $this->assertNull($result->skipReason());
+    }
+
+    #[Test]
+    public function outcome_match_covers_all_three_cases_exhaustively(): void
+    {
+        $results = [
+            OpenApiValidationResult::success(),
+            OpenApiValidationResult::failure(['err']),
+            OpenApiValidationResult::skipped(reason: 'reason'),
+        ];
+
+        $labels = [];
+        foreach ($results as $result) {
+            $labels[] = match ($result->outcome()) {
+                OpenApiValidationOutcome::Success => 'success',
+                OpenApiValidationOutcome::Failure => 'failure',
+                OpenApiValidationOutcome::Skipped => 'skipped',
+            };
+        }
+
+        $this->assertSame(['success', 'failure', 'skipped'], $labels);
     }
 }

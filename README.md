@@ -306,7 +306,7 @@ Notes:
 - Patterns are regex strings **without** `/` delimiters or `^$` anchors; they are anchored automatically, so `5\d\d` matches exactly `500`–`599` (not `5000`).
 - The skip check sits **between** the "path / method not in spec" checks and the "status code not defined" / schema-validation checks. A skipped code therefore suppresses both status-code failure modes (undocumented code AND body mismatch for a documented code), but typos in the request path or method still fail loudly.
 - Skipped endpoints count as covered — the endpoint was exercised, just not schema-validated. Coverage semantics here match how non-JSON content types and schema-less `204` responses are handled, but `OpenApiValidationResult::isSkipped()` returns `true` **only** for status-code skips; the other no-body-validation branches still return a plain `success()`.
-- `OpenApiValidationResult::isSkipped()` is exposed for callers who want to distinguish a skip from a genuine success. `skipReason()` identifies the matched pattern.
+- `OpenApiValidationResult::isSkipped()` is exposed for callers who want to distinguish a skip from a genuine success. `skipReason()` identifies the matched pattern. `outcome()` returns an `OpenApiValidationOutcome` enum (`Success` / `Failure` / `Skipped`) for callers who want exhaustive `match` handling instead of two bool predicates.
 - **Observability trade-off**: a real regression that causes an unrelated `500` will not fail this assertion. Keep your HTTP-level assertions (`$response->assertOk()`, status-code expectations in the test) alongside the contract check so a stray 5xx still surfaces — the contract assertion alone is not a substitute for status-code assertions on happy paths.
 
 #### Auto-assert every response
@@ -648,12 +648,26 @@ $result = $validator->validate(
     responseContentType: 'application/json',
 );
 
+$result->outcome();      // OpenApiValidationOutcome (Success | Failure | Skipped)
 $result->isValid();      // bool (true for both successes AND skipped results)
 $result->isSkipped();    // bool (true when the status code matched skip_response_codes)
 $result->errors();       // string[]
 $result->errorMessage(); // string (joined errors)
 $result->matchedPath();  // ?string (e.g., '/v1/pets/{petId}')
 $result->skipReason();   // ?string (non-null when skipped)
+```
+
+Prefer `outcome()` when you need to distinguish all three states explicitly — PHPStan enforces `match` exhaustiveness, so adding a future outcome cannot silently slip past a caller:
+
+```php
+use PHPUnit\Framework\AssertionFailedError;
+use Studio\OpenApiContractTesting\OpenApiValidationOutcome;
+
+match ($result->outcome()) {
+    OpenApiValidationOutcome::Success => null, // schema matched
+    OpenApiValidationOutcome::Failure => throw new AssertionFailedError($result->errorMessage()),
+    OpenApiValidationOutcome::Skipped => logger()->info('skipped', ['reason' => $result->skipReason()]),
+};
 ```
 
 ### `OpenApiSpecLoader`

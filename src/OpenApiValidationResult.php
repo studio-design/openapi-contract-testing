@@ -10,51 +10,58 @@ final class OpenApiValidationResult
 {
     /**
      * Private so the three factories (success / failure / skipped) are the
-     * only way to construct a result. This prevents illegal combinations such
-     * as `valid=false, skipped=true` or `valid=true, errors=['x']` — the
-     * factories enforce every invariant the type depends on.
+     * only way to construct a result. The outcome enum narrows the legal
+     * state space to exactly those three cases — errors are only attached
+     * to Failure, and skipReason is only attached to Skipped.
      *
      * @param string[] $errors
      */
     private function __construct(
-        private readonly bool $valid,
+        private readonly OpenApiValidationOutcome $outcome,
         private readonly array $errors = [],
         private readonly ?string $matchedPath = null,
-        private readonly bool $skipped = false,
         private readonly ?string $skipReason = null,
     ) {}
 
     public static function success(?string $matchedPath = null): self
     {
-        return new self(true, [], $matchedPath);
+        return new self(OpenApiValidationOutcome::Success, [], $matchedPath);
     }
 
     /** @param string[] $errors */
     public static function failure(array $errors, ?string $matchedPath = null): self
     {
-        return new self(false, $errors, $matchedPath);
+        return new self(OpenApiValidationOutcome::Failure, $errors, $matchedPath);
     }
 
     /**
      * Represents a response whose body was intentionally not validated (e.g. a
      * 5xx production error that the spec does not document). isValid() stays
      * true so callers that gate on it (e.g. PHPUnit assertions) treat the
-     * result as non-failing; isSkipped() distinguishes it from a genuine
-     * successful schema match.
+     * result as non-failing; isSkipped() / outcome() distinguish it from a
+     * genuine successful schema match.
      */
     public static function skipped(?string $matchedPath = null, ?string $reason = null): self
     {
-        return new self(true, [], $matchedPath, true, $reason);
+        return new self(OpenApiValidationOutcome::Skipped, [], $matchedPath, $reason);
+    }
+
+    public function outcome(): OpenApiValidationOutcome
+    {
+        return $this->outcome;
     }
 
     public function isValid(): bool
     {
-        return $this->valid;
+        return match ($this->outcome) {
+            OpenApiValidationOutcome::Success, OpenApiValidationOutcome::Skipped => true,
+            OpenApiValidationOutcome::Failure => false,
+        };
     }
 
     public function isSkipped(): bool
     {
-        return $this->skipped;
+        return $this->outcome === OpenApiValidationOutcome::Skipped;
     }
 
     /** @return string[] */
