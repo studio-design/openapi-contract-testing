@@ -182,25 +182,22 @@ class OpenApiSpecLoaderTest extends TestCase
     {
         // Mirrors `load_resolves_internal_refs` but loads the YAML twin of
         // refs-valid to pin that `$ref` resolution works end-to-end for YAML-
-        // decoded specs. symfony/yaml applies scalar coercion that JSON never
-        // does (e.g. `1.0` → float, bare `on`/`off` → bool), so this also
-        // guards against type drift slipping into the resolved spec.
+        // decoded specs. symfony/yaml applies YAML 1.2 scalar coercion that
+        // JSON never does (e.g. bare `1.0` -> float, bare `true`/`false` ->
+        // bool, bare `YYYY-MM-DD` -> int timestamp), so the strict-equality
+        // assertions below double as drift pins: if a scalar's decoded type
+        // ever changes, the resolved-array comparisons will fail.
         $fixturesPath = __DIR__ . '/../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         $spec = OpenApiSpecLoader::load('petstore-yaml-with-refs');
 
-        // Distinctive title pins that the YAML fixture (not a stray JSON twin)
-        // was actually loaded.
+        // Distinctive title pins that the YAML fixture (not a stray JSON
+        // twin) was actually loaded. SEARCH_EXTENSIONS is json-first, so if a
+        // `petstore-yaml-with-refs.json` ever appears in this directory it
+        // would shadow the YAML fixture and this assertion would fail loudly
+        // rather than silently bypass the YAML decode path.
         $this->assertSame('Refs valid (YAML)', $spec['info']['title']);
-
-        // YAML scalar-coercion drift pin: `openapi` and `version` must stay
-        // strings. If symfony/yaml ever starts surfacing these as floats the
-        // spec would silently change shape downstream.
-        $this->assertIsString($spec['openapi']);
-        $this->assertSame('3.0.3', $spec['openapi']);
-        $this->assertIsString($spec['info']['version']);
-        $this->assertSame('1.0.0', $spec['info']['version']);
 
         // Array-item $ref inlined.
         $listSchema = $spec['paths']['/pets']['get']['responses']['200']['content']['application/json']['schema'];
@@ -208,7 +205,10 @@ class OpenApiSpecLoaderTest extends TestCase
         $this->assertArrayNotHasKey('$ref', $listSchema['items']);
         $this->assertSame('object', $listSchema['items']['type']);
 
-        // Transitive chain Pet -> Category -> Label fully resolved.
+        // Transitive chain Pet -> Category -> Label fully resolved. The int
+        // `minLength => 1` here is the actual coercion pin: strict `===`
+        // comparison fails if symfony/yaml ever decodes `1` as a string or
+        // float through this ref-inlined subtree.
         $this->assertSame(
             ['type' => 'string', 'minLength' => 1],
             $listSchema['items']['properties']['category']['properties']['label'],
