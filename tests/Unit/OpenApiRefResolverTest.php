@@ -6,7 +6,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
+use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\OpenApiRefResolver;
 
 class OpenApiRefResolverTest extends TestCase
@@ -332,7 +332,7 @@ class OpenApiRefResolverTest extends TestCase
             ],
         ];
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('External $ref');
 
         OpenApiRefResolver::resolve($spec);
@@ -349,7 +349,7 @@ class OpenApiRefResolverTest extends TestCase
             ],
         ];
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('External $ref');
 
         OpenApiRefResolver::resolve($spec);
@@ -386,7 +386,7 @@ class OpenApiRefResolverTest extends TestCase
             ],
         ];
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('Circular $ref');
 
         OpenApiRefResolver::resolve($spec);
@@ -429,7 +429,7 @@ class OpenApiRefResolverTest extends TestCase
             ],
         ];
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('Circular $ref');
 
         OpenApiRefResolver::resolve($spec);
@@ -464,7 +464,7 @@ class OpenApiRefResolverTest extends TestCase
             'x-alias' => ['$ref' => '#/components/schemas/A'],
         ];
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('Circular $ref');
 
         OpenApiRefResolver::resolve($spec);
@@ -496,7 +496,7 @@ class OpenApiRefResolverTest extends TestCase
             ],
         ];
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('Unresolvable $ref');
 
         OpenApiRefResolver::resolve($spec);
@@ -530,7 +530,7 @@ class OpenApiRefResolverTest extends TestCase
             ],
         ];
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('Unresolvable $ref');
 
         OpenApiRefResolver::resolve($spec);
@@ -551,7 +551,7 @@ class OpenApiRefResolverTest extends TestCase
             ],
         ];
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('Invalid $ref');
 
         OpenApiRefResolver::resolve($spec);
@@ -571,7 +571,7 @@ class OpenApiRefResolverTest extends TestCase
             ],
         ];
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('not an object');
 
         OpenApiRefResolver::resolve($spec);
@@ -592,7 +592,7 @@ class OpenApiRefResolverTest extends TestCase
             ],
         ];
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('not an object');
 
         OpenApiRefResolver::resolve($spec);
@@ -612,7 +612,7 @@ class OpenApiRefResolverTest extends TestCase
             ],
         ];
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('bare fragment');
 
         OpenApiRefResolver::resolve($spec);
@@ -628,7 +628,7 @@ class OpenApiRefResolverTest extends TestCase
             'x-bad' => ['$ref' => '#/'],
         ];
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('root pointer');
 
         OpenApiRefResolver::resolve($spec);
@@ -965,7 +965,7 @@ class OpenApiRefResolverTest extends TestCase
             ],
         ];
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('Invalid $ref');
 
         OpenApiRefResolver::resolve($spec);
