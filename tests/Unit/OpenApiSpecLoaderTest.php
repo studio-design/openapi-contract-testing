@@ -178,6 +178,55 @@ class OpenApiSpecLoaderTest extends TestCase
     }
 
     #[Test]
+    public function load_resolves_internal_refs_from_yaml_spec(): void
+    {
+        // Mirrors `load_resolves_internal_refs` but loads the YAML twin of
+        // refs-valid to pin that `$ref` resolution works end-to-end for YAML-
+        // decoded specs. symfony/yaml applies YAML 1.2 scalar coercion that
+        // JSON never does (e.g. bare `1.0` -> float, bare `true`/`false` ->
+        // bool, bare `YYYY-MM-DD` -> int timestamp), so the strict-equality
+        // assertions below double as drift pins: if a scalar's decoded type
+        // ever changes, the resolved-array comparisons will fail.
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $spec = OpenApiSpecLoader::load('petstore-yaml-with-refs');
+
+        // Distinctive title pins that the YAML fixture (not a stray JSON
+        // twin) was actually loaded. SEARCH_EXTENSIONS is json-first, so if a
+        // `petstore-yaml-with-refs.json` ever appears in this directory it
+        // would shadow the YAML fixture and this assertion would fail loudly
+        // rather than silently bypass the YAML decode path.
+        $this->assertSame('Refs valid (YAML)', $spec['info']['title']);
+
+        // Array-item $ref inlined.
+        $listSchema = $spec['paths']['/pets']['get']['responses']['200']['content']['application/json']['schema'];
+        $this->assertSame('array', $listSchema['type']);
+        $this->assertArrayNotHasKey('$ref', $listSchema['items']);
+        $this->assertSame('object', $listSchema['items']['type']);
+
+        // Transitive chain Pet -> Category -> Label fully resolved. The int
+        // `minLength => 1` here is the actual coercion pin: strict `===`
+        // comparison fails if symfony/yaml ever decodes `1` as a string or
+        // float through this ref-inlined subtree.
+        $this->assertSame(
+            ['type' => 'string', 'minLength' => 1],
+            $listSchema['items']['properties']['category']['properties']['label'],
+        );
+
+        // Path-level parameter $ref inlined.
+        $pathParam = $spec['paths']['/pets/{petId}']['parameters'][0];
+        $this->assertArrayNotHasKey('$ref', $pathParam);
+        $this->assertSame('petId', $pathParam['name']);
+        $this->assertSame('path', $pathParam['in']);
+
+        // Response-level $ref inlined.
+        $responseSpec = $spec['paths']['/pets/{petId}']['get']['responses']['200'];
+        $this->assertArrayNotHasKey('$ref', $responseSpec);
+        $this->assertSame('A single pet', $responseSpec['description']);
+    }
+
+    #[Test]
     public function load_throws_on_circular_ref(): void
     {
         $fixturesPath = __DIR__ . '/../fixtures/specs';
