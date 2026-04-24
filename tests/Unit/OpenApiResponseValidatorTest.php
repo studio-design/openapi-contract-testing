@@ -292,18 +292,15 @@ class OpenApiResponseValidatorTest extends TestCase
     #[Test]
     public function skip_pattern_is_anchored(): void
     {
-        // Anchoring matters: "50" must not match "500". Without anchors, a
-        // pattern like "50" would accidentally skip any code starting with 50.
-        // Also assert that validation still proceeds normally — petstore-3.0
-        // defines 500 with an empty application/json schema, so the result is
-        // a regular success, not a skip.
-        $validator = new OpenApiResponseValidator(skipResponseCodes: ['50']);
+        // Anchoring matters: "20" must not match "201". Without anchors, a
+        // pattern like "20" would accidentally skip any code starting with 20.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: ['20']);
 
         $result = $validator->validate(
-            'petstore-3.0',
+            'content-without-schema',
             'GET',
-            '/v1/pets',
-            500,
+            '/widgets',
+            201,
             null,
         );
 
@@ -529,23 +526,20 @@ class OpenApiResponseValidatorTest extends TestCase
     #[Test]
     public function v30_json_content_type_without_schema_skips_validation(): void
     {
-        // Bypass the 5xx default skip so we exercise the "content entry with
-        // no schema" path specifically (petstore-3.0 defines 500 with an empty
-        // application/json object). With the default skip list, the 5xx check
-        // would short-circuit before reaching the schema-less branch.
-        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
-
-        $result = $validator->validate(
-            'petstore-3.0',
+        // The content-without-schema fixture declares application/json with no
+        // schema on 201, outside the default 5xx skip window — so the default
+        // validator reaches the schema-less branch directly.
+        $result = $this->validator->validate(
+            'content-without-schema',
             'GET',
-            '/v1/pets',
-            500,
+            '/widgets',
+            201,
             ['error' => 'something went wrong'],
         );
 
         $this->assertTrue($result->isValid());
         $this->assertFalse($result->isSkipped());
-        $this->assertSame('/v1/pets', $result->matchedPath());
+        $this->assertSame('/widgets', $result->matchedPath());
     }
 
     #[Test]
