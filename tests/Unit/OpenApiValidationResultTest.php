@@ -55,6 +55,7 @@ class OpenApiValidationResultTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('failure() requires at least one error message');
 
+        // @phpstan-ignore-next-line argument.type — intentionally empty to verify the runtime guard still fires for consumers without static analysis
         OpenApiValidationResult::failure([]);
     }
 

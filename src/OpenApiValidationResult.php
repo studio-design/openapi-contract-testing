@@ -34,13 +34,17 @@ final class OpenApiValidationResult
      * Reject `failure([])` so a Failure always carries at least one error
      * message. Without this guard, `errorMessage()` would return an empty
      * string and the Failure would surface as a silent assertion failure.
+     * The `non-empty-array` bound lifts that invariant into the signature so
+     * PHPStan flags empty-literal callers at analyse time; the runtime guard
+     * remains as defense-in-depth for consumers without static analysis.
      *
-     * @param string[] $errors
+     * @param non-empty-array<string> $errors
      *
      * @throws InvalidArgumentException when $errors is empty
      */
     public static function failure(array $errors, ?string $matchedPath = null): self
     {
+        // @phpstan-ignore-next-line identical.alwaysFalse — PHPDoc bound is not enforced at runtime; keep guard for consumers without static analysis
         if ($errors === []) {
             throw new InvalidArgumentException(
                 'OpenApiValidationResult::failure() requires at least one error message.',
