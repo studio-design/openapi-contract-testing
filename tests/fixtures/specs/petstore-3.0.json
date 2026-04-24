@@ -584,33 +584,6 @@
                         }
                     },
                     {
-                        "name": "Accept",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "enum": ["never-match"]
-                        }
-                    },
-                    {
-                        "name": "Content-Type",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "enum": ["never-match"]
-                        }
-                    },
-                    {
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "enum": ["never-match"]
-                        }
-                    },
-                    {
                         "name": "X-Category",
                         "in": "header",
                         "schema": {

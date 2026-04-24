@@ -183,6 +183,139 @@
                 }
             }
         },
+        "/header-reserved-accept-required": {
+            "get": {
+                "summary": "in:header Accept declared with required:true — OAS 3.x §4.7.12.1 says SHALL be ignored",
+                "operationId": "headerReservedAcceptRequired",
+                "parameters": [
+                    {
+                        "name": "Accept",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": ["application/json"]
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/header-reserved-content-type-optional": {
+            "get": {
+                "summary": "in:header Content-Type declared without required (implicit false)",
+                "operationId": "headerReservedContentTypeOptional",
+                "parameters": [
+                    {
+                        "name": "Content-Type",
+                        "in": "header",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/header-reserved-authorization-required": {
+            "get": {
+                "summary": "in:header Authorization declared instead of using a security scheme",
+                "operationId": "headerReservedAuthorizationRequired",
+                "parameters": [
+                    {
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "pattern": "^Bearer "
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/header-reserved-accept-upper": {
+            "get": {
+                "summary": "in:header ACCEPT (upper-case) — detection must be case-insensitive",
+                "operationId": "headerReservedAcceptUpper",
+                "parameters": [
+                    {
+                        "name": "ACCEPT",
+                        "in": "header",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/header-reserved-multiple": {
+            "get": {
+                "summary": "two reserved in:header entries in one operation — both must surface",
+                "operationId": "headerReservedMultiple",
+                "parameters": [
+                    {
+                        "name": "Accept",
+                        "in": "header",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "Content-Type",
+                        "in": "header",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/header-reserved-path-level": {
+            "parameters": [
+                {
+                    "name": "Authorization",
+                    "in": "header",
+                    "required": true,
+                    "schema": {
+                        "type": "string"
+                    }
+                }
+            ],
+            "get": {
+                "summary": "reserved in:header declared at path-level parameters (not operation-level)",
+                "operationId": "headerReservedPathLevel",
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
         "/security-undefined-scheme": {
             "get": {
                 "summary": "security references a scheme not defined in components.securitySchemes",
