@@ -52,10 +52,14 @@ final class OpenApiRefResolver
      * @param array<int|string, mixed> $node
      * @param array<string, mixed> $root
      * @param list<string> $chain pointer-refs already on the resolution stack — used to detect cycles
+     * @param bool $insidePropertiesMap true when `$node` is the direct children dict of
+     *                                  a `properties` / `patternProperties` map, where keys are property names
+     *                                  rather than schema keywords. The flag resets one level deeper, because
+     *                                  each named entry is itself a schema.
      */
-    private static function walk(array &$node, array $root, array $chain): void
+    private static function walk(array &$node, array $root, array $chain, bool $insidePropertiesMap = false): void
     {
-        if (array_key_exists('$ref', $node)) {
+        if (!$insidePropertiesMap && array_key_exists('$ref', $node)) {
             $ref = $node['$ref'];
 
             if (!is_string($ref)) {
@@ -118,9 +122,13 @@ final class OpenApiRefResolver
             return;
         }
 
-        foreach ($node as &$child) {
+        foreach ($node as $key => &$child) {
             if (is_array($child)) {
-                self::walk($child, $root, $chain);
+                // additionalProperties is intentionally excluded: its value is a single
+                // schema (not a dict of schemas), so a direct $ref under it is a
+                // legitimate Reference Object that must resolve.
+                $childInsidePropertiesMap = $key === 'properties' || $key === 'patternProperties';
+                self::walk($child, $root, $chain, $childInsidePropertiesMap);
             }
         }
         unset($child);

@@ -758,4 +758,216 @@ class OpenApiRefResolverTest extends TestCase
         $schema = $resolved['paths']['/pets']['get']['responses']['200']['content']['application/xml']['schema'];
         $this->assertSame(['type' => 'object', 'required' => ['id']], $schema);
     }
+
+    #[Test]
+    public function resolves_schema_with_ref_as_property_name(): void
+    {
+        // Specs for JSON Patch / JSON-LD / JSON Schema payloads legally describe
+        // an object with a property literally named `$ref`. The walker must
+        // treat keys inside a `properties` map as property names, not as
+        // Reference Object markers — otherwise load throws on a valid spec.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'JsonPatch' => [
+                        'type' => 'object',
+                        'properties' => [
+                            '$ref' => ['type' => 'string'],
+                            'value' => ['type' => 'string'],
+                        ],
+                    ],
+                ],
+            ],
+            'paths' => [
+                '/patches' => [
+                    'get' => [
+                        'responses' => [
+                            '200' => [
+                                'content' => [
+                                    'application/json' => [
+                                        'schema' => ['$ref' => '#/components/schemas/JsonPatch'],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $schema = $resolved['paths']['/patches']['get']['responses']['200']['content']['application/json']['schema'];
+        $this->assertSame(
+            [
+                'type' => 'object',
+                'properties' => [
+                    '$ref' => ['type' => 'string'],
+                    'value' => ['type' => 'string'],
+                ],
+            ],
+            $schema,
+        );
+    }
+
+    #[Test]
+    public function resolves_ref_inside_schema_with_ref_property_name(): void
+    {
+        // Pins that the property-name guard is one level deep only: the entry
+        // `properties.$ref` is a schema, and if that schema itself is a
+        // Reference Object it must still resolve at the next level.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Label' => ['type' => 'string'],
+                    'Holder' => [
+                        'type' => 'object',
+                        'properties' => [
+                            '$ref' => ['$ref' => '#/components/schemas/Label'],
+                        ],
+                    ],
+                ],
+            ],
+            'x-alias' => ['$ref' => '#/components/schemas/Holder'],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame(
+            [
+                'type' => 'object',
+                'properties' => [
+                    '$ref' => ['type' => 'string'],
+                ],
+            ],
+            $resolved['x-alias'],
+        );
+    }
+
+    #[Test]
+    public function resolves_schema_with_ref_as_pattern_property_name(): void
+    {
+        // `patternProperties` has the same shape as `properties` (dict of
+        // schemas keyed by arbitrary strings). The same context guard applies.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'PatternHolder' => [
+                        'type' => 'object',
+                        'patternProperties' => [
+                            '$ref' => ['type' => 'string'],
+                        ],
+                    ],
+                ],
+            ],
+            'x-alias' => ['$ref' => '#/components/schemas/PatternHolder'],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame(
+            [
+                'type' => 'object',
+                'patternProperties' => [
+                    '$ref' => ['type' => 'string'],
+                ],
+            ],
+            $resolved['x-alias'],
+        );
+    }
+
+    #[Test]
+    public function resolves_ref_as_additional_properties_schema(): void
+    {
+        // `additionalProperties` holds a single schema, not a dict of schemas,
+        // so a $ref directly under it is a legitimate Reference Object and
+        // must still resolve. Pins that `additionalProperties` is deliberately
+        // excluded from the property-name guard.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Pet' => ['type' => 'object', 'required' => ['id']],
+                ],
+            ],
+            'x-alias' => [
+                'type' => 'object',
+                'additionalProperties' => ['$ref' => '#/components/schemas/Pet'],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame(
+            ['type' => 'object', 'required' => ['id']],
+            $resolved['x-alias']['additionalProperties'],
+        );
+    }
+
+    #[Test]
+    public function resolves_nested_ref_as_property_name_inside_all_of(): void
+    {
+        // Pins that the property-name guard applies exactly at the children
+        // of properties/patternProperties, not at every descendant. A sibling
+        // $ref at a deeper schema level (inside allOf, here) must still
+        // resolve as a Reference Object.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Label' => ['type' => 'string'],
+                    'Holder' => [
+                        'allOf' => [
+                            [
+                                'type' => 'object',
+                                'properties' => [
+                                    '$ref' => ['type' => 'string'],
+                                    'label' => ['$ref' => '#/components/schemas/Label'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+            'x-alias' => ['$ref' => '#/components/schemas/Holder'],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame(
+            [
+                'allOf' => [
+                    [
+                        'type' => 'object',
+                        'properties' => [
+                            '$ref' => ['type' => 'string'],
+                            'label' => ['type' => 'string'],
+                        ],
+                    ],
+                ],
+            ],
+            $resolved['x-alias'],
+        );
+    }
+
+    #[Test]
+    public function throws_on_malformed_ref_as_value_of_ref_property(): void
+    {
+        // The property-name guard resets exactly one level deep. When a
+        // `properties.$ref` entry's VALUE is itself a malformed Reference
+        // Object (non-string $ref), the resolver must still throw — otherwise
+        // the one-level reset would widen into a broader silent-pass hole.
+        $spec = [
+            'x-holder' => [
+                'properties' => [
+                    '$ref' => [
+                        '$ref' => ['not', 'a', 'string'],
+                    ],
+                ],
+            ],
+        ];
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Invalid $ref');
+
+        OpenApiRefResolver::resolve($spec);
+    }
 }
