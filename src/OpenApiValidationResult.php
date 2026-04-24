@@ -37,6 +37,16 @@ final class OpenApiValidationResult
      * `non-empty-array` surfaces empty-literal callers in PHPStan; the
      * runtime guard covers consumers without static analysis.
      *
+     * Contract note: only literal emptiness (`$errors === []`) is rejected.
+     * Vacuous string entries such as `['']`, `['   ']`, or `['', '']` are
+     * NOT rejected — the caller is responsible for emitting meaningful,
+     * non-empty error messages. This keeps the guard cheap and avoids
+     * `trim()`-based heuristics whose correctness depends on validator
+     * output conventions (e.g. whether multi-line error messages may
+     * legitimately begin with whitespace). If a future validator is
+     * observed to emit whitespace-only errors in practice, tightening
+     * this guard (e.g. rejecting all-blank arrays) can be reconsidered.
+     *
      * @param non-empty-array<string> $errors
      *
      * @throws InvalidArgumentException when $errors is empty
