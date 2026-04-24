@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use PHPUnit\Runner\Extension\Facade;
 use PHPUnit\Runner\Extension\ParameterCollection;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
 
@@ -127,6 +128,85 @@ class OpenApiCoverageExtensionTest extends TestCase
         $this->assertStringContainsString('FATAL OpenAPI spec error', $contents);
         $this->assertStringContainsString('refs-unresolvable', $contents);
         $this->assertStringContainsString('Unresolvable $ref', $contents);
+    }
+
+    #[Test]
+    public function bootstrap_throws_for_malformed_json_spec(): void
+    {
+        // Pre-PR catch-all demoted malformed JSON to a stderr WARNING, which
+        // is functionally the same silent-pass hole as the $ref case issue
+        // #79 set out to close. Pin the fatal treatment so it cannot regress.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'malformed-json',
+        ]);
+
+        try {
+            $extension->setupExtension($this->stubFacade(), $parameters, null);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::MalformedJson, $e->reason);
+        }
+
+        $this->assertStringContainsString('FATAL', $this->readStderr());
+    }
+
+    #[Test]
+    public function bootstrap_throws_when_base_path_not_configured(): void
+    {
+        // Omitting spec_base_path is a misconfiguration, not a missing file —
+        // previously bundled into the warn-and-continue bucket via the broad
+        // RuntimeException catch. Treat as fatal so users see their mistake.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'specs' => 'refs-valid',
+        ]);
+
+        try {
+            $extension->setupExtension($this->stubFacade(), $parameters, null);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::BasePathNotConfigured, $e->reason);
+        }
+    }
+
+    #[Test]
+    public function bootstrap_continues_past_missing_spec_to_load_valid_ones(): void
+    {
+        // A stale entry in `specs=` should not block the rest of the list
+        // from being eager-loaded. Pins the warn-and-continue semantics that
+        // differentiate SpecFileNotFoundException from the fatal paths.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'does-not-exist,refs-valid',
+        ]);
+
+        $extension->setupExtension($this->stubFacade(), $parameters, null);
+
+        $this->assertStringContainsString("WARNING: Skipping spec 'does-not-exist'", $this->readStderr());
+        // refs-valid must have loaded cleanly — its content is cached.
+        $spec = OpenApiSpecLoader::load('refs-valid');
+        $this->assertSame('Refs valid', $spec['info']['title']);
+    }
+
+    #[Test]
+    public function bootstrap_hard_fails_even_when_earlier_specs_are_valid(): void
+    {
+        // Order-independence: the loop must reach and trip on the broken spec
+        // even if a good spec ran first. A future early-return on "first
+        // successful load" refactor would be caught here.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'refs-valid,refs-unresolvable',
+        ]);
+
+        $this->expectException(InvalidOpenApiSpecException::class);
+        $this->expectExceptionMessage('Unresolvable $ref');
+
+        $extension->setupExtension($this->stubFacade(), $parameters, null);
     }
 
     private function readStderr(): string

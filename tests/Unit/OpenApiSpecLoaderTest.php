@@ -6,9 +6,10 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\SpecFileNotFoundException;
 
 use function file_put_contents;
 use function mkdir;
@@ -59,10 +60,13 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function get_base_path_throws_when_not_configured(): void
     {
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('OpenApiSpecLoader base path not configured');
-
-        OpenApiSpecLoader::getBasePath();
+        try {
+            OpenApiSpecLoader::getBasePath();
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::BasePathNotConfigured, $e->reason);
+            $this->assertStringContainsString('OpenApiSpecLoader base path not configured', $e->getMessage());
+        }
     }
 
     #[Test]
@@ -95,10 +99,14 @@ class OpenApiSpecLoaderTest extends TestCase
     {
         OpenApiSpecLoader::configure('/nonexistent/path');
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('OpenAPI bundled spec not found');
-
-        OpenApiSpecLoader::load('nonexistent');
+        try {
+            OpenApiSpecLoader::load('nonexistent');
+            $this->fail('expected SpecFileNotFoundException');
+        } catch (SpecFileNotFoundException $e) {
+            $this->assertSame('nonexistent', $e->specName);
+            $this->assertSame('/nonexistent/path', $e->basePath);
+            $this->assertStringContainsString('OpenAPI bundled spec not found', $e->getMessage());
+        }
     }
 
     #[Test]
@@ -110,7 +118,7 @@ class OpenApiSpecLoaderTest extends TestCase
 
         $this->assertSame([], OpenApiSpecLoader::getStripPrefixes());
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         OpenApiSpecLoader::getBasePath();
     }
 
@@ -196,10 +204,17 @@ class OpenApiSpecLoaderTest extends TestCase
         $fixturesPath = __DIR__ . '/../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
-        $this->expectException(InvalidOpenApiSpecException::class);
-        $this->expectExceptionMessage('Unresolvable $ref');
-
-        OpenApiSpecLoader::load('refs-unresolvable');
+        try {
+            OpenApiSpecLoader::load('refs-unresolvable');
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::UnresolvableRef, $e->reason);
+            // Loader re-wraps resolver throws with the spec name it knows;
+            // pins that wrap so consumers can surface the spec in diagnostics.
+            $this->assertSame('refs-unresolvable', $e->specName);
+            $this->assertSame('#/components/schemas/DoesNotExist', $e->ref);
+            $this->assertStringContainsString('Unresolvable $ref', $e->getMessage());
+        }
     }
 
     #[Test]
@@ -350,10 +365,14 @@ class OpenApiSpecLoaderTest extends TestCase
         $fixturesPath = __DIR__ . '/../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('Failed to parse YAML');
-
-        OpenApiSpecLoader::load('malformed-yaml');
+        try {
+            OpenApiSpecLoader::load('malformed-yaml');
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::MalformedYaml, $e->reason);
+            $this->assertSame('malformed-yaml', $e->specName);
+            $this->assertStringContainsString('Failed to parse YAML', $e->getMessage());
+        }
     }
 
     #[Test]
@@ -362,10 +381,14 @@ class OpenApiSpecLoaderTest extends TestCase
         $fixturesPath = __DIR__ . '/../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('YAML OpenAPI spec must decode to a mapping');
-
-        OpenApiSpecLoader::load('non-array-root');
+        try {
+            OpenApiSpecLoader::load('non-array-root');
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::NonMappingRoot, $e->reason);
+            $this->assertSame('non-array-root', $e->specName);
+            $this->assertStringContainsString('YAML OpenAPI spec must decode to a mapping', $e->getMessage());
+        }
     }
 
     #[Test]
@@ -374,10 +397,14 @@ class OpenApiSpecLoaderTest extends TestCase
         $fixturesPath = __DIR__ . '/../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('JSON OpenAPI spec must decode to a mapping');
-
-        OpenApiSpecLoader::load('non-array-json-root');
+        try {
+            OpenApiSpecLoader::load('non-array-json-root');
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::NonMappingRoot, $e->reason);
+            $this->assertSame('non-array-json-root', $e->specName);
+            $this->assertStringContainsString('JSON OpenAPI spec must decode to a mapping', $e->getMessage());
+        }
     }
 
     #[Test]
@@ -386,11 +413,14 @@ class OpenApiSpecLoaderTest extends TestCase
         $fixturesPath = __DIR__ . '/../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('Failed to parse JSON OpenAPI spec');
-        $this->expectExceptionMessage('malformed-json');
-
-        OpenApiSpecLoader::load('malformed-json');
+        try {
+            OpenApiSpecLoader::load('malformed-json');
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::MalformedJson, $e->reason);
+            $this->assertSame('malformed-json', $e->specName);
+            $this->assertStringContainsString('Failed to parse JSON OpenAPI spec', $e->getMessage());
+        }
     }
 
     #[Test]
@@ -400,11 +430,14 @@ class OpenApiSpecLoaderTest extends TestCase
         OpenApiSpecLoader::configure($fixturesPath);
         OpenApiSpecLoader::overrideYamlAvailabilityForTesting(false);
 
-        $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('symfony/yaml');
-        $this->expectExceptionMessage('composer require');
-
-        OpenApiSpecLoader::load('petstore-yaml');
+        try {
+            OpenApiSpecLoader::load('petstore-yaml');
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::YamlLibraryMissing, $e->reason);
+            $this->assertStringContainsString('symfony/yaml', $e->getMessage());
+            $this->assertStringContainsString('composer require', $e->getMessage());
+        }
     }
 
     #[Test]
@@ -414,8 +447,8 @@ class OpenApiSpecLoaderTest extends TestCase
 
         try {
             OpenApiSpecLoader::load('nowhere');
-            $this->fail('expected RuntimeException');
-        } catch (RuntimeException $e) {
+            $this->fail('expected SpecFileNotFoundException');
+        } catch (SpecFileNotFoundException $e) {
             $message = $e->getMessage();
             $this->assertStringContainsString('.json', $message);
             $this->assertStringContainsString('.yaml', $message);

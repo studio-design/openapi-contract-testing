@@ -7,7 +7,6 @@ namespace Studio\OpenApiContractTesting;
 use const JSON_THROW_ON_ERROR;
 
 use JsonException;
-use RuntimeException;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
@@ -58,7 +57,8 @@ final class OpenApiSpecLoader
     public static function getBasePath(): string
     {
         if (self::$basePath === null) {
-            throw new RuntimeException(
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::BasePathNotConfigured,
                 'OpenApiSpecLoader base path not configured. '
                 . 'Call OpenApiSpecLoader::configure() or set spec_base_path in PHPUnit extension parameters.',
             );
@@ -83,12 +83,24 @@ final class OpenApiSpecLoader
         ['path' => $path, 'extension' => $extension] = self::resolveSpecFile($specName);
 
         $decoded = match ($extension) {
-            'json' => self::decodeJsonSpec($path),
-            'yaml', 'yml' => self::decodeYamlSpec($path),
-            default => throw new RuntimeException("Unsupported spec extension: .{$extension}"),
+            'json' => self::decodeJsonSpec($path, $specName),
+            'yaml', 'yml' => self::decodeYamlSpec($path, $specName),
+            default => throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::UnsupportedExtension,
+                "Unsupported spec extension: .{$extension}",
+                specName: $specName,
+            ),
         };
 
-        $resolved = OpenApiRefResolver::resolve($decoded);
+        try {
+            $resolved = OpenApiRefResolver::resolve($decoded);
+        } catch (InvalidOpenApiSpecException $e) {
+            // The resolver is stateless and therefore cannot know which spec
+            // produced the throw. Re-wrap once so consumers (e.g. the coverage
+            // extension) can surface the spec name in diagnostics without
+            // having to correlate against the call site.
+            throw $e->withSpecName($specName);
+        }
         self::$cache[$specName] = $resolved;
 
         return $resolved;
@@ -141,40 +153,52 @@ final class OpenApiSpecLoader
             }
         }
 
-        throw new RuntimeException(sprintf(
-            'OpenAPI bundled spec not found: %s/%s (tried extensions: %s). '
-            . "Run 'cd openapi && npm run bundle' to generate a JSON bundle, "
-            . 'or place a .yaml / .yml source file alongside.',
-            $basePath,
+        throw new SpecFileNotFoundException(
             $specName,
-            '.' . implode(', .', self::SEARCH_EXTENSIONS),
-        ));
+            $basePath,
+            sprintf(
+                'OpenAPI bundled spec not found: %s/%s (tried extensions: %s). '
+                . "Run 'cd openapi && npm run bundle' to generate a JSON bundle, "
+                . 'or place a .yaml / .yml source file alongside.',
+                $basePath,
+                $specName,
+                '.' . implode(', .', self::SEARCH_EXTENSIONS),
+            ),
+        );
     }
 
     /** @return array<string, mixed> */
-    private static function decodeJsonSpec(string $path): array
+    private static function decodeJsonSpec(string $path, string $specName): array
     {
         $content = file_get_contents($path);
         if ($content === false) {
-            throw new RuntimeException("Failed to read OpenAPI spec: {$path}");
+            // I/O failure after resolveSpecFile() already confirmed the file
+            // exists is practically always a permissions / concurrent-unlink
+            // issue — treat the file as effectively missing.
+            throw new SpecFileNotFoundException(
+                $specName,
+                self::getBasePath(),
+                "Failed to read OpenAPI spec: {$path}",
+            );
         }
 
         try {
             $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
-            throw new RuntimeException(
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::MalformedJson,
                 "Failed to parse JSON OpenAPI spec: {$path}. {$e->getMessage()}",
-                0,
-                $e,
+                specName: $specName,
+                previous: $e,
             );
         }
 
         if (!is_array($decoded)) {
-            throw new RuntimeException(sprintf(
-                'JSON OpenAPI spec must decode to a mapping (got %s): %s',
-                get_debug_type($decoded),
-                $path,
-            ));
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::NonMappingRoot,
+                sprintf('JSON OpenAPI spec must decode to a mapping (got %s): %s', get_debug_type($decoded), $path),
+                specName: $specName,
+            );
         }
 
         /** @var array<string, mixed> $decoded */
@@ -182,12 +206,14 @@ final class OpenApiSpecLoader
     }
 
     /** @return array<string, mixed> */
-    private static function decodeYamlSpec(string $path): array
+    private static function decodeYamlSpec(string $path, string $specName): array
     {
         if (!self::isYamlLibraryAvailable()) {
-            throw new RuntimeException(
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::YamlLibraryMissing,
                 'Loading YAML OpenAPI specs requires symfony/yaml. '
                 . 'Install it via: composer require --dev symfony/yaml',
+                specName: $specName,
             );
         }
 
@@ -196,19 +222,20 @@ final class OpenApiSpecLoader
         try {
             $decoded = Yaml::parseFile($path);
         } catch (ParseException $e) {
-            throw new RuntimeException(
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::MalformedYaml,
                 "Failed to parse YAML OpenAPI spec: {$path}. {$e->getMessage()}",
-                0,
-                $e,
+                specName: $specName,
+                previous: $e,
             );
         }
 
         if (!is_array($decoded)) {
-            throw new RuntimeException(sprintf(
-                'YAML OpenAPI spec must decode to a mapping (got %s): %s',
-                get_debug_type($decoded),
-                $path,
-            ));
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::NonMappingRoot,
+                sprintf('YAML OpenAPI spec must decode to a mapping (got %s): %s', get_debug_type($decoded), $path),
+                specName: $specName,
+            );
         }
 
         /** @var array<string, mixed> $decoded */
