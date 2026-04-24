@@ -11,6 +11,7 @@ use Studio\OpenApiContractTesting\Validation\Request\QueryParameterValidator;
 use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Request\SecurityValidator;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
+use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
 
 use function array_keys;
 use function strtolower;
@@ -95,13 +96,25 @@ final class OpenApiRequestValidator
         // are surfaced only once.
         $collected = ParameterCollector::collect($method, $matchedPath, $pathSpec, $operation);
 
+        // Each sub-validator is wrapped in ValidatorErrorBoundary::safely() so a
+        // RuntimeException thrown from one (typically an opis/json-schema
+        // SchemaException via body validation — e.g. InvalidKeywordException from a
+        // malformed `pattern` keyword, or UnresolvedReferenceException from a $ref
+        // the loader couldn't resolve) is converted to an error string instead of
+        // aborting the orchestrator and discarding errors already collected from
+        // sibling validators. \LogicException and \Error still bubble so programmer
+        // bugs are not silently downgraded to "just another contract error".
+        //
+        // The boundary is per-sub-validator and permissive: a capture at one stage
+        // does NOT short-circuit later stages — every sub-validator still runs so
+        // a single test run surfaces as much contract drift as possible.
         $errors = [
             ...$collected->specErrors,
-            ...$this->pathValidator->validate($method, $matchedPath, $collected->parameters, $pathVariables, $version),
-            ...$this->queryValidator->validate($method, $matchedPath, $collected->parameters, $queryParams, $version),
-            ...$this->headerValidator->validate($method, $matchedPath, $collected->parameters, $headers, $version),
-            ...$this->securityValidator->validate($method, $matchedPath, $spec, $operation, $headers, $queryParams, $cookies),
-            ...$this->bodyValidator->validate($specName, $method, $matchedPath, $operation, $requestBody, $contentType, $version),
+            ...ValidatorErrorBoundary::safely('path', $specName, $method, $matchedPath, fn(): array => $this->pathValidator->validate($method, $matchedPath, $collected->parameters, $pathVariables, $version)),
+            ...ValidatorErrorBoundary::safely('query', $specName, $method, $matchedPath, fn(): array => $this->queryValidator->validate($method, $matchedPath, $collected->parameters, $queryParams, $version)),
+            ...ValidatorErrorBoundary::safely('header', $specName, $method, $matchedPath, fn(): array => $this->headerValidator->validate($method, $matchedPath, $collected->parameters, $headers, $version)),
+            ...ValidatorErrorBoundary::safely('security', $specName, $method, $matchedPath, fn(): array => $this->securityValidator->validate($method, $matchedPath, $spec, $operation, $headers, $queryParams, $cookies)),
+            ...ValidatorErrorBoundary::safely('request-body', $specName, $method, $matchedPath, fn(): array => $this->bodyValidator->validate($specName, $method, $matchedPath, $operation, $requestBody, $contentType, $version)),
         ];
 
         if ($errors === []) {

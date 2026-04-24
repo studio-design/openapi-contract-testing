@@ -7,6 +7,7 @@ namespace Studio\OpenApiContractTesting;
 use InvalidArgumentException;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
+use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
 
 use function array_keys;
 use function preg_last_error_msg;
@@ -109,15 +110,27 @@ final class OpenApiResponseValidator
         /** @var array<string, array<string, mixed>> $content */
         $content = $responseSpec['content'];
 
-        $errors = $this->bodyValidator->validate(
+        // ValidatorErrorBoundary::safely() converts a RuntimeException thrown from
+        // body validation (e.g. opis/json-schema SchemaException — InvalidKeywordException,
+        // UnresolvedReferenceException, ...) into an error-string entry rather than
+        // letting it abort the orchestrator. Preserves observability symmetry with
+        // OpenApiRequestValidator. \LogicException and \Error still bubble so
+        // programmer bugs are not masked.
+        $errors = ValidatorErrorBoundary::safely(
+            'response-body',
             $specName,
             $method,
             $matchedPath,
-            $statusCode,
-            $content,
-            $responseBody,
-            $responseContentType,
-            $version,
+            fn(): array => $this->bodyValidator->validate(
+                $specName,
+                $method,
+                $matchedPath,
+                $statusCode,
+                $content,
+                $responseBody,
+                $responseContentType,
+                $version,
+            ),
         );
 
         if ($errors === []) {
