@@ -81,6 +81,44 @@
                 }
             }
         },
+        "/scalar-content-schema": {
+            "post": {
+                "summary": "content[mediaType].schema is a scalar (not an object)",
+                "operationId": "scalarContentSchema",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": "this should have been an object"
+                        }
+                    }
+                },
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
+        "/null-content-schema": {
+            "post": {
+                "summary": "content[mediaType].schema is null (explicitly absent value)",
+                "operationId": "nullContentSchema",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": null
+                        }
+                    }
+                },
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
         "/path-scalar-parameter/{id}": {
             "parameters": [
                 "this should have been an object"

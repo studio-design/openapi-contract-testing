@@ -443,6 +443,53 @@ class OpenApiRequestValidatorTest extends TestCase
         $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
     }
 
+    #[Test]
+    public function scalar_content_media_type_schema_returns_failure(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'POST',
+            '/scalar-content-schema',
+            [],
+            [],
+            ['foo' => 'bar'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'requestBody.content[\"application/json\"].schema'",
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+    }
+
+    /**
+     * Locks in the `array_key_exists` vs `isset` choice in the guard. If a
+     * future refactor swaps to `isset`, `schema: null` would silently fall
+     * through the downstream presence check and accept any request body —
+     * the exact silent failure this guard exists to prevent.
+     */
+    #[Test]
+    public function null_content_media_type_schema_returns_failure(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'POST',
+            '/null-content-schema',
+            [],
+            [],
+            ['foo' => 'bar'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'requestBody.content[\"application/json\"].schema'",
+            $result->errors()[0],
+        );
+    }
+
     // ========================================
     // Constructor validation (mirrors response validator)
     // ========================================
