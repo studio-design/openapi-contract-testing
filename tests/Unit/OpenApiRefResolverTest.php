@@ -503,6 +503,42 @@ class OpenApiRefResolverTest extends TestCase
     }
 
     #[Test]
+    public function throws_on_unresolvable_ref_under_non_json_media_type(): void
+    {
+        // Regression for issue #63: a broken $ref under a non-JSON media type
+        // (application/xml, text/plain, ...) must surface at load time just
+        // like one under application/json. The resolver walks every node, so
+        // media-type keys are irrelevant — this test pins that invariant so a
+        // future "skip non-JSON branches" optimization cannot silently mask
+        // unresolvable refs.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Pet' => ['type' => 'object'],
+                ],
+            ],
+            'paths' => [
+                '/x' => [
+                    'post' => [
+                        'requestBody' => [
+                            'content' => [
+                                'application/xml' => [
+                                    'schema' => ['$ref' => '#/components/schemas/DoesNotExist'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Unresolvable $ref');
+
+        OpenApiRefResolver::resolve($spec);
+    }
+
+    #[Test]
     public function throws_on_non_string_ref(): void
     {
         $spec = [
@@ -646,5 +682,47 @@ class OpenApiRefResolverTest extends TestCase
         $expected = ['type' => 'object', 'properties' => ['id' => ['type' => 'integer']]];
         $this->assertSame($expected, $resolved['paths']['/a']['get']['responses']['200']['content']['application/json']['schema']);
         $this->assertSame($expected, $resolved['paths']['/b']['get']['responses']['200']['content']['application/json']['schema']);
+    }
+
+    #[Test]
+    public function resolves_refs_across_mixed_json_and_non_json_content(): void
+    {
+        // Regression for issue #63: when a single requestBody declares both a
+        // JSON and a non-JSON media type, every $ref under either key must be
+        // resolved. The original concern was foreach insertion order inside
+        // the validator; PR #77 moved ref handling to the loader, so the same
+        // guarantee now lives here. Pinning it prevents a future "resolve only
+        // the first JSON-compatible branch" optimization from silently
+        // leaving non-JSON refs untouched.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Pet' => ['type' => 'object', 'required' => ['name']],
+                ],
+            ],
+            'paths' => [
+                '/pets' => [
+                    'post' => [
+                        'requestBody' => [
+                            'content' => [
+                                'application/json' => [
+                                    'schema' => ['$ref' => '#/components/schemas/Pet'],
+                                ],
+                                'application/xml' => [
+                                    'schema' => ['$ref' => '#/components/schemas/Pet'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $expectedSchema = ['type' => 'object', 'required' => ['name']];
+        $content = $resolved['paths']['/pets']['post']['requestBody']['content'];
+        $this->assertSame($expectedSchema, $content['application/json']['schema']);
+        $this->assertSame($expectedSchema, $content['application/xml']['schema']);
     }
 }
