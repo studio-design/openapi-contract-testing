@@ -1,0 +1,8 @@
+openapi: 3.0.3
+info:
+  title: "Broken
+  version: 1.0.0
+paths:
+  /v1/pets:
+    get:
+      summary: Missing quote above causes a parse error
