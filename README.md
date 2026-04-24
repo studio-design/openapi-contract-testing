@@ -400,7 +400,7 @@ Three scopes are available:
 
 - `withoutValidation()` — skip both request and response validation
 - `withoutResponseValidation()` — skip response validation only
-- `withoutRequestValidation()` — skip request validation only (forward-looking hook; request validation itself is not yet implemented)
+- `withoutRequestValidation()` — skip request validation only (active when `auto_validate_request` is on)
 
 Notes:
 
@@ -441,7 +441,54 @@ Notes:
 - **One HTTP call**: same consumption model as `withoutValidation()`. The codes are consumed on the next auto-assert attempt and reset, so the next call falls back to the config-level set.
 - **Auto-assert only**. Explicit `assertResponseMatchesOpenApiSchema()` calls ignore per-request codes — explicit calls are the user's direct intent.
 - **Chainable**: returns `$this`. Multiple chained calls accumulate (`$this->skipResponseCode(404)->skipResponseCode(503)` registers both).
-- `withoutRequestValidation()` currently has no observable effect because request validation has not landed yet — the method exists so tests can adopt the intended API surface today without a later rewrite.
+
+### Auto-validate every request
+
+Request-side contract drift (missing query params, body-shape divergence, absent security headers) goes undetected unless the test explicitly checks for it. Enable `auto_validate_request` to run `OpenApiRequestValidator` against every request Laravel's HTTP helpers dispatch:
+
+```php
+// config/openapi-contract-testing.php
+return [
+    'default_spec'               => 'front',
+    'auto_validate_request'      => true,
+    'auto_inject_dummy_bearer'   => true, // optional — see below
+];
+```
+
+Validation covers path / query / header parameters, request body (JSON Schema), and security schemes. Failures raise a PHPUnit assertion error from inside the HTTP call, exactly like `auto_assert`.
+
+Notes:
+
+- Independent of `auto_assert` — either side can be enabled on its own. Both default to `false` for backward compatibility.
+- `withoutRequestValidation()` and `#[SkipOpenApi]` both opt a single call (or a whole test) out of request validation, with the same per-request semantics already documented for response-side auto-assert.
+- `auto_validate_request` accepts boolean-compatible values (`"true"`, `"1"`, etc.) like `auto_assert`. Unrecognized values fail the test loudly.
+- Coverage is recorded for every matched request path, so enabling auto-validate-request without auto-assert still lights up your coverage report.
+
+#### Auto-inject dummy bearer
+
+When `auto_validate_request=true`, endpoints whose spec declares `bearerAuth` fail the security check unless the test supplies an `Authorization: Bearer …` header. For test suites that authenticate via `actingAs()` or middleware bypass — and therefore never set the header — set `auto_inject_dummy_bearer=true` to auto-inject `Authorization: Bearer test-token` into the validator's view of the request:
+
+```php
+class SecureEndpointTest extends TestCase
+{
+    use ValidatesOpenApiSchema;
+
+    public function test_secure_endpoint(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        // No header set, but auto-inject lets request validation pass.
+        $this->get('/v1/secure/bearer')->assertOk();
+    }
+}
+```
+
+Notes:
+
+- **View-only rewrite**: the Symfony `Request` itself is not modified; Laravel has already dispatched by the time the trait runs. The inject exists purely to prevent the security check from false-failing.
+- **Bearer only**: `apiKey` and `oauth2` endpoints are not affected (the header name for `apiKey` is arbitrary per spec; `oauth2` is classified as unsupported in phase 1 anyway).
+- **Never overrides user values**: if the test already set an `Authorization` header (in any case), the user's value wins.
+- **Requires `auto_validate_request=true`** — the inject is a sub-feature of request validation. Setting the inject flag alone has no effect.
 
 ## Coverage Report
 
