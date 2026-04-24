@@ -100,6 +100,25 @@
                 }
             }
         },
+        "/null-content-schema": {
+            "post": {
+                "summary": "content[mediaType].schema is null (explicitly absent value)",
+                "operationId": "nullContentSchema",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": null
+                        }
+                    }
+                },
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
         "/path-scalar-parameter/{id}": {
             "parameters": [
                 "this should have been an object"
