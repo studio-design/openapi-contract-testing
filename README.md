@@ -163,7 +163,7 @@ Resolution priority (highest to lowest) — the first match wins:
 | 3 | `openApiSpec()` method override          | Class-specific spec without the attribute (e.g. dynamically chosen at runtime) |
 | 4 | `config('openapi-contract-testing.default_spec')` | Project-wide default set once in `config/openapi-contract-testing.php` |
 
-Concrete example where all four layers are populated:
+Concrete example where all four layers are populated (class name differs from the earlier `MixedApiTest` example so both snippets can coexist in one project):
 
 ```php
 use Studio\OpenApiContractTesting\OpenApiSpec;
@@ -171,7 +171,7 @@ use Studio\OpenApiContractTesting\OpenApiSpec;
 // config/openapi-contract-testing.php → ['default_spec' => 'front']   (layer 4)
 
 #[OpenApiSpec('admin')]                                             // layer 2
-class MixedApiTest extends TestCase
+class AllLayersPriorityTest extends TestCase
 {
     use ValidatesOpenApiSchema;
 

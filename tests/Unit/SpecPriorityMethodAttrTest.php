@@ -16,9 +16,9 @@ require_once __DIR__ . '/../Helpers/LaravelConfigMock.php';
  * Priority row 1 of 4: method-level #[OpenApiSpec] wins over every lower layer.
  *
  * All four priority layers are populated with distinct `from-<layer>` markers;
- * the assertion proves the method attribute is chosen. Pairs with
- * SpecPriorityClassAttrTest, SpecPriorityOverrideTest, and SpecPriorityConfigTest
- * — together they cover the table in issue #51.
+ * the assertion proves the method attribute is chosen. Together with the other
+ * `SpecPriority*Test` cases, this covers each row of the resolution priority
+ * table (see the Resolution priority section in README).
  */
 #[OpenApiSpec('from-class-attr')]
 class SpecPriorityMethodAttrTest extends TestCase
