@@ -7,6 +7,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
 use function file_put_contents;
@@ -171,7 +172,7 @@ class OpenApiSpecLoaderTest extends TestCase
         $fixturesPath = __DIR__ . '/../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('Circular $ref');
 
         OpenApiSpecLoader::load('refs-circular');
@@ -183,7 +184,7 @@ class OpenApiSpecLoaderTest extends TestCase
         $fixturesPath = __DIR__ . '/../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('External $ref');
 
         OpenApiSpecLoader::load('refs-external');
@@ -195,7 +196,7 @@ class OpenApiSpecLoaderTest extends TestCase
         $fixturesPath = __DIR__ . '/../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('Unresolvable $ref');
 
         OpenApiSpecLoader::load('refs-unresolvable');
@@ -230,13 +231,13 @@ class OpenApiSpecLoaderTest extends TestCase
 
         try {
             OpenApiSpecLoader::load('refs-unresolvable');
-            $this->fail('expected RuntimeException');
-        } catch (RuntimeException) {
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException) {
             // Expected — next load must re-attempt from disk, not return a
             // partially-resolved array captured before the throw.
         }
 
-        $this->expectException(RuntimeException::class);
+        $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('Unresolvable $ref');
         OpenApiSpecLoader::load('refs-unresolvable');
     }
@@ -249,7 +250,7 @@ class OpenApiSpecLoaderTest extends TestCase
 
         try {
             OpenApiSpecLoader::load('refs-circular');
-        } catch (RuntimeException) {
+        } catch (InvalidOpenApiSpecException) {
             // Swallow so we can verify a different spec still loads afterwards.
         }
 

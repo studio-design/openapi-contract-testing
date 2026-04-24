@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
-use RuntimeException;
-
 use function array_key_exists;
 use function explode;
 use function get_debug_type;
@@ -24,8 +22,9 @@ final class OpenApiRefResolver
     /**
      * Resolve all internal `$ref` entries in the spec in place and return the
      * same array. External, circular, unresolvable, malformed, and root refs
-     * all throw `RuntimeException` so users get one actionable error at load
-     * time instead of a cryptic opis failure surfacing deep inside validation.
+     * all throw `InvalidOpenApiSpecException` so users get one actionable
+     * error at load time instead of a cryptic opis failure surfacing deep
+     * inside validation.
      *
      * The input array is mutated: on a successful resolve the returned value
      * is the same array with `$ref` nodes substituted. On throw, the partially
@@ -36,7 +35,7 @@ final class OpenApiRefResolver
      *
      * @return array<string, mixed>
      *
-     * @throws RuntimeException on external / circular / unresolvable / malformed refs
+     * @throws InvalidOpenApiSpecException on external / circular / unresolvable / malformed refs
      */
     public static function resolve(array $spec): array
     {
@@ -63,7 +62,7 @@ final class OpenApiRefResolver
             $ref = $node['$ref'];
 
             if (!is_string($ref)) {
-                throw new RuntimeException(sprintf(
+                throw new InvalidOpenApiSpecException(sprintf(
                     'Invalid $ref: expected string, got %s',
                     get_debug_type($ref),
                 ));
@@ -74,18 +73,18 @@ final class OpenApiRefResolver
                 // which triggers unbounded recursion before cycle detection
                 // can help. Reject with a specific message so the author
                 // doesn't chase a confusing "Circular" error.
-                throw new RuntimeException('Invalid $ref: root pointer "' . $ref . '" is not a reference to a definition');
+                throw new InvalidOpenApiSpecException('Invalid $ref: root pointer "' . $ref . '" is not a reference to a definition');
             }
 
             if (!str_starts_with($ref, '#/')) {
                 if (str_starts_with($ref, '#')) {
-                    throw new RuntimeException(sprintf(
+                    throw new InvalidOpenApiSpecException(sprintf(
                         'Invalid $ref: bare fragment %s is not a JSON Pointer (expected "#/..." form)',
                         $ref,
                     ));
                 }
 
-                throw new RuntimeException(sprintf(
+                throw new InvalidOpenApiSpecException(sprintf(
                     'External $ref is not supported: %s. Only internal refs (#/...) are resolved; '
                     . 'bundle external files with a tool like `redocly bundle` before loading.',
                     $ref,
@@ -93,7 +92,7 @@ final class OpenApiRefResolver
             }
 
             if (in_array($ref, $chain, true)) {
-                throw new RuntimeException(sprintf(
+                throw new InvalidOpenApiSpecException(sprintf(
                     'Circular $ref detected: %s',
                     implode(' -> ', [...$chain, $ref]),
                 ));
@@ -101,11 +100,11 @@ final class OpenApiRefResolver
 
             [$found, $target] = self::lookup($ref, $root);
             if (!$found) {
-                throw new RuntimeException(sprintf('Unresolvable $ref: target not found for %s', $ref));
+                throw new InvalidOpenApiSpecException(sprintf('Unresolvable $ref: target not found for %s', $ref));
             }
 
             if (!is_array($target)) {
-                throw new RuntimeException(sprintf(
+                throw new InvalidOpenApiSpecException(sprintf(
                     '$ref target is not an object: %s points to a %s value',
                     $ref,
                     get_debug_type($target),

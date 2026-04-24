@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\PHPUnit;
 
 use const FILE_APPEND;
+use const PHP_EOL;
 use const STDERR;
 
 use PHPUnit\Event\TestRunner\ExecutionFinished;
@@ -14,6 +15,7 @@ use PHPUnit\Runner\Extension\Facade;
 use PHPUnit\Runner\Extension\ParameterCollection;
 use PHPUnit\TextUI\Configuration\Configuration;
 use RuntimeException;
+use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
@@ -27,8 +29,58 @@ use function str_starts_with;
 
 final class OpenApiCoverageExtension implements Extension
 {
+    /**
+     * Test-only override for STDERR writes. null means "use STDERR".
+     *
+     * @var null|resource
+     */
+    private static $stderrOverride;
+
+    /**
+     * Redirect STDERR writes to a test-supplied stream. Pass null to restore.
+     *
+     * @param null|resource $stream
+     *
+     * @internal
+     */
+    public static function overrideStderrForTesting($stream): void
+    {
+        self::$stderrOverride = $stream;
+    }
+
+    /**
+     * @internal exposed so the anonymous subscriber class can reuse the stream override.
+     */
+    public static function writeStderr(string $message): void
+    {
+        fwrite(self::$stderrOverride ?? STDERR, $message);
+    }
+
     /** @phpcsSuppress SlevomatCodingStandard.Functions.UnusedParameter.UnusedParameter */
     public function bootstrap(Configuration $configuration, Facade $facade, ParameterCollection $parameters): void
+    {
+        try {
+            $this->setupExtension($facade, $parameters, getenv('GITHUB_STEP_SUMMARY') ?: null);
+        } catch (InvalidOpenApiSpecException) {
+            // setupExtension() has already written a FATAL line to stderr and
+            // (if GITHUB_STEP_SUMMARY is set) appended a fatal block to it.
+            // PHPUnit's ExtensionBootstrapper::bootstrap() swallows Throwable
+            // and converts it to testRunnerTriggeredPhpunitWarning, which does
+            // not fail the run unless consumers also set failOnPhpunitWarning.
+            // Relying on that flag would re-open the exact silent-pass hole
+            // this extension exists to close, so force a non-zero exit here.
+            exit(1);
+        }
+    }
+
+    /**
+     * Exposed for testing: accepts the injectable parts of bootstrap without
+     * requiring a real PHPUnit Configuration (which is a final readonly class
+     * with a 150-arg constructor and cannot reasonably be stubbed).
+     *
+     * @internal
+     */
+    public function setupExtension(Facade $facade, ParameterCollection $parameters, ?string $githubSummaryPath): void
     {
         if ($parameters->has('spec_base_path')) {
             $basePath = $parameters->get('spec_base_path');
@@ -49,6 +101,24 @@ final class OpenApiCoverageExtension implements Extension
             $specs = array_map('trim', explode(',', $parameters->get('specs')));
         }
 
+        // Eager-load every registered spec so $ref resolution failures surface
+        // at PHPUnit bootstrap (hard fail) rather than being silently swallowed
+        // when a test happens not to exercise the broken spec. File-not-found
+        // and other non-ref RuntimeExceptions keep the legacy warn-and-continue
+        // behavior so a stale entry in `specs=` doesn't block unrelated work.
+        foreach ($specs as $spec) {
+            try {
+                OpenApiSpecLoader::load($spec);
+            } catch (InvalidOpenApiSpecException $e) {
+                self::writeStderr("[OpenAPI Coverage] FATAL: Invalid OpenAPI spec '{$spec}': {$e->getMessage()}\n");
+                self::appendGithubStepSummaryFatalBlock($githubSummaryPath, $spec, $e->getMessage());
+
+                throw $e;
+            } catch (RuntimeException $e) {
+                self::writeStderr("[OpenAPI Coverage] WARNING: Skipping spec '{$spec}': {$e->getMessage()}\n");
+            }
+        }
+
         $outputFile = null;
         if ($parameters->has('output_file')) {
             $outputFile = $parameters->get('output_file');
@@ -60,8 +130,6 @@ final class OpenApiCoverageExtension implements Extension
         $consoleOutput = ConsoleOutput::resolve(
             $parameters->has('console_output') ? $parameters->get('console_output') : null,
         );
-
-        $githubSummaryPath = getenv('GITHUB_STEP_SUMMARY') ?: null;
 
         $facade->registerSubscriber(new class ($specs, $outputFile, $consoleOutput, $githubSummaryPath) implements ExecutionFinishedSubscriber {
             /**
@@ -125,8 +193,15 @@ final class OpenApiCoverageExtension implements Extension
                 foreach ($this->specs as $spec) {
                     try {
                         $results[$spec] = OpenApiCoverageTracker::computeCoverage($spec);
+                    } catch (InvalidOpenApiSpecException $e) {
+                        // Defensive: bootstrap eager-load should have already
+                        // aborted the run. Surface the error prominently if a
+                        // later cache eviction or spec edit somehow revived it.
+                        OpenApiCoverageExtension::writeStderr("[OpenAPI Coverage] FATAL: Invalid OpenAPI spec '{$spec}': {$e->getMessage()}\n");
+
+                        throw $e;
                     } catch (RuntimeException $e) {
-                        fwrite(STDERR, "[OpenAPI Coverage] WARNING: Skipping spec '{$spec}': {$e->getMessage()}\n");
+                        OpenApiCoverageExtension::writeStderr("[OpenAPI Coverage] WARNING: Skipping spec '{$spec}': {$e->getMessage()}\n");
 
                         continue;
                     }
@@ -153,7 +228,7 @@ final class OpenApiCoverageExtension implements Extension
                     $written = file_put_contents($this->outputFile, $markdown);
 
                     if ($written === false) {
-                        fwrite(STDERR, "[OpenAPI Coverage] WARNING: Failed to write Markdown report to {$this->outputFile}\n");
+                        OpenApiCoverageExtension::writeStderr("[OpenAPI Coverage] WARNING: Failed to write Markdown report to {$this->outputFile}\n");
                     }
                 }
 
@@ -161,10 +236,31 @@ final class OpenApiCoverageExtension implements Extension
                     $written = file_put_contents($this->githubSummaryPath, $markdown . "\n", FILE_APPEND);
 
                     if ($written === false) {
-                        fwrite(STDERR, "[OpenAPI Coverage] WARNING: Failed to append Markdown report to GITHUB_STEP_SUMMARY ({$this->githubSummaryPath})\n");
+                        OpenApiCoverageExtension::writeStderr("[OpenAPI Coverage] WARNING: Failed to append Markdown report to GITHUB_STEP_SUMMARY ({$this->githubSummaryPath})\n");
                     }
                 }
             }
         });
+    }
+
+    private static function appendGithubStepSummaryFatalBlock(?string $path, string $spec, string $reason): void
+    {
+        if ($path === null) {
+            return;
+        }
+
+        $block = '## :rotating_light: FATAL OpenAPI spec error' . PHP_EOL
+            . PHP_EOL
+            . "Spec `{$spec}` could not be loaded and the test run was aborted." . PHP_EOL
+            . PHP_EOL
+            . '```' . PHP_EOL
+            . $reason . PHP_EOL
+            . '```' . PHP_EOL
+            . PHP_EOL;
+
+        $written = file_put_contents($path, $block, FILE_APPEND);
+        if ($written === false) {
+            self::writeStderr("[OpenAPI Coverage] WARNING: Failed to append FATAL block to GITHUB_STEP_SUMMARY ({$path})\n");
+        }
     }
 }
