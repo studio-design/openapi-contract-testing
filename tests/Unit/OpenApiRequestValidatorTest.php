@@ -7,6 +7,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
@@ -1744,6 +1745,76 @@ class OpenApiRequestValidatorTest extends TestCase
 
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString('[header.X-Api-Key]', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function header_params_nested_array_value_surfaces_hard_error(): void
+    {
+        // Caller-side bug: a header value that is itself a nested associative array.
+        // Without a scalar guard the single-element unwrap would hand an `array` off
+        // to opis, producing a cryptic JSON-Pointer type-mismatch message. Surface
+        // the caller bug directly instead.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => ['nested' => ['deeper' => 'value']]],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[header.X-Request-ID]', $message);
+        $this->assertStringContainsString('scalar', $message);
+        $this->assertStringContainsString('array', $message);
+    }
+
+    #[Test]
+    public function header_params_object_value_surfaces_hard_error(): void
+    {
+        // Objects never reach the is_array unwrap branch, so they flow straight to
+        // coercion without a guard. The scalar check must catch them too, with a
+        // type label specific enough to identify the caller-side class.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => new stdClass()],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[header.X-Request-ID]', $message);
+        $this->assertStringContainsString('scalar', $message);
+        $this->assertStringContainsString('stdClass', $message);
+    }
+
+    #[Test]
+    public function header_params_single_element_array_containing_array_surfaces_hard_error(): void
+    {
+        // Laravel HeaderBag shape with a single entry, but the entry itself is an
+        // array — the unwrap produces an array, not a scalar. Asserts the guard
+        // runs *after* unwrap (the other branch).
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => [['deeper' => 'value']]],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[header.X-Request-ID]', $message);
+        $this->assertStringContainsString('scalar', $message);
+        $this->assertStringContainsString('array', $message);
     }
 
     #[Test]

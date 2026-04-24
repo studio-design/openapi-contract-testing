@@ -27,6 +27,7 @@ use function in_array;
 use function is_array;
 use function is_int;
 use function is_numeric;
+use function is_scalar;
 use function is_string;
 use function preg_match;
 use function rawurldecode;
@@ -595,6 +596,20 @@ final class OpenApiRequestValidator
                 }
 
                 $rawValue = $rawValue[array_key_first($rawValue)];
+            }
+
+            // Guard against caller-side bugs that smuggle a non-scalar (nested array,
+            // object, resource) past the unwrap. Without this, opis would report a
+            // JSON-Pointer type mismatch that hides the real cause — that the caller
+            // never produced a header-shaped value in the first place.
+            if (!is_scalar($rawValue) && $rawValue !== null) {
+                $errors[] = sprintf(
+                    '[header.%s] value must be a scalar (string|int|bool|float); got %s.',
+                    $name,
+                    get_debug_type($rawValue),
+                );
+
+                continue;
             }
 
             $coerced = self::coercePrimitiveValue($rawValue, $schema);
