@@ -7,6 +7,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
@@ -180,6 +181,42 @@ class ValidatesOpenApiSchemaAutoInjectBearerTest extends TestCase
         $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::GET, '/v1/secure/bearer');
 
         $this->assertArrayNotHasKey('petstore-3.0', OpenApiCoverageTracker::getCovered());
+    }
+
+    #[Test]
+    public function inject_flag_with_non_bool_value_fails_loudly(): void
+    {
+        // Same three-way coercion that auto_assert / auto_validate_request
+        // use — wiring regression guard for the shared resolveBoolConfig()
+        // helper. A typo'd env value must not silently disable the feature.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_inject_dummy_bearer'] = 'yolo';
+
+        $request = Request::create('/v1/secure/bearer', 'GET');
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('auto_inject_dummy_bearer must be a boolean');
+
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::GET, '/v1/secure/bearer');
+    }
+
+    #[Test]
+    public function inject_swallows_runtime_exception_from_spec_load_and_lets_validator_surface_it(): void
+    {
+        // RuntimeException from OpenApiSpecLoader::load() (unreadable file,
+        // malformed JSON, unsupported extension, etc.) is caught inside
+        // shouldAutoInjectDummyBearer() so the inject path returns false.
+        // The validator loads the same spec immediately after and re-raises
+        // the error — confirming "one failure, not a cascade" doctrine.
+        // Uses a spec name with no corresponding file to trigger the real
+        // RuntimeException path.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = 'nonexistent-spec-name';
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_inject_dummy_bearer'] = true;
+
+        $request = Request::create('/v1/secure/bearer', 'GET');
+
+        $this->expectException(RuntimeException::class);
+
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::GET, '/v1/secure/bearer');
     }
 
     #[Test]

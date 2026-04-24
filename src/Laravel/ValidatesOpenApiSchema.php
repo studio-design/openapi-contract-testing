@@ -13,6 +13,7 @@ use const STDERR;
 use Illuminate\Testing\TestResponse;
 use InvalidArgumentException;
 use JsonException;
+use RuntimeException;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiPathMatcher;
@@ -26,7 +27,6 @@ use Studio\OpenApiContractTesting\Validation\Request\SecuritySchemeIntrospector;
 use Studio\OpenApiContractTesting\Validation\Support\HeaderNormalizer;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Throwable;
 use WeakMap;
 
 use function array_merge;
@@ -52,8 +52,9 @@ trait ValidatesOpenApiSchema
 
     // Fixed dummy token injected when auto_inject_dummy_bearer is enabled and
     // the endpoint spec requires bearerAuth but the test did not set one.
-    // Issue #69 scoped the value to a fixed string; making it configurable is
-    // a deliberate separate discussion.
+    // A fixed string is sufficient because the value is never evaluated by
+    // anything downstream — the inject only silences the spec's security
+    // check. Making it configurable is a deliberate separate discussion.
     private const DUMMY_BEARER_TOKEN = 'test-token';
     private static ?OpenApiResponseValidator $cachedValidator = null;
     private static ?int $cachedMaxErrors = null;
@@ -531,10 +532,16 @@ trait ValidatesOpenApiSchema
 
     /**
      * Decide whether to rewrite the validator's view of the request with a
-     * dummy Authorization header. True only when: (1) the feature is enabled
-     * AND auto-validate-request is on, (2) no Authorization is already present,
-     * and (3) the matched operation's spec security accepts a bearer
-     * credential (see {@see SecuritySchemeIntrospector}).
+     * dummy Authorization header. True only when: (1) the inject feature is
+     * enabled, (2) no Authorization is already present (any case), and (3)
+     * the matched operation's spec security accepts a bearer credential (see
+     * {@see SecuritySchemeIntrospector}).
+     *
+     * Callers are expected to have already confirmed auto-validate-request
+     * is on — this method is reached only from {@see self::maybeAutoValidateOpenApiRequest()},
+     * which gates on that flag. Calling it from a new code path without the
+     * same gate would silently load the spec even when request validation is
+     * disabled.
      *
      * Errors walking the spec (unreadable file, no matching path, missing
      * operation) fall through as "do not inject" — the validator will surface
@@ -560,7 +567,13 @@ trait ValidatesOpenApiSchema
 
         try {
             $spec = OpenApiSpecLoader::load($specName);
-        } catch (Throwable) {
+        } catch (RuntimeException) {
+            // OpenApiSpecLoader throws RuntimeException on unreadable files,
+            // malformed JSON/YAML, unsupported extensions, etc. Swallow those
+            // and decline to inject — the validator re-loads the same spec
+            // immediately after and will surface the real error. Broader
+            // Throwable (TypeError, AssertionError, ...) keeps bubbling so
+            // programmer bugs are not silently downgraded to "missing auth".
             return false;
         }
 

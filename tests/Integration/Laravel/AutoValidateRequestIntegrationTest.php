@@ -138,6 +138,43 @@ class AutoValidateRequestIntegrationTest extends TestCase
         $this->get('/v1/secure/bearer');
     }
 
+    #[Test]
+    public function both_hooks_enabled_runs_request_before_response_and_records_coverage_once(): void
+    {
+        // With both auto_assert and auto_validate_request on, the trait must
+        // (1) run request validation first so the skipNextRequestValidation
+        // flag is consumed at the right boundary, (2) record coverage only
+        // once per (spec,method,path) despite both hooks calling the tracker,
+        // and (3) both validations must see a consistent request/response.
+        config()->set('openapi-contract-testing.auto_assert', true);
+        config()->set('openapi-contract-testing.auto_validate_request', true);
+
+        $response = $this->postJson('/v1/pets', ['name' => 'Buddy']);
+        $response->assertCreated();
+
+        $covered = OpenApiCoverageTracker::getCovered();
+        $this->assertArrayHasKey('petstore-3.0', $covered);
+        $this->assertArrayHasKey('POST /v1/pets', $covered['petstore-3.0']);
+        // Tracker de-dupes by (spec,method,path) — exactly one entry, not two.
+        $this->assertCount(1, $covered['petstore-3.0']);
+    }
+
+    #[Test]
+    public function both_hooks_enabled_request_failure_takes_precedence(): void
+    {
+        // If both hooks are on and the request is invalid, the request-side
+        // assertion fires first (before the response hook runs), so the
+        // surfaced error is the request one. Response drift on the same call
+        // does not override this.
+        config()->set('openapi-contract-testing.auto_assert', true);
+        config()->set('openapi-contract-testing.auto_validate_request', true);
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('OpenAPI request validation failed');
+
+        $this->postJson('/v1/pets', ['not_name' => 'x']);
+    }
+
     /** @return array<int, class-string> */
     protected function getPackageProviders($app): array
     {

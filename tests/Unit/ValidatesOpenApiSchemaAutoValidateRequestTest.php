@@ -278,6 +278,94 @@ class ValidatesOpenApiSchemaAutoValidateRequestTest extends TestCase
         $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::POST, '/does/not/exist');
     }
 
+    #[Test]
+    public function empty_spec_name_fails_loudly_on_request_side(): void
+    {
+        // Mirrors the response-side guard: returning `''` from openApiSpec()
+        // is the misconfigured-defaults case. The trait must shout with an
+        // actionable hint rather than silently skipping validation.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_validate_request'] = true;
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = '';
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('openApiSpec() must return a non-empty spec name');
+
+        $this->maybeAutoValidateOpenApiRequest(
+            $this->makeJsonRequest('POST', '/v1/pets', ['name' => 'ok']),
+            HttpMethod::POST,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
+    public function malformed_json_body_with_content_type_fails_with_clear_message(): void
+    {
+        // json_decode with JSON_THROW_ON_ERROR raises JsonException on broken
+        // bodies; the trait converts it to a PHPUnit failure so the test
+        // author sees what happened instead of a mid-stack exception.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_validate_request'] = true;
+
+        $request = Request::create(
+            '/v1/pets',
+            'POST',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/json'],
+            '{not valid json',
+        );
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('Request body could not be parsed as JSON');
+
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::POST, '/v1/pets');
+    }
+
+    #[Test]
+    public function malformed_json_body_without_content_type_adds_hint(): void
+    {
+        // Missing Content-Type on a non-empty body falls through to the JSON
+        // decode path (documented lenient behavior). If it fails, the error
+        // message appends a hint that the header was absent so the user
+        // knows to set it. Symfony's Request::create auto-sets Content-Type
+        // to x-www-form-urlencoded when a body is provided, so we explicitly
+        // clear it to reach the "empty Content-Type" branch of extractRequestBody().
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_validate_request'] = true;
+
+        $request = Request::create('/v1/pets', 'POST', [], [], [], [], '{not valid json');
+        $request->headers->remove('Content-Type');
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('no Content-Type header was present on the request');
+
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::POST, '/v1/pets');
+    }
+
+    #[Test]
+    public function non_json_content_type_body_is_treated_as_null(): void
+    {
+        // Regression guard: a form-urlencoded body must not be handed to the
+        // validator as raw content — it returns `null` so the validator's
+        // body-schema check runs against "no JSON body" and surfaces the
+        // right error rather than a coercion one.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_validate_request'] = true;
+
+        $request = Request::create(
+            '/v1/pets',
+            'POST',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/x-www-form-urlencoded'],
+            'name=fido',
+        );
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('OpenAPI request validation failed');
+
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::POST, '/v1/pets');
+    }
+
     /**
      * @param array<string, mixed> $body
      */
