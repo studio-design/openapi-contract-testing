@@ -1124,6 +1124,17 @@ final class OpenApiRequestValidator
                     "Malformed 'requestBody.content[\"{$mediaType}\"]' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
                 ];
             }
+
+            // `schema: "oops"` (or any other non-array scalar) would slip past the
+            // downstream `isset(...['schema'])` presence check and reach
+            // OpenApiSchemaConverter::convert() as a scalar, producing a confusing
+            // TypeError instead of a spec-level error. array_key_exists rather than
+            // isset so an explicit `schema: null` is also flagged.
+            if (array_key_exists('schema', $mediaTypeSpec) && !is_array($mediaTypeSpec['schema'])) {
+                return [
+                    "Malformed 'requestBody.content[\"{$mediaType}\"].schema' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
+                ];
+            }
         }
 
         // When the actual request Content-Type is provided, handle content negotiation:

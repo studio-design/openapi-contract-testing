@@ -443,6 +443,27 @@ class OpenApiRequestValidatorTest extends TestCase
         $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
     }
 
+    #[Test]
+    public function scalar_content_media_type_schema_returns_failure(): void
+    {
+        $result = $this->validator->validate(
+            'malformed',
+            'POST',
+            '/scalar-content-schema',
+            [],
+            [],
+            ['foo' => 'bar'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'requestBody.content[\"application/json\"].schema'",
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+    }
+
     // ========================================
     // Constructor validation (mirrors response validator)
     // ========================================
