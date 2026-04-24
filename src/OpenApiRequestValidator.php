@@ -386,7 +386,7 @@ final class OpenApiRequestValidator
             }
 
             $coerced = $this->coerceQueryValue($queryParams[$name], $schema);
-            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version);
+            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
 
             $schemaObject = self::toObject($jsonSchema);
             $dataObject = self::toObject($coerced);
@@ -471,7 +471,7 @@ final class OpenApiRequestValidator
 
             $decoded = rawurldecode($pathVariables[$name]);
             $coerced = self::coercePrimitiveValue($decoded, $schema);
-            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version);
+            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
 
             $schemaObject = self::toObject($jsonSchema);
             $dataObject = self::toObject($coerced);
@@ -602,7 +602,7 @@ final class OpenApiRequestValidator
             }
 
             $coerced = self::coercePrimitiveValue($rawValue, $schema);
-            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version);
+            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
 
             $schemaObject = self::toObject($jsonSchema);
             $dataObject = self::toObject($coerced);
@@ -1175,7 +1175,7 @@ final class OpenApiRequestValidator
 
         /** @var array<string, mixed> $schema */
         $schema = $content[$jsonContentType]['schema'];
-        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version);
+        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
 
         $schemaObject = self::toObject($jsonSchema);
         $dataObject = self::toObject($requestBody);

@@ -2623,4 +2623,47 @@ class OpenApiRequestValidatorTest extends TestCase
 
         $this->assertTrue($result->isValid(), $result->errorMessage());
     }
+
+    // ========================================
+    // readOnly / writeOnly enforcement (issue #52)
+    // ========================================
+
+    #[Test]
+    public function request_body_containing_read_only_property_fails_validation(): void
+    {
+        // The spec marks `id` as readOnly — clients must not send it. Pre-#52 the
+        // converter stripped the marker and this request silently passed.
+        $result = $this->validator->validate(
+            'readwrite',
+            'POST',
+            '/users',
+            [],
+            [],
+            ['id' => 99, 'name' => 'Ada', 'password' => 'hunter2'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid(), 'readOnly id should be rejected in request');
+        $errorMessage = implode(' | ', $result->errors());
+        $this->assertStringContainsString('id', $errorMessage);
+    }
+
+    #[Test]
+    public function request_body_without_read_only_property_passes_even_when_spec_lists_it_required(): void
+    {
+        // The spec lists `id` in `required`, but since it is readOnly the request
+        // side must treat it as absent — a compliant request that omits it
+        // should validate.
+        $result = $this->validator->validate(
+            'readwrite',
+            'POST',
+            '/users',
+            [],
+            [],
+            ['name' => 'Ada', 'password' => 'hunter2'],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid(), 'errors: ' . implode(' | ', $result->errors()));
+    }
 }
