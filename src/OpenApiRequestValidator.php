@@ -1023,12 +1023,15 @@ final class OpenApiRequestValidator
                 // would let a spec author's `required: true` pass every request;
                 // surface as a hard spec error and drop the entry so downstream
                 // per-request validation stays OAS-compliant (no runtime effect).
+                // The `in === 'header'` guard keeps a non-header parameter that
+                // coincidentally shares a reserved name (e.g. `in: query, name: accept`)
+                // out of scope — only in:header entries are governed by §4.7.12.1.
                 if ($param['in'] === 'header' && in_array(strtolower($param['name']), self::RESERVED_HEADER_NAMES, true)) {
                     $errors[] = sprintf(
-                        '[header.%s] reserved header declared for %s %s; per OpenAPI 3.x §4.7.12.1, `Accept`/`Content-Type`/`Authorization` parameter definitions SHALL be ignored. Remove the declaration or use `content` / security schemes instead.',
-                        $param['name'],
+                        'Reserved in:header parameter declared for %s %s: [header.%s] — per OpenAPI 3.x §4.7.12.1, `Accept`/`Content-Type`/`Authorization` parameter definitions SHALL be ignored. Remove the declaration or use `content` / security schemes instead.',
                         $method,
                         $matchedPath,
+                        $param['name'],
                     );
 
                     continue;

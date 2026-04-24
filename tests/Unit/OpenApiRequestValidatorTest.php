@@ -1665,8 +1665,7 @@ class OpenApiRequestValidatorTest extends TestCase
         // the caller are handled by content negotiation / security schemes, not
         // parameter validation. When the spec declares none of them (the normal
         // case), runtime values at any casing must pass through untouched — this
-        // pins that the per-request side stays OAS-compliant. The spec-side
-        // detection is covered by reserved_header_declaration_case_insensitive_in_spec.
+        // pins that the per-request side stays OAS-compliant.
         $result = $this->validator->validate(
             'petstore-3.0',
             'GET',
@@ -1775,8 +1774,8 @@ class OpenApiRequestValidatorTest extends TestCase
     #[Test]
     public function reserved_header_declaration_content_type_optional_surfaces_spec_error(): void
     {
-        // `required` is absent (implicit false). The detection is name-based, not
-        // required-based — any reserved declaration is a spec defect regardless.
+        // Detection is name-based, not required-based — `required` is absent
+        // (implicit false) yet the declaration is still a spec defect.
         $result = $this->validator->validate(
             'malformed',
             'GET',
@@ -1791,13 +1790,12 @@ class OpenApiRequestValidatorTest extends TestCase
         $message = $result->errorMessage();
         $this->assertStringContainsString('[header.Content-Type]', $message);
         $this->assertStringContainsString('SHALL be ignored', $message);
+        $this->assertStringContainsString('§4.7.12.1', $message);
     }
 
     #[Test]
     public function reserved_header_declaration_authorization_required_surfaces_spec_error(): void
     {
-        // Reserved-name detection applies to Authorization too — security schemes
-        // are the intended mechanism, so an in:header declaration is a spec defect.
         $result = $this->validator->validate(
             'malformed',
             'GET',
@@ -1812,15 +1810,14 @@ class OpenApiRequestValidatorTest extends TestCase
         $message = $result->errorMessage();
         $this->assertStringContainsString('[header.Authorization]', $message);
         $this->assertStringContainsString('SHALL be ignored', $message);
+        $this->assertStringContainsString('§4.7.12.1', $message);
     }
 
     #[Test]
     public function reserved_header_declaration_case_insensitive_in_spec(): void
     {
-        // Spec author may write `ACCEPT` / `accept` / any other casing. HTTP header
-        // names are case-insensitive so detection must be too — and the error
-        // message preserves the author's original casing so the offending entry
-        // is easy to grep in their spec file.
+        // The error message preserves the author's original casing so the
+        // offending entry is easy to grep in their spec file.
         $result = $this->validator->validate(
             'malformed',
             'GET',
@@ -1835,14 +1832,12 @@ class OpenApiRequestValidatorTest extends TestCase
         $message = $result->errorMessage();
         $this->assertStringContainsString('[header.ACCEPT]', $message);
         $this->assertStringContainsString('SHALL be ignored', $message);
+        $this->assertStringContainsString('§4.7.12.1', $message);
     }
 
     #[Test]
     public function reserved_header_declaration_multiple_entries_surface_multiple_errors(): void
     {
-        // Two reserved entries in the same operation should each surface their own
-        // error — pinning that the spec-error loop does not short-circuit after
-        // the first detection.
         $result = $this->validator->validate(
             'malformed',
             'GET',
@@ -1855,10 +1850,36 @@ class OpenApiRequestValidatorTest extends TestCase
 
         $this->assertFalse($result->isValid());
         $errors = $result->errors();
+        // Pin the total so a future bug producing a duplicate or extra error is caught.
+        $this->assertCount(2, $errors, 'expected exactly 2 errors, got: ' . implode(' | ', $errors));
         $accept = array_filter($errors, static fn(string $e): bool => str_contains($e, '[header.Accept]'));
         $contentType = array_filter($errors, static fn(string $e): bool => str_contains($e, '[header.Content-Type]'));
         $this->assertCount(1, $accept, 'expected one [header.Accept] error, got: ' . implode(' | ', $errors));
         $this->assertCount(1, $contentType, 'expected one [header.Content-Type] error, got: ' . implode(' | ', $errors));
+    }
+
+    #[Test]
+    public function reserved_header_declaration_path_level_surfaces_spec_error(): void
+    {
+        // Path-level `parameters` are a separate source from operation-level
+        // `parameters` in collectParameters. Pin that reserved-header detection
+        // applies to both — a future refactor that dedupes sources before
+        // detection must not silently drop the path-level case.
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/header-reserved-path-level',
+            [],
+            [],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[header.Authorization]', $message);
+        $this->assertStringContainsString('SHALL be ignored', $message);
+        $this->assertStringContainsString('§4.7.12.1', $message);
     }
 
     #[Test]

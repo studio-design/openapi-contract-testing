@@ -295,6 +295,27 @@
                 }
             }
         },
+        "/header-reserved-path-level": {
+            "parameters": [
+                {
+                    "name": "Authorization",
+                    "in": "header",
+                    "required": true,
+                    "schema": {
+                        "type": "string"
+                    }
+                }
+            ],
+            "get": {
+                "summary": "reserved in:header declared at path-level parameters (not operation-level)",
+                "operationId": "headerReservedPathLevel",
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    }
+                }
+            }
+        },
         "/security-undefined-scheme": {
             "get": {
                 "summary": "security references a scheme not defined in components.securitySchemes",
