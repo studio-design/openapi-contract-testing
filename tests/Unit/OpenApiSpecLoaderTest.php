@@ -6,11 +6,14 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Internal\YamlAvailability;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\SpecFileNotFoundException;
+use Symfony\Component\Yaml\Yaml;
 
+use function class_exists;
 use function file_put_contents;
 use function mkdir;
 use function rmdir;
@@ -428,7 +431,7 @@ class OpenApiSpecLoaderTest extends TestCase
     {
         $fixturesPath = __DIR__ . '/../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
-        OpenApiSpecLoader::overrideYamlAvailabilityForTesting(false);
+        YamlAvailability::overrideForTesting(false);
 
         try {
             OpenApiSpecLoader::load('petstore-yaml');
@@ -438,6 +441,30 @@ class OpenApiSpecLoaderTest extends TestCase
             $this->assertStringContainsString('symfony/yaml', $e->getMessage());
             $this->assertStringContainsString('composer require', $e->getMessage());
         }
+    }
+
+    #[Test]
+    public function reset_clears_yaml_availability_override_to_prevent_leaks_between_tests(): void
+    {
+        YamlAvailability::overrideForTesting(false);
+        $this->assertFalse(
+            YamlAvailability::isAvailable(),
+            'sanity: override(false) should force isAvailable() to false',
+        );
+
+        OpenApiSpecLoader::reset();
+
+        // After reset, the override must be cleared so isAvailable() falls
+        // through to the real class_exists() probe. Compare against the probe
+        // result directly rather than a hard-coded true/false, so this test
+        // stays meaningful even if symfony/yaml ever moves out of require-dev
+        // or the suite is run with --no-dev.
+        $this->assertSame(
+            class_exists(Yaml::class),
+            YamlAvailability::isAvailable(),
+            'OpenApiSpecLoader::reset() must clear the YAML availability override '
+            . 'so it cannot leak into other tests via the shared static state.',
+        );
     }
 
     #[Test]
