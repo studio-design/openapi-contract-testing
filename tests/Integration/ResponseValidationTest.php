@@ -142,6 +142,112 @@ class ResponseValidationTest extends TestCase
     }
 
     #[Test]
+    public function response_500_records_endpoint_as_skipped_only(): void
+    {
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            500,
+            ['anything' => 'goes'],
+        );
+        // Record before asserting isSkipped() — asserting first lets phpstan
+        // narrow the bool to a constant and flag !isSkipped() as always-false.
+        if ($result->matchedPath() !== null) {
+            OpenApiCoverageTracker::record(
+                'petstore-3.0',
+                'GET',
+                $result->matchedPath(),
+                schemaValidated: !$result->isSkipped(),
+            );
+        }
+
+        $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
+
+        $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+        $this->assertContains('GET /v1/pets', $coverage['covered']);
+        $this->assertSame(['GET /v1/pets'], $coverage['skippedOnly']);
+        $this->assertSame(1, $coverage['skippedOnlyCount']);
+    }
+
+    #[Test]
+    public function response_200_then_500_keeps_endpoint_validated(): void
+    {
+        $ok = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            200,
+            ['data' => [['id' => 1, 'name' => 'Fido', 'tag' => null]]],
+        );
+        OpenApiCoverageTracker::record(
+            'petstore-3.0',
+            'GET',
+            $ok->matchedPath() ?? '/v1/pets',
+            schemaValidated: !$ok->isSkipped(),
+        );
+
+        $skip = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            500,
+            ['anything' => 'goes'],
+        );
+        OpenApiCoverageTracker::record(
+            'petstore-3.0',
+            'GET',
+            $skip->matchedPath() ?? '/v1/pets',
+            schemaValidated: !$skip->isSkipped(),
+        );
+
+        $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+        $this->assertContains('GET /v1/pets', $coverage['covered']);
+        $this->assertSame([], $coverage['skippedOnly']);
+        $this->assertSame(0, $coverage['skippedOnlyCount']);
+    }
+
+    #[Test]
+    public function response_500_then_200_keeps_endpoint_validated(): void
+    {
+        // Reverse order of the previous test — monotonic `validated` means
+        // ordering does not matter.
+        $skip = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            500,
+            ['anything' => 'goes'],
+        );
+        OpenApiCoverageTracker::record(
+            'petstore-3.0',
+            'GET',
+            $skip->matchedPath() ?? '/v1/pets',
+            schemaValidated: !$skip->isSkipped(),
+        );
+
+        $ok = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            200,
+            ['data' => [['id' => 1, 'name' => 'Fido', 'tag' => null]]],
+        );
+        OpenApiCoverageTracker::record(
+            'petstore-3.0',
+            'GET',
+            $ok->matchedPath() ?? '/v1/pets',
+            schemaValidated: !$ok->isSkipped(),
+        );
+
+        $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+        $this->assertContains('GET /v1/pets', $coverage['covered']);
+        $this->assertSame([], $coverage['skippedOnly']);
+        $this->assertSame(0, $coverage['skippedOnlyCount']);
+    }
+
+    #[Test]
     public function invalid_response_produces_descriptive_errors(): void
     {
         $result = $this->validator->validate(

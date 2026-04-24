@@ -80,6 +80,25 @@ class ValidatesOpenApiSchemaAutoValidateRequestTest extends TestCase
     }
 
     #[Test]
+    public function request_side_records_as_validated_not_skipped_only(): void
+    {
+        // Guards the default-arg contract at the trait level: a future
+        // refactor that forwards `!isSkipped()` from a request result (or
+        // adds a request-side skip concept) would silently flip every
+        // request-only endpoint to skipped-only without this assertion.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_validate_request'] = true;
+
+        $request = $this->makeJsonRequest('POST', '/v1/pets', ['name' => 'Fido']);
+
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::POST, '/v1/pets');
+
+        $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+        $this->assertContains('POST /v1/pets', $coverage['covered']);
+        $this->assertSame([], $coverage['skippedOnly']);
+        $this->assertSame(0, $coverage['skippedOnlyCount']);
+    }
+
+    #[Test]
     public function auto_validate_request_true_raises_on_invalid_body(): void
     {
         // /v1/pets POST requires `name` per the spec. Sending a body without

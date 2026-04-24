@@ -473,11 +473,15 @@ trait ValidatesOpenApiSchema
         // the endpoint was exercised in a test, not that its body was validated.
         // Note: under auto_assert, this records coverage for every Laravel HTTP
         // call — including responses with no explicit contract-test intent.
+        //
+        // 204 and non-JSON still count as validated; only skip_response_codes
+        // matches (isSkipped() === true) suppress body validation.
         if ($result->matchedPath() !== null) {
             OpenApiCoverageTracker::record(
                 $specName,
                 $resolvedMethod,
                 $result->matchedPath(),
+                schemaValidated: !$result->isSkipped(),
             );
         }
 

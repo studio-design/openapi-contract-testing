@@ -10,21 +10,61 @@ use function in_array;
 use function sort;
 use function strtoupper;
 
+/**
+ * @phpstan-type CoverageResult array{
+ *     covered: string[],
+ *     uncovered: string[],
+ *     total: int,
+ *     coveredCount: int,
+ *     skippedOnly: string[],
+ *     skippedOnlyCount: int,
+ * }
+ */
 final class OpenApiCoverageTracker
 {
-    /** @var array<string, array<string, true>> key: "METHOD /path", grouped by spec name */
+    /**
+     * `validated` is monotonic — once true, a later skipped record does not
+     * demote it — so ordering of observations across a suite does not matter.
+     *
+     * @var array<string, array<string, array{validated: bool, skipped: bool}>>
+     */
     private static array $covered = [];
 
-    public static function record(string $specName, string $method, string $path): void
-    {
+    public static function record(
+        string $specName,
+        string $method,
+        string $path,
+        bool $schemaValidated = true,
+    ): void {
         $key = strtoupper($method) . ' ' . $path;
-        self::$covered[$specName][$key] = true;
+        $entry = self::$covered[$specName][$key] ?? ['validated' => false, 'skipped' => false];
+
+        if ($schemaValidated) {
+            $entry['validated'] = true;
+        } else {
+            $entry['skipped'] = true;
+        }
+
+        self::$covered[$specName][$key] = $entry;
     }
 
-    /** @return array<string, array<string, true>> */
+    /**
+     * Flattens the internal 2-flag entry to `true` to preserve the public
+     * shape. Richer skipped-only data lives on computeCoverage().
+     *
+     * @return array<string, array<string, true>>
+     */
     public static function getCovered(): array
     {
-        return self::$covered;
+        $external = [];
+
+        foreach (self::$covered as $spec => $endpoints) {
+            foreach (array_keys($endpoints) as $endpoint) {
+                $external[$spec][$endpoint] = true;
+            }
+        }
+
+        return $external;
     }
 
     public static function reset(): void
@@ -33,7 +73,7 @@ final class OpenApiCoverageTracker
     }
 
     /**
-     * @return array{covered: string[], uncovered: string[], total: int, coveredCount: int}
+     * @return CoverageResult
      */
     public static function computeCoverage(string $specName): array
     {
@@ -55,10 +95,15 @@ final class OpenApiCoverageTracker
         $coveredSet = self::$covered[$specName] ?? [];
         $covered = [];
         $uncovered = [];
+        $skippedOnly = [];
 
         foreach ($allEndpoints as $endpoint) {
             if (isset($coveredSet[$endpoint])) {
                 $covered[] = $endpoint;
+                $entry = $coveredSet[$endpoint];
+                if ($entry['skipped'] && !$entry['validated']) {
+                    $skippedOnly[] = $endpoint;
+                }
             } else {
                 $uncovered[] = $endpoint;
             }
@@ -69,6 +114,8 @@ final class OpenApiCoverageTracker
             'uncovered' => $uncovered,
             'total' => count($allEndpoints),
             'coveredCount' => count($covered),
+            'skippedOnly' => $skippedOnly,
+            'skippedOnlyCount' => count($skippedOnly),
         ];
     }
 }
