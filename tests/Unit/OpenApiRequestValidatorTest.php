@@ -7,10 +7,13 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
 use function array_filter;
+use function fclose;
+use function fopen;
 use function implode;
 use function str_contains;
 use function strtolower;
@@ -1744,6 +1747,131 @@ class OpenApiRequestValidatorTest extends TestCase
 
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString('[header.X-Api-Key]', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function header_params_associative_single_element_array_surfaces_hard_error(): void
+    {
+        // Caller-side bug: associative single-element array (not a HeaderBag shape).
+        // The unwrap picks the only element via `array_key_first`, which here yields
+        // another array — opis would then emit a cryptic JSON-Pointer type mismatch.
+        // Surface the caller bug directly instead.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => ['nested' => ['deeper' => 'value']]],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[header.X-Request-ID]', $message);
+        $this->assertStringContainsString('scalar', $message);
+        $this->assertStringContainsString('array', $message);
+    }
+
+    #[Test]
+    public function header_params_object_value_surfaces_hard_error(): void
+    {
+        // Objects never reach the is_array unwrap branch, so they flow straight to
+        // the scalar guard. Pins the "direct, no unwrap" path and asserts that
+        // `get_debug_type` surfaces a class name specific enough for callers to
+        // locate the offending producer.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => new stdClass()],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[header.X-Request-ID]', $message);
+        $this->assertStringContainsString('scalar', $message);
+        $this->assertStringContainsString('stdClass', $message);
+    }
+
+    #[Test]
+    public function header_params_list_shaped_single_element_containing_array_surfaces_hard_error(): void
+    {
+        // HeaderBag shape (list-indexed single element) but the element is an
+        // array — the unwrap produces an array. Complements the associative-shape
+        // test above: different caller-supplied input shape, same post-unwrap
+        // guard path.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => [['deeper' => 'value']]],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[header.X-Request-ID]', $message);
+        $this->assertStringContainsString('scalar', $message);
+        $this->assertStringContainsString('array', $message);
+    }
+
+    #[Test]
+    public function header_params_resource_value_surfaces_hard_error(): void
+    {
+        // Completes the non-scalar type matrix (array, object, resource). A future
+        // refactor that narrows the guard to `is_array || is_object` would slip
+        // this case through silently, so it earns its own regression pin.
+        $resource = fopen('php://memory', 'r');
+        $this->assertNotFalse($resource);
+
+        try {
+            $result = $this->validator->validate(
+                'petstore-3.0',
+                'GET',
+                '/v1/reports',
+                [],
+                ['X-Request-ID' => $resource],
+                null,
+                null,
+            );
+        } finally {
+            fclose($resource);
+        }
+
+        $this->assertFalse($result->isValid());
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[header.X-Request-ID]', $message);
+        $this->assertStringContainsString('scalar', $message);
+        $this->assertStringContainsString('resource', $message);
+    }
+
+    #[Test]
+    public function header_params_list_shaped_single_element_null_treated_as_missing(): void
+    {
+        // `['X-Foo' => [null]]` unwraps to `null`. Without a post-unwrap missing
+        // check this would either silently pass against a `nullable` schema or
+        // surface as a `/` type mismatch from opis — both hide the caller-side
+        // shape bug. Mirrors the pre-unwrap `null`/`[]` → missing branch.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/reports',
+            [],
+            ['X-Request-ID' => [null]],
+            null,
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $message = $result->errorMessage();
+        $this->assertStringContainsString('[header.X-Request-ID]', $message);
+        $this->assertStringContainsString('missing', $message);
     }
 
     #[Test]

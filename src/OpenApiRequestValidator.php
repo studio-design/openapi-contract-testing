@@ -27,6 +27,7 @@ use function in_array;
 use function is_array;
 use function is_int;
 use function is_numeric;
+use function is_scalar;
 use function is_string;
 use function preg_match;
 use function rawurldecode;
@@ -595,6 +596,33 @@ final class OpenApiRequestValidator
                 }
 
                 $rawValue = $rawValue[array_key_first($rawValue)];
+            }
+
+            // Mirror the pre-unwrap missing-header branch for the post-unwrap case:
+            // `['X-Foo' => [null]]` is a caller bug shaped identically to an absent
+            // header. Letting it flow to coercion would either silently pass against
+            // a `nullable` schema or surface as a `/` type mismatch from opis — both
+            // hide the root cause.
+            if ($rawValue === null) {
+                if ($required) {
+                    $errors[] = "[header.{$name}] required header is missing.";
+                }
+
+                continue;
+            }
+
+            // Guard against caller-side bugs that smuggle a non-scalar (nested array,
+            // object, resource) past the unwrap. Without this, opis would report a
+            // JSON-Pointer type mismatch that hides the real cause — that the caller
+            // never produced a header-shaped value in the first place.
+            if (!is_scalar($rawValue)) {
+                $errors[] = sprintf(
+                    '[header.%s] value must be a scalar (string|int|bool|float); got %s.',
+                    $name,
+                    get_debug_type($rawValue),
+                );
+
+                continue;
             }
 
             $coerced = self::coercePrimitiveValue($rawValue, $schema);
