@@ -660,8 +660,11 @@ $result->skipReason();   // ?string (non-null when skipped)
 Prefer `outcome()` when you need to distinguish all three states explicitly — PHPStan enforces `match` exhaustiveness, so adding a future outcome cannot silently slip past a caller:
 
 ```php
+use PHPUnit\Framework\AssertionFailedError;
+use Studio\OpenApiContractTesting\OpenApiValidationOutcome;
+
 match ($result->outcome()) {
-    OpenApiValidationOutcome::Success => /* schema matched */,
+    OpenApiValidationOutcome::Success => null, // schema matched
     OpenApiValidationOutcome::Failure => throw new AssertionFailedError($result->errorMessage()),
     OpenApiValidationOutcome::Skipped => logger()->info('skipped', ['reason' => $result->skipReason()]),
 };
