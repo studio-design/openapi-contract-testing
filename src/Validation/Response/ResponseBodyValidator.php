@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Validation\Response;
 
+use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\OpenApiValidationResult;
 use Studio\OpenApiContractTesting\OpenApiVersion;
@@ -23,12 +24,16 @@ final class ResponseBodyValidator
 
     /**
      * Validate the response body against the matched operation's response
-     * entry. Returns an empty list when the body is acceptable (including
-     * no-content responses, non-JSON content types without explicit schema,
-     * and schema-less entries). Hard failures (content-type not defined,
-     * empty body against JSON schema, schema mismatch) are returned as
-     * error strings so the orchestrator can assemble the final
-     * {@see OpenApiValidationResult}.
+     * entry. Returns an empty list when the body is acceptable (non-JSON
+     * content types that are present in the spec, JSON media types with no
+     * `schema` key, and JSON bodies that pass schema validation). Hard
+     * failures (content-type not defined, empty body against a JSON schema,
+     * schema mismatch) are returned as error strings so the orchestrator can
+     * assemble the final {@see OpenApiValidationResult}.
+     *
+     * The 204-style "no content" case is handled upstream in
+     * {@see OpenApiResponseValidator::validate()} — when the response spec
+     * has no `content` key, this validator is never invoked.
      *
      * @param array<string, array<string, mixed>> $content the `responses[$status].content` map
      *
@@ -63,7 +68,7 @@ final class ResponseBodyValidator
                 ];
             }
 
-            // JSON-compatible response: fall through to existing JSON schema validation.
+            // JSON-compatible response: continue to JSON schema validation below.
             // JSON types are treated as interchangeable (e.g. application/vnd.api+json
             // validates against an application/json spec entry) because the schema is
             // the same regardless of the specific JSON media type.
