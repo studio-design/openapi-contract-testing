@@ -124,6 +124,9 @@ final class OpenApiRefResolver
 
         foreach ($node as $key => &$child) {
             if (is_array($child)) {
+                // additionalProperties is intentionally excluded: its value is a single
+                // schema (not a dict of schemas), so a direct $ref under it is a
+                // legitimate Reference Object that must resolve.
                 $childInsidePropertiesMap = $key === 'properties' || $key === 'patternProperties';
                 self::walk($child, $root, $chain, $childInsidePropertiesMap);
             }
