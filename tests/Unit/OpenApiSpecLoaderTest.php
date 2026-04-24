@@ -10,6 +10,10 @@ use RuntimeException;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
 use function file_put_contents;
+use function mkdir;
+use function rmdir;
+use function sys_get_temp_dir;
+use function uniqid;
 use function unlink;
 
 class OpenApiSpecLoaderTest extends TestCase
@@ -312,23 +316,30 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_prefers_json_when_both_json_and_yaml_exist(): void
     {
-        // petstore-3.0 has a .json fixture; drop an inert .yaml beside it for
-        // this test to prove the loader picks JSON first for back-compat.
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
-        $yamlDuplicate = $fixturesPath . '/petstore-3.0.yaml';
-
-        file_put_contents(
-            $yamlDuplicate,
-            "openapi: 3.0.3\ninfo:\n  title: YAML wins (should not happen)\n  version: 1.0.0\npaths: {}\n",
-        );
+        // Write both a .json and a .yaml for the same basename into a scratch
+        // dir so the precedence guarantee in SEARCH_EXTENSIONS is covered
+        // without mutating the shared tests/fixtures directory.
+        $scratchDir = sys_get_temp_dir() . '/openapi-spec-loader-test-' . uniqid('', true);
+        mkdir($scratchDir);
 
         try {
-            OpenApiSpecLoader::configure($fixturesPath);
-            $spec = OpenApiSpecLoader::load('petstore-3.0');
+            file_put_contents(
+                $scratchDir . '/dual.json',
+                '{"openapi":"3.0.3","info":{"title":"JSON wins","version":"1.0.0"},"paths":{}}',
+            );
+            file_put_contents(
+                $scratchDir . '/dual.yaml',
+                "openapi: 3.0.3\ninfo:\n  title: YAML should lose\n  version: 1.0.0\npaths: {}\n",
+            );
 
-            $this->assertSame('Petstore', $spec['info']['title']);
+            OpenApiSpecLoader::configure($scratchDir);
+            $spec = OpenApiSpecLoader::load('dual');
+
+            $this->assertSame('JSON wins', $spec['info']['title']);
         } finally {
-            unlink($yamlDuplicate);
+            @unlink($scratchDir . '/dual.json');
+            @unlink($scratchDir . '/dual.yaml');
+            @rmdir($scratchDir);
         }
     }
 
@@ -354,6 +365,31 @@ class OpenApiSpecLoaderTest extends TestCase
         $this->expectExceptionMessage('YAML OpenAPI spec must decode to a mapping');
 
         OpenApiSpecLoader::load('non-array-root');
+    }
+
+    #[Test]
+    public function load_throws_when_json_root_is_not_an_array(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('JSON OpenAPI spec must decode to a mapping');
+
+        OpenApiSpecLoader::load('non-array-json-root');
+    }
+
+    #[Test]
+    public function load_throws_when_json_is_malformed(): void
+    {
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Failed to parse JSON OpenAPI spec');
+        $this->expectExceptionMessage('malformed-json');
+
+        OpenApiSpecLoader::load('malformed-json');
     }
 
     #[Test]

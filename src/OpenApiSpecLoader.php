@@ -6,14 +6,15 @@ namespace Studio\OpenApiContractTesting;
 
 use const JSON_THROW_ON_ERROR;
 
+use JsonException;
 use RuntimeException;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
-use Throwable;
 
 use function class_exists;
 use function file_exists;
 use function file_get_contents;
+use function get_debug_type;
 use function implode;
 use function is_array;
 use function json_decode;
@@ -22,7 +23,12 @@ use function sprintf;
 
 final class OpenApiSpecLoader
 {
-    /** @var list<string> */
+    /**
+     * Extensions are searched in the order listed; the first hit wins.
+     * JSON is first for back-compat with the pre-existing bundle workflow.
+     *
+     * @var list<string>
+     */
     private const SEARCH_EXTENSIONS = ['json', 'yaml', 'yml'];
     private static ?string $basePath = null;
 
@@ -35,8 +41,6 @@ final class OpenApiSpecLoader
     /**
      * Test-only override for the `symfony/yaml` availability check.
      * null means "ask the real class_exists()". true/false forces the answer.
-     *
-     * @internal
      */
     private static ?bool $yamlAvailableOverride = null;
 
@@ -76,7 +80,7 @@ final class OpenApiSpecLoader
             return self::$cache[$specName];
         }
 
-        [$path, $extension] = self::resolveSpecFile($specName);
+        ['path' => $path, 'extension' => $extension] = self::resolveSpecFile($specName);
 
         $decoded = match ($extension) {
             'json' => self::decodeJsonSpec($path),
@@ -125,7 +129,7 @@ final class OpenApiSpecLoader
         self::$yamlAvailableOverride = $available;
     }
 
-    /** @return array{0: string, 1: string} */
+    /** @return array{path: string, extension: string} */
     private static function resolveSpecFile(string $specName): array
     {
         $basePath = self::getBasePath();
@@ -133,7 +137,7 @@ final class OpenApiSpecLoader
         foreach (self::SEARCH_EXTENSIONS as $extension) {
             $candidate = "{$basePath}/{$specName}.{$extension}";
             if (file_exists($candidate)) {
-                return [$candidate, $extension];
+                return ['path' => $candidate, 'extension' => $extension];
             }
         }
 
@@ -155,12 +159,22 @@ final class OpenApiSpecLoader
             throw new RuntimeException("Failed to read OpenAPI spec: {$path}");
         }
 
-        $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
+        try {
+            $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            throw new RuntimeException(
+                "Failed to parse JSON OpenAPI spec: {$path}. {$e->getMessage()}",
+                0,
+                $e,
+            );
+        }
 
         if (!is_array($decoded)) {
-            throw new RuntimeException(
-                "JSON OpenAPI spec must decode to a mapping (got scalar / null): {$path}",
-            );
+            throw new RuntimeException(sprintf(
+                'JSON OpenAPI spec must decode to a mapping (got %s): %s',
+                get_debug_type($decoded),
+                $path,
+            ));
         }
 
         /** @var array<string, mixed> $decoded */
@@ -177,6 +191,8 @@ final class OpenApiSpecLoader
             );
         }
 
+        // Yaml::parseFile wraps its own I/O failures in ParseException, so a
+        // single catch covers both syntax errors and file-read problems.
         try {
             $decoded = Yaml::parseFile($path);
         } catch (ParseException $e) {
@@ -185,18 +201,14 @@ final class OpenApiSpecLoader
                 0,
                 $e,
             );
-        } catch (Throwable $e) {
-            throw new RuntimeException(
-                "Failed to read YAML OpenAPI spec: {$path}. {$e->getMessage()}",
-                0,
-                $e,
-            );
         }
 
         if (!is_array($decoded)) {
-            throw new RuntimeException(
-                "YAML OpenAPI spec must decode to a mapping (got scalar / null): {$path}",
-            );
+            throw new RuntimeException(sprintf(
+                'YAML OpenAPI spec must decode to a mapping (got %s): %s',
+                get_debug_type($decoded),
+                $path,
+            ));
         }
 
         /** @var array<string, mixed> $decoded */
