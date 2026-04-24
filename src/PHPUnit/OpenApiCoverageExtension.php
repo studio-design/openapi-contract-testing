@@ -94,7 +94,14 @@ final class OpenApiCoverageExtension implements Extension
             }
 
             /**
-             * @return array<string, array{covered: string[], uncovered: string[], total: int, coveredCount: int}>
+             * @return array<string, array{
+             *     covered: string[],
+             *     uncovered: string[],
+             *     total: int,
+             *     coveredCount: int,
+             *     skippedOnly: string[],
+             *     skippedOnlyCount: int,
+             * }>
              */
             private function computeAllResults(): array
             {
@@ -129,7 +136,14 @@ final class OpenApiCoverageExtension implements Extension
             }
 
             /**
-             * @param array<string, array{covered: string[], uncovered: string[], total: int, coveredCount: int}> $results
+             * @param array<string, array{
+             *     covered: string[],
+             *     uncovered: string[],
+             *     total: int,
+             *     coveredCount: int,
+             *     skippedOnly: string[],
+             *     skippedOnlyCount: int,
+             * }> $results
              */
             private function writeMarkdownReport(array $results): void
             {

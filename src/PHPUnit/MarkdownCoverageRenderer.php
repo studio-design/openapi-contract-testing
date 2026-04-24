@@ -4,15 +4,25 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\PHPUnit;
 
+use function array_flip;
 use function count;
 use function implode;
 use function round;
 
 /**
- * @phpstan-type CoverageResult array{covered: string[], uncovered: string[], total: int, coveredCount: int}
+ * @phpstan-type CoverageResult array{
+ *     covered: string[],
+ *     uncovered: string[],
+ *     total: int,
+ *     coveredCount: int,
+ *     skippedOnly: string[],
+ *     skippedOnlyCount: int,
+ * }
  */
 final class MarkdownCoverageRenderer
 {
+    private const SKIPPED_ONLY_NOTE = '> :warning: response body validation skipped (e.g. 5xx default skip) — endpoint was exercised but its body was never checked against the schema.';
+
     /**
      * @param array<string, CoverageResult> $results
      */
@@ -34,11 +44,18 @@ final class MarkdownCoverageRenderer
             $lines[] = "### {$specName} — {$coveredCount}/{$total} endpoints ({$percentage}%)";
             $lines[] = '';
 
+            if ($result['skippedOnlyCount'] > 0) {
+                $lines[] = self::SKIPPED_ONLY_NOTE;
+                $lines[] = '';
+            }
+
             if ($result['covered'] !== []) {
+                $skipSet = array_flip($result['skippedOnly']);
                 $lines[] = '| Status | Endpoint |';
                 $lines[] = '|--------|----------|';
                 foreach ($result['covered'] as $endpoint) {
-                    $lines[] = "| :white_check_mark: | `{$endpoint}` |";
+                    $marker = isset($skipSet[$endpoint]) ? ':warning:' : ':white_check_mark:';
+                    $lines[] = "| {$marker} | `{$endpoint}` |";
                 }
                 $lines[] = '';
             }

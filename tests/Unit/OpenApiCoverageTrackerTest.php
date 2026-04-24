@@ -93,4 +93,78 @@ class OpenApiCoverageTrackerTest extends TestCase
 
         $this->assertSame([], OpenApiCoverageTracker::getCovered());
     }
+
+    #[Test]
+    public function record_defaults_to_schema_validated_true(): void
+    {
+        OpenApiCoverageTracker::record('petstore-3.0', 'GET', '/v1/pets');
+
+        $result = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+
+        $this->assertContains('GET /v1/pets', $result['covered']);
+        $this->assertSame([], $result['skippedOnly']);
+        $this->assertSame(0, $result['skippedOnlyCount']);
+    }
+
+    #[Test]
+    public function record_with_schema_validated_false_marks_skipped_only(): void
+    {
+        OpenApiCoverageTracker::record('petstore-3.0', 'GET', '/v1/pets', schemaValidated: false);
+
+        $result = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+
+        $this->assertContains('GET /v1/pets', $result['covered']);
+        $this->assertSame(['GET /v1/pets'], $result['skippedOnly']);
+        $this->assertSame(1, $result['skippedOnlyCount']);
+    }
+
+    #[Test]
+    public function validated_record_overrides_prior_skipped_record(): void
+    {
+        OpenApiCoverageTracker::record('petstore-3.0', 'GET', '/v1/pets', schemaValidated: false);
+        OpenApiCoverageTracker::record('petstore-3.0', 'GET', '/v1/pets', schemaValidated: true);
+
+        $result = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+
+        $this->assertContains('GET /v1/pets', $result['covered']);
+        $this->assertSame([], $result['skippedOnly']);
+        $this->assertSame(0, $result['skippedOnlyCount']);
+    }
+
+    #[Test]
+    public function skipped_record_does_not_demote_validated_endpoint(): void
+    {
+        OpenApiCoverageTracker::record('petstore-3.0', 'GET', '/v1/pets', schemaValidated: true);
+        OpenApiCoverageTracker::record('petstore-3.0', 'GET', '/v1/pets', schemaValidated: false);
+
+        $result = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+
+        $this->assertContains('GET /v1/pets', $result['covered']);
+        $this->assertSame([], $result['skippedOnly']);
+        $this->assertSame(0, $result['skippedOnlyCount']);
+    }
+
+    #[Test]
+    public function compute_coverage_returns_skipped_only_sorted(): void
+    {
+        OpenApiCoverageTracker::record('petstore-3.0', 'POST', '/v1/pets', schemaValidated: false);
+        OpenApiCoverageTracker::record('petstore-3.0', 'GET', '/v1/pets', schemaValidated: false);
+        OpenApiCoverageTracker::record('petstore-3.0', 'GET', '/v1/pets/{petId}', schemaValidated: true);
+
+        $result = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+
+        $this->assertSame(['GET /v1/pets', 'POST /v1/pets'], $result['skippedOnly']);
+        $this->assertSame(2, $result['skippedOnlyCount']);
+        $this->assertSame(3, $result['coveredCount']);
+    }
+
+    #[Test]
+    public function get_covered_preserves_external_shape(): void
+    {
+        OpenApiCoverageTracker::record('petstore-3.0', 'GET', '/v1/pets', schemaValidated: false);
+
+        $covered = OpenApiCoverageTracker::getCovered();
+
+        $this->assertSame(['petstore-3.0' => ['GET /v1/pets' => true]], $covered);
+    }
 }
