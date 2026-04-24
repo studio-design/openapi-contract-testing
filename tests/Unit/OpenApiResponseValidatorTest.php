@@ -1105,19 +1105,14 @@ class OpenApiResponseValidatorTest extends TestCase
         $this->assertTrue($result->isValid(), 'errors: ' . implode(' | ', $result->errors()));
     }
 
-    // ========================================
-    // Issue #92: per-sub-validator error boundary
-    // ========================================
-
     #[Test]
     public function body_validator_exception_is_captured_as_boundary_error(): void
     {
-        // Regression guard for issue #92 on the response side. The fixture's 200
-        // response schema has a malformed `pattern` ("[unterminated") that opis
-        // rejects at validation time with InvalidKeywordException. Pre-fix, this
-        // aborted the orchestrator; ValidatorErrorBoundary::safely() now returns
-        // it as a [response-body] error entry so the result is a structured
-        // failure rather than an uncaught exception.
+        // Response-side symmetry for the request-side regression guard. The
+        // fixture's 200 response schema carries the same malformed `pattern`
+        // ("[unterminated") that opis rejects with InvalidKeywordException.
+        // Without ValidatorErrorBoundary::safely() this would escape as an
+        // uncaught throw; post-fix it is a structured [response-body] failure.
         $result = $this->validator->validate(
             'body-validator-throws',
             'POST',

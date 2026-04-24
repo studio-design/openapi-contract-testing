@@ -110,10 +110,12 @@ final class OpenApiResponseValidator
         /** @var array<string, array<string, mixed>> $content */
         $content = $responseSpec['content'];
 
-        // ValidatorErrorBoundary::safely() converts an Exception thrown from body
-        // validation (e.g. opis/json-schema SchemaException) into an error-string entry
-        // rather than letting it abort the orchestrator — preserving observability
-        // symmetry with OpenApiRequestValidator. \Error subclasses still bubble.
+        // ValidatorErrorBoundary::safely() converts a RuntimeException thrown from
+        // body validation (e.g. opis/json-schema SchemaException — InvalidKeywordException,
+        // UnresolvedReferenceException, ...) into an error-string entry rather than
+        // letting it abort the orchestrator. Preserves observability symmetry with
+        // OpenApiRequestValidator. \LogicException and \Error still bubble so
+        // programmer bugs are not masked.
         $errors = ValidatorErrorBoundary::safely(
             'response-body',
             $specName,

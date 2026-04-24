@@ -96,11 +96,18 @@ final class OpenApiRequestValidator
         // are surfaced only once.
         $collected = ParameterCollector::collect($method, $matchedPath, $pathSpec, $operation);
 
-        // Each sub-validator is wrapped in ValidatorErrorBoundary::safely() so an
-        // Exception thrown from one (typically opis/json-schema SchemaException via
-        // body validation on a malformed-after-load $ref) is converted to an error
-        // string instead of aborting the orchestrator and discarding already-collected
-        // errors from sibling validators. \Error subclasses still bubble (programmer bugs).
+        // Each sub-validator is wrapped in ValidatorErrorBoundary::safely() so a
+        // RuntimeException thrown from one (typically an opis/json-schema
+        // SchemaException via body validation — e.g. InvalidKeywordException from a
+        // malformed `pattern` keyword, or UnresolvedReferenceException from a $ref
+        // the loader couldn't resolve) is converted to an error string instead of
+        // aborting the orchestrator and discarding errors already collected from
+        // sibling validators. \LogicException and \Error still bubble so programmer
+        // bugs are not silently downgraded to "just another contract error".
+        //
+        // The boundary is per-sub-validator and permissive: a capture at one stage
+        // does NOT short-circuit later stages — every sub-validator still runs so
+        // a single test run surfaces as much contract drift as possible.
         $errors = [
             ...$collected->specErrors,
             ...ValidatorErrorBoundary::safely('path', $specName, $method, $matchedPath, fn(): array => $this->pathValidator->validate($method, $matchedPath, $collected->parameters, $pathVariables, $version)),

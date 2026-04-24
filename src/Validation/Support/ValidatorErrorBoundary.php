@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Validation\Support;
 
-use Exception;
+use RuntimeException;
+use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 
@@ -12,17 +13,28 @@ use function sprintf;
 
 /**
  * Per-sub-validator error boundary used by {@see OpenApiRequestValidator}
- * and {@see OpenApiResponseValidator}. Wraps a
- * single sub-validator call so that an `\Exception` thrown from its internals
- * (typically opis/json-schema's `SchemaException` family — `RuntimeException`
- * descendants like `UnresolvedReferenceException` / `ParseException`) is
- * converted into a standard error-string entry rather than aborting the whole
- * orchestrator and discarding errors already collected from sibling validators.
+ * and {@see OpenApiResponseValidator}. Wraps a single sub-validator call so a
+ * `\RuntimeException` thrown from its internals is converted into a standard
+ * error-string entry rather than aborting the whole orchestrator and
+ * discarding errors already collected from sibling validators.
  *
- * `\Error` subclasses (TypeError, AssertionError, ...) are deliberately NOT
- * caught: those indicate programmer bugs and must keep bubbling so they are
- * not silently downgraded to a contract-validation error. This matches the
- * pattern used in `ValidatesOpenApiSchema::maybeInjectDummyBearer()`.
+ * The catch is intentionally narrowed to `\RuntimeException` rather than the
+ * broader `\Exception`: it covers the practical target — opis/json-schema
+ * exceptions implementing the `SchemaException` **interface** (all current
+ * concrete implementers extend `\RuntimeException`: `ParseException`,
+ * `InvalidKeywordException`, `UnresolvedReferenceException`, ...) — while
+ * keeping `\LogicException` (e.g. `\InvalidArgumentException` thrown by
+ * `Opis\JsonSchema\Validator::validate()` on an invalid schema/URI, or by
+ * our own `SchemaValidatorRunner` on invalid construction arguments) and
+ * `\Error` (TypeError, AssertionError, ...) bubbling. Both of those families
+ * indicate programmer bugs and must not be silently downgraded to a
+ * contract-validation error. Mirrors the narrower catch at
+ * {@see ValidatesOpenApiSchema::shouldAutoInjectDummyBearer()}.
+ *
+ * If the thrown `\RuntimeException` carries a `getPrevious()` chain (opis
+ * wraps lower-level errors), the previous class + message is appended so the
+ * synthetic error line retains the root cause that would otherwise be lost
+ * when the stack trace is discarded.
  */
 final class ValidatorErrorBoundary
 {
@@ -40,15 +52,21 @@ final class ValidatorErrorBoundary
     ): array {
         try {
             return $fn();
-        } catch (Exception $e) {
+        } catch (RuntimeException $e) {
+            $previous = $e->getPrevious();
+            $previousSuffix = $previous !== null
+                ? sprintf(' (caused by %s: %s)', $previous::class, $previous->getMessage())
+                : '';
+
             return [sprintf(
-                "[%s] %s %s in '%s' spec: %s threw: %s",
+                "[%s] %s %s in '%s' spec: %s threw: %s%s",
                 $stage,
                 $method,
                 $matchedPath,
                 $specName,
                 $e::class,
                 $e->getMessage(),
+                $previousSuffix,
             )];
         }
     }
