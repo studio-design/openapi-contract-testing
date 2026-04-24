@@ -5,12 +5,10 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting;
 
 use InvalidArgumentException;
-use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
-use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
+use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 
 use function array_keys;
-use function implode;
 use function preg_last_error_msg;
 use function preg_match;
 use function sprintf;
@@ -27,7 +25,7 @@ final class OpenApiResponseValidator
 
     /** @var array<string, OpenApiPathMatcher> */
     private array $pathMatchers = [];
-    private readonly SchemaValidatorRunner $runner;
+    private readonly ResponseBodyValidator $bodyValidator;
 
     /** @var array<string, string> Raw pattern (as supplied) => anchored pattern ready for preg_match. */
     private readonly array $skipPatterns;
@@ -44,7 +42,7 @@ final class OpenApiResponseValidator
         array $skipResponseCodes = self::DEFAULT_SKIP_RESPONSE_CODES,
     ) {
         $this->skipPatterns = self::compileSkipPatterns($skipResponseCodes);
-        $this->runner = new SchemaValidatorRunner($maxErrors);
+        $this->bodyValidator = new ResponseBodyValidator(new SchemaValidatorRunner($maxErrors));
     }
 
     public function validate(
@@ -111,68 +109,19 @@ final class OpenApiResponseValidator
         /** @var array<string, array<string, mixed>> $content */
         $content = $responseSpec['content'];
 
-        // When the actual response Content-Type is provided, handle content negotiation:
-        // non-JSON types are checked for spec presence only, while JSON-compatible types
-        // fall through to schema validation against the first JSON media type in the spec.
-        if ($responseContentType !== null) {
-            $normalizedType = ContentTypeMatcher::normalizeMediaType($responseContentType);
+        $errors = $this->bodyValidator->validate(
+            $specName,
+            $method,
+            $matchedPath,
+            $statusCode,
+            $content,
+            $responseBody,
+            $responseContentType,
+            $version,
+        );
 
-            if (!ContentTypeMatcher::isJsonContentType($normalizedType)) {
-                // Non-JSON response: check if the content type is defined in the spec.
-                if (ContentTypeMatcher::isContentTypeInSpec($normalizedType, $content)) {
-                    return OpenApiValidationResult::success($matchedPath);
-                }
-
-                $defined = implode(', ', array_keys($content));
-
-                return OpenApiValidationResult::failure([
-                    "Response Content-Type '{$normalizedType}' is not defined for {$method} {$matchedPath} (status {$statusCode}) in '{$specName}' spec. Defined content types: {$defined}",
-                ], $matchedPath);
-            }
-
-            // JSON-compatible response: fall through to existing JSON schema validation.
-            // JSON types are treated as interchangeable (e.g. application/vnd.api+json
-            // validates against an application/json spec entry) because the schema is
-            // the same regardless of the specific JSON media type.
-        }
-
-        $jsonContentType = ContentTypeMatcher::findJsonContentType($content);
-
-        // If no JSON-compatible content type is defined, skip body validation.
-        // This validator only handles JSON schemas; non-JSON types (e.g. text/html,
-        // application/xml) are outside its scope.
-        if ($jsonContentType === null) {
+        if ($errors === []) {
             return OpenApiValidationResult::success($matchedPath);
-        }
-
-        if (!isset($content[$jsonContentType]['schema'])) {
-            return OpenApiValidationResult::success($matchedPath);
-        }
-
-        if ($responseBody === null) {
-            return OpenApiValidationResult::failure([
-                "Response body is empty but {$method} {$matchedPath} (status {$statusCode}) defines a JSON-compatible response schema in '{$specName}' spec.",
-            ], $matchedPath);
-        }
-
-        /** @var array<string, mixed> $schema */
-        $schema = $content[$jsonContentType]['schema'];
-        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Response);
-
-        $schemaObject = ObjectConverter::convert($jsonSchema);
-        $dataObject = ObjectConverter::convert($responseBody);
-
-        $formatted = $this->runner->validate($schemaObject, $dataObject);
-
-        if ($formatted === []) {
-            return OpenApiValidationResult::success($matchedPath);
-        }
-
-        $errors = [];
-        foreach ($formatted as $path => $messages) {
-            foreach ($messages as $message) {
-                $errors[] = "[{$path}] {$message}";
-            }
         }
 
         return OpenApiValidationResult::failure($errors, $matchedPath);
