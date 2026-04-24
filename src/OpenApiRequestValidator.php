@@ -4,38 +4,29 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
-use const FILTER_VALIDATE_INT;
-use const PHP_INT_MAX;
-
-use InvalidArgumentException;
 use LogicException;
-use Opis\JsonSchema\Errors\ErrorFormatter;
-use Opis\JsonSchema\Validator;
-use stdClass;
+use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
+use Studio\OpenApiContractTesting\Validation\Support\HeaderNormalizer;
+use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
+use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
+use Studio\OpenApiContractTesting\Validation\Support\TypeCoercer;
 
-use function array_is_list;
 use function array_key_exists;
 use function array_key_first;
 use function array_keys;
-use function array_map;
 use function array_values;
 use function count;
-use function filter_var;
 use function get_debug_type;
 use function implode;
 use function in_array;
 use function is_array;
 use function is_int;
-use function is_numeric;
 use function is_scalar;
 use function is_string;
 use function preg_match;
 use function rawurldecode;
 use function sprintf;
-use function str_ends_with;
-use function strstr;
 use function strtolower;
-use function trim;
 
 final class OpenApiRequestValidator
 {
@@ -50,24 +41,11 @@ final class OpenApiRequestValidator
 
     /** @var array<string, OpenApiPathMatcher> */
     private array $pathMatchers = [];
-    private Validator $opisValidator;
-    private ErrorFormatter $errorFormatter;
+    private readonly SchemaValidatorRunner $runner;
 
-    public function __construct(
-        private readonly int $maxErrors = 20,
-    ) {
-        if ($this->maxErrors < 0) {
-            throw new InvalidArgumentException(
-                sprintf('maxErrors must be 0 (unlimited) or a positive integer, got %d.', $this->maxErrors),
-            );
-        }
-
-        $resolvedMaxErrors = $this->maxErrors === 0 ? PHP_INT_MAX : $this->maxErrors;
-        $this->opisValidator = new Validator(
-            max_errors: $resolvedMaxErrors,
-            stop_at_first_error: $resolvedMaxErrors === 1,
-        );
-        $this->errorFormatter = new ErrorFormatter();
+    public function __construct(int $maxErrors = 20)
+    {
+        $this->runner = new SchemaValidatorRunner($maxErrors);
     }
 
     /**
@@ -179,151 +157,6 @@ final class OpenApiRequestValidator
     }
 
     /**
-     * Recursively convert PHP arrays to stdClass objects, matching the
-     * behaviour of json_decode(json_encode($data)) without the intermediate
-     * JSON string allocation.
-     */
-    private static function toObject(mixed $value): mixed
-    {
-        if (!is_array($value)) {
-            return $value;
-        }
-
-        if ($value === [] || array_is_list($value)) {
-            /** @var list<mixed> $value */
-            foreach ($value as $i => $item) {
-                $value[$i] = self::toObject($item);
-            }
-
-            return $value;
-        }
-
-        $object = new stdClass();
-        foreach ($value as $key => $item) {
-            $object->{$key} = self::toObject($item);
-        }
-
-        return $object;
-    }
-
-    /**
-     * Pick the first primitive type from an OAS 3.1 multi-type declaration,
-     * skipping `null`. Returns `null` if no usable string type is found.
-     *
-     * @param array<int|string, mixed> $types
-     */
-    private static function firstPrimitiveType(array $types): ?string
-    {
-        foreach ($types as $candidate) {
-            if (is_string($candidate) && $candidate !== 'null') {
-                return $candidate;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Coerce a URL-sourced string to int.
-     *
-     * `filter_var(FILTER_VALIDATE_INT)` is too permissive for contract testing:
-     * it accepts leading/trailing whitespace (e.g. "5 " → 5) and a leading
-     * sign prefix ("+5" → 5). Combined with rawurldecode these laundering
-     * behaviours would silently pass non-canonical URLs — real servers
-     * typically reject them, creating silent drift between the test harness
-     * and production. Pre-filter with a strict canonical-integer regex:
-     * optional leading `-`, then either `0` or a digit string without a
-     * leading zero. Anything else falls through unchanged so opis can
-     * report a meaningful type error.
-     *
-     * Overflow is still handled by `filter_var` returning `false` for
-     * values exceeding PHP_INT_MAX/MIN.
-     */
-    private static function coerceToInt(string $value): int|string
-    {
-        if (preg_match('/^-?(0|[1-9]\d*)$/', $value) !== 1) {
-            return $value;
-        }
-
-        $result = filter_var($value, FILTER_VALIDATE_INT);
-
-        return is_int($result) ? $result : $value;
-    }
-
-    /**
-     * Scalar-only variant used for path parameters. Path segments arrive as
-     * single strings (OpenAPI default `style: simple`) so array handling is
-     * never appropriate — a spec declaring `type: array` for a path param
-     * would be rejected by opis because the request value is still scalar.
-     *
-     * @param array<string, mixed> $schema
-     */
-    private static function coercePrimitiveValue(mixed $value, array $schema): mixed
-    {
-        $type = $schema['type'] ?? null;
-
-        if (is_array($type)) {
-            $type = self::firstPrimitiveType($type);
-        }
-
-        return self::coercePrimitiveFromType($value, $type);
-    }
-
-    /**
-     * Shared scalar coercion: string → int/float/bool when the target type is
-     * clean, otherwise the original value passes through so opis can report a
-     * meaningful type mismatch.
-     */
-    private static function coercePrimitiveFromType(mixed $value, mixed $type): mixed
-    {
-        if (!is_string($value) || !is_string($type)) {
-            return $value;
-        }
-
-        return match ($type) {
-            'integer' => self::coerceToInt($value),
-            'number' => is_numeric($value) ? (float) $value : $value,
-            'boolean' => match (strtolower($value)) {
-                'true' => true,
-                'false' => false,
-                default => $value,
-            },
-            default => $value,
-        };
-    }
-
-    /**
-     * Lower-case the keys of the caller-supplied headers map. Non-string keys
-     * are skipped — they cannot match any spec name and would cause a
-     * TypeError on strtolower(). Values are returned as-is; array/scalar
-     * discrimination happens in validateHeaderParameters() so the "how many
-     * values" decision is visible at the validation site.
-     *
-     * When two keys collapse to the same lower-case form (e.g. both
-     * `X-Foo` and `x-foo` are present), later entries overwrite earlier ones
-     * — HTTP treats these as the same header so the behaviour matches what
-     * most frameworks surface to application code.
-     *
-     * @param array<array-key, mixed> $headers
-     *
-     * @return array<string, mixed>
-     */
-    private static function normalizeHeaders(array $headers): array
-    {
-        $normalized = [];
-
-        foreach ($headers as $name => $value) {
-            if (!is_string($name)) {
-                continue;
-            }
-
-            $normalized[strtolower($name)] = $value;
-        }
-
-        return $normalized;
-    }
-
-    /**
      * @param string[] $specPaths
      */
     private function getPathMatcher(string $specName, array $specPaths): OpenApiPathMatcher
@@ -386,18 +219,13 @@ final class OpenApiRequestValidator
                 continue;
             }
 
-            $coerced = $this->coerceQueryValue($queryParams[$name], $schema);
+            $coerced = TypeCoercer::coerceQuery($queryParams[$name], $schema);
             $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
 
-            $schemaObject = self::toObject($jsonSchema);
-            $dataObject = self::toObject($coerced);
+            $schemaObject = ObjectConverter::convert($jsonSchema);
+            $dataObject = ObjectConverter::convert($coerced);
 
-            $result = $this->opisValidator->validate($dataObject, $schemaObject);
-            if ($result->isValid()) {
-                continue;
-            }
-
-            $formatted = $this->errorFormatter->format($result->error());
+            $formatted = $this->runner->validate($schemaObject, $dataObject);
             foreach ($formatted as $path => $messages) {
                 $suffix = $path === '/' ? '' : $path;
                 foreach ($messages as $message) {
@@ -471,18 +299,13 @@ final class OpenApiRequestValidator
             $schema = $param['schema'];
 
             $decoded = rawurldecode($pathVariables[$name]);
-            $coerced = self::coercePrimitiveValue($decoded, $schema);
+            $coerced = TypeCoercer::coercePrimitive($decoded, $schema);
             $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
 
-            $schemaObject = self::toObject($jsonSchema);
-            $dataObject = self::toObject($coerced);
+            $schemaObject = ObjectConverter::convert($jsonSchema);
+            $dataObject = ObjectConverter::convert($coerced);
 
-            $result = $this->opisValidator->validate($dataObject, $schemaObject);
-            if ($result->isValid()) {
-                continue;
-            }
-
-            $formatted = $this->errorFormatter->format($result->error());
+            $formatted = $this->runner->validate($schemaObject, $dataObject);
             foreach ($formatted as $path => $messages) {
                 $suffix = $path === '/' ? '' : $path;
                 foreach ($messages as $message) {
@@ -539,7 +362,7 @@ final class OpenApiRequestValidator
         OpenApiVersion $version,
     ): array {
         $errors = [];
-        $normalizedHeaders = self::normalizeHeaders($headers);
+        $normalizedHeaders = HeaderNormalizer::normalize($headers);
 
         foreach ($parameters as $param) {
             if (($param['in'] ?? null) !== 'header') {
@@ -625,18 +448,13 @@ final class OpenApiRequestValidator
                 continue;
             }
 
-            $coerced = self::coercePrimitiveValue($rawValue, $schema);
+            $coerced = TypeCoercer::coercePrimitive($rawValue, $schema);
             $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
 
-            $schemaObject = self::toObject($jsonSchema);
-            $dataObject = self::toObject($coerced);
+            $schemaObject = ObjectConverter::convert($jsonSchema);
+            $dataObject = ObjectConverter::convert($coerced);
 
-            $result = $this->opisValidator->validate($dataObject, $schemaObject);
-            if ($result->isValid()) {
-                continue;
-            }
-
-            $formatted = $this->errorFormatter->format($result->error());
+            $formatted = $this->runner->validate($schemaObject, $dataObject);
             foreach ($formatted as $path => $messages) {
                 $suffix = $path === '/' ? '' : $path;
                 foreach ($messages as $message) {
@@ -726,7 +544,7 @@ final class OpenApiRequestValidator
             ];
         }
 
-        $normalizedHeaders = self::normalizeHeaders($headers);
+        $normalizedHeaders = HeaderNormalizer::normalize($headers);
 
         $hardErrors = [];
         $failureErrors = [];
@@ -1074,39 +892,6 @@ final class OpenApiRequestValidator
     }
 
     /**
-     * Conservatively coerce a query string value to the type declared by the
-     * schema. When the string is not a clean representation of the target
-     * type, the original value is returned unchanged so opis can surface a
-     * meaningful type error rather than silently passing.
-     *
-     * For multi-type schemas (OAS 3.1 `type: ["integer", "null"]`) the first
-     * non-`null` primitive type is used as the coercion target.
-     *
-     * @param array<string, mixed> $schema
-     */
-    private function coerceQueryValue(mixed $value, array $schema): mixed
-    {
-        $type = $schema['type'] ?? null;
-
-        if (is_array($type)) {
-            $type = self::firstPrimitiveType($type);
-        }
-
-        if ($type === 'array') {
-            $value = is_array($value) ? array_values($value) : [$value];
-
-            $itemSchema = $schema['items'] ?? null;
-            if (is_array($itemSchema)) {
-                return array_map(fn(mixed $item): mixed => $this->coerceQueryValue($item, $itemSchema), $value);
-            }
-
-            return $value;
-        }
-
-        return self::coercePrimitiveFromType($value, $type);
-    }
-
-    /**
      * Validate the request body against the operation's `requestBody` schema.
      *
      * Returns an empty list when the body is acceptable (including when the
@@ -1185,10 +970,10 @@ final class OpenApiRequestValidator
         // non-JSON types are checked for spec presence only, while JSON-compatible types
         // fall through to schema validation against the first JSON media type in the spec.
         if ($contentType !== null) {
-            $normalizedType = $this->normalizeMediaType($contentType);
+            $normalizedType = ContentTypeMatcher::normalizeMediaType($contentType);
 
-            if (!$this->isJsonContentType($normalizedType)) {
-                if ($this->isContentTypeInSpec($normalizedType, $content)) {
+            if (!ContentTypeMatcher::isJsonContentType($normalizedType)) {
+                if (ContentTypeMatcher::isContentTypeInSpec($normalizedType, $content)) {
                     return [];
                 }
 
@@ -1205,7 +990,7 @@ final class OpenApiRequestValidator
             // the same regardless of the specific JSON media type.
         }
 
-        $jsonContentType = $this->findJsonContentType($content);
+        $jsonContentType = ContentTypeMatcher::findJsonContentType($content);
 
         // If no JSON-compatible content type is defined, skip body validation.
         // This validator only handles JSON schemas; non-JSON types (e.g. application/xml,
@@ -1232,86 +1017,18 @@ final class OpenApiRequestValidator
         $schema = $content[$jsonContentType]['schema'];
         $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
 
-        $schemaObject = self::toObject($jsonSchema);
-        $dataObject = self::toObject($requestBody);
+        $schemaObject = ObjectConverter::convert($jsonSchema);
+        $dataObject = ObjectConverter::convert($requestBody);
 
-        $result = $this->opisValidator->validate($dataObject, $schemaObject);
-
-        if ($result->isValid()) {
-            return [];
-        }
-
-        $formattedErrors = $this->errorFormatter->format($result->error());
+        $formatted = $this->runner->validate($schemaObject, $dataObject);
 
         $errors = [];
-        foreach ($formattedErrors as $path => $messages) {
+        foreach ($formatted as $path => $messages) {
             foreach ($messages as $message) {
                 $errors[] = "[{$path}] {$message}";
             }
         }
 
         return $errors;
-    }
-
-    /**
-     * Find the first JSON-compatible content type from the request body spec.
-     *
-     * Matches "application/json" exactly and any type with a "+json" structured
-     * syntax suffix (RFC 6838), such as "application/problem+json" and
-     * "application/vnd.api+json". Matching is case-insensitive.
-     *
-     * @param array<string, mixed> $content
-     */
-    private function findJsonContentType(array $content): ?string
-    {
-        foreach ($content as $contentType => $mediaType) {
-            $lower = strtolower($contentType);
-
-            if ($this->isJsonContentType($lower)) {
-                return $contentType;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Extract the media type portion before any parameters (e.g. charset),
-     * and return it lower-cased.
-     *
-     * Example: "text/html; charset=utf-8" → "text/html"
-     */
-    private function normalizeMediaType(string $contentType): string
-    {
-        $mediaType = strstr($contentType, ';', true);
-
-        return strtolower(trim($mediaType !== false ? $mediaType : $contentType));
-    }
-
-    /**
-     * Check whether the given (already normalised, lower-cased) request content
-     * type matches any content type key defined in the spec. Spec keys are
-     * lower-cased before comparison.
-     *
-     * @param array<string, mixed> $content
-     */
-    private function isContentTypeInSpec(string $requestContentType, array $content): bool
-    {
-        foreach ($content as $specContentType => $mediaType) {
-            if (strtolower($specContentType) === $requestContentType) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * True for "application/json" or any "+json" structured syntax suffix (RFC 6838).
-     * Expects a lower-cased media type without parameters.
-     */
-    private function isJsonContentType(string $lowerContentType): bool
-    {
-        return $lowerContentType === 'application/json' || str_ends_with($lowerContentType, '+json');
     }
 }
