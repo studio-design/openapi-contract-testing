@@ -549,10 +549,6 @@ final class OpenApiRequestValidator
             $name = $param['name'];
             $lowerName = strtolower($name);
 
-            if (in_array($lowerName, self::RESERVED_HEADER_NAMES, true)) {
-                continue;
-            }
-
             $required = ($param['required'] ?? false) === true;
 
             // Same reasoning as query/path: a required parameter without a schema would
@@ -1017,6 +1013,23 @@ final class OpenApiRequestValidator
 
                 if (!isset($param['in'], $param['name']) || !is_string($param['in']) || !is_string($param['name'])) {
                     $errors[] = "Malformed parameter entry for {$method} {$matchedPath}: 'name' and 'in' must be strings.";
+
+                    continue;
+                }
+
+                // OAS 3.x §4.7.12.1 says `Accept`/`Content-Type`/`Authorization`
+                // in:header parameter definitions SHALL be ignored — content
+                // negotiation and security schemes own them. Silently skipping
+                // would let a spec author's `required: true` pass every request;
+                // surface as a hard spec error and drop the entry so downstream
+                // per-request validation stays OAS-compliant (no runtime effect).
+                if ($param['in'] === 'header' && in_array(strtolower($param['name']), self::RESERVED_HEADER_NAMES, true)) {
+                    $errors[] = sprintf(
+                        '[header.%s] reserved header declared for %s %s; per OpenAPI 3.x §4.7.12.1, `Accept`/`Content-Type`/`Authorization` parameter definitions SHALL be ignored. Remove the declaration or use `content` / security schemes instead.',
+                        $param['name'],
+                        $method,
+                        $matchedPath,
+                    );
 
                     continue;
                 }

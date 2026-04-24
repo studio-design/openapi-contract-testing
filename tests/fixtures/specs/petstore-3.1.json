@@ -455,15 +455,6 @@
                             "minimum": 1,
                             "maximum": 100
                         }
-                    },
-                    {
-                        "name": "Accept",
-                        "in": "header",
-                        "required": true,
-                        "schema": {
-                            "type": "string",
-                            "enum": ["never-match"]
-                        }
                     }
                 ],
                 "responses": {
