@@ -2938,4 +2938,36 @@ class OpenApiRequestValidatorTest extends TestCase
 
         $this->assertTrue($result->isValid(), 'errors: ' . implode(' | ', $result->errors()));
     }
+
+    // ========================================
+    // Issue #92: per-sub-validator error boundary
+    // ========================================
+
+    #[Test]
+    public function body_validator_exception_does_not_suppress_path_parameter_errors(): void
+    {
+        // Regression guard for issue #92. The fixture has a malformed JSON Schema
+        // `pattern` (`"[unterminated"`) that opis rejects at validation time with
+        // InvalidKeywordException (a ParseException subclass / Exception descendant).
+        // Pre-fix, this throw aborted the orchestrator mid-spread and the path-param
+        // error was lost. ValidatorErrorBoundary::safely() now converts the throw
+        // into a synthetic [request-body] error so sibling validators' findings
+        // remain surfaced.
+        $result = $this->validator->validate(
+            'body-validator-throws',
+            'POST',
+            '/items/abc', // non-integer path param → [path.id] error must survive the body throw
+            [],
+            [],
+            ['code' => 'x'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+
+        $joined = implode(' | ', $result->errors());
+        $this->assertStringContainsString('[path.id]', $joined, 'path-param error must survive body throw');
+        $this->assertStringContainsString('[request-body]', $joined, 'body throw must surface as boundary error');
+        $this->assertStringContainsString('InvalidKeywordException', $joined, 'exception class name preserved for diagnostics');
+    }
 }
