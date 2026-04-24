@@ -56,6 +56,7 @@ This is a PHP library (`studio-design/openapi-contract-testing`) that validates 
 
 - **`OpenApiVersion`** (`V3_0` | `V3_1`) — Auto-detected from spec's `openapi` field.
 - **`HttpMethod`** — GET, POST, PUT, PATCH, DELETE.
+- **`OpenApiValidationOutcome`** (`Success` | `Failure` | `Skipped`) — Tri-state outcome of a validation run, exposed via `OpenApiValidationResult::outcome()`. `isValid()` / `isSkipped()` remain as bool wrappers for back-compat.
 
 ## Code Style
 
