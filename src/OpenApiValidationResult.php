@@ -34,9 +34,8 @@ final class OpenApiValidationResult
      * Reject `failure([])` so a Failure always carries at least one error
      * message. Without this guard, `errorMessage()` would return an empty
      * string and the Failure would surface as a silent assertion failure.
-     * The `non-empty-array` bound lifts that invariant into the signature so
-     * PHPStan flags empty-literal callers at analyse time; the runtime guard
-     * remains as defense-in-depth for consumers without static analysis.
+     * `non-empty-array` surfaces empty-literal callers in PHPStan; the
+     * runtime guard covers consumers without static analysis.
      *
      * @param non-empty-array<string> $errors
      *
