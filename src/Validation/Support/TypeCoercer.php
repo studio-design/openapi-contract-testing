@@ -112,20 +112,20 @@ final class TypeCoercer
     }
 
     /**
-     * Coerce a URL-sourced string to int.
+     * Coerce a scalar string (from a path / header / query parameter) to int.
      *
      * `filter_var(FILTER_VALIDATE_INT)` is too permissive for contract testing:
      * it accepts leading/trailing whitespace (e.g. "5 " → 5) and a leading
-     * sign prefix ("+5" → 5). Combined with rawurldecode these laundering
-     * behaviours would silently pass non-canonical URLs — real servers
-     * typically reject them, creating silent drift between the test harness
-     * and production. Pre-filter with a strict canonical-integer regex:
-     * optional leading `-`, then either `0` or a digit string without a
-     * leading zero. Anything else falls through unchanged so opis can
-     * report a meaningful type error.
+     * sign prefix ("+5" → 5). Accepting those laundering behaviours would
+     * silently pass non-canonical values that real servers typically reject,
+     * creating silent drift between the test harness and production. Pre-filter
+     * with a strict canonical-integer regex: optional leading `-`, then either
+     * `0` or a digit string without a leading zero. Anything else falls through
+     * unchanged so opis can report a meaningful type error.
      *
-     * Overflow is still handled by `filter_var` returning `false` for
-     * values exceeding PHP_INT_MAX/MIN.
+     * Overflow is handled the same way: values exceeding PHP_INT_MAX/MIN
+     * cause `filter_var` to return `false`, and the original string is
+     * returned so opis surfaces the type mismatch.
      */
     public static function coerceToInt(string $value): int|string
     {

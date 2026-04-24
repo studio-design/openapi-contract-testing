@@ -10,6 +10,8 @@ use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 
+use function count;
+
 class SchemaValidatorRunnerTest extends TestCase
 {
     #[Test]
@@ -66,5 +68,29 @@ class SchemaValidatorRunnerTest extends TestCase
         $runner = new SchemaValidatorRunner(0);
 
         $this->assertSame([], $runner->validate(ObjectConverter::convert(['type' => 'string']), 'ok'));
+    }
+
+    #[Test]
+    public function max_errors_one_stops_at_first_error(): void
+    {
+        // Pin the `stop_at_first_error: true` branch that the constructor
+        // enables when maxErrors === 1. With two independent violations, the
+        // capped runner must return exactly one error; the uncapped runner
+        // must surface both.
+        $schema = ObjectConverter::convert([
+            'type' => 'object',
+            'properties' => [
+                'a' => ['type' => 'integer'],
+                'b' => ['type' => 'integer'],
+            ],
+            'required' => ['a', 'b'],
+        ]);
+        $data = ObjectConverter::convert(['a' => 'not-int', 'b' => 'also-not-int']);
+
+        $cappedErrors = (new SchemaValidatorRunner(1))->validate($schema, $data);
+        $uncappedErrors = (new SchemaValidatorRunner(20))->validate($schema, $data);
+
+        $this->assertCount(1, $cappedErrors);
+        $this->assertGreaterThan(1, count($uncappedErrors));
     }
 }

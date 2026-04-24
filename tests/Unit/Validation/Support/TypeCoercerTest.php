@@ -44,6 +44,18 @@ class TypeCoercerTest extends TestCase
     }
 
     #[Test]
+    public function coerce_to_int_falls_back_to_string_on_overflow(): void
+    {
+        // A canonical-integer shape that exceeds PHP_INT_MAX: the regex passes
+        // but `filter_var` returns false, so the original string must survive
+        // unchanged so opis can flag the type mismatch instead of quietly
+        // receiving a truncated int.
+        $overflow = '99999999999999999999';
+
+        $this->assertSame($overflow, TypeCoercer::coerceToInt($overflow));
+    }
+
+    #[Test]
     public function coerce_primitive_from_type_handles_boolean_and_number(): void
     {
         $this->assertTrue(TypeCoercer::coercePrimitiveFromType('true', 'boolean'));
@@ -74,5 +86,16 @@ class TypeCoercerTest extends TestCase
         $schema = ['type' => 'array', 'items' => ['type' => 'integer']];
 
         $this->assertSame([5], TypeCoercer::coerceQuery('5', $schema));
+    }
+
+    #[Test]
+    public function coerce_query_skips_per_item_coercion_when_items_schema_missing(): void
+    {
+        // With no `items` schema (or a non-array `items` like an OAS $ref string
+        // that slipped past validation), the array is only reindexed — values
+        // stay as raw strings so opis surfaces the shape mismatch.
+        $schema = ['type' => 'array'];
+
+        $this->assertSame(['1', '2'], TypeCoercer::coerceQuery(['1', '2'], $schema));
     }
 }

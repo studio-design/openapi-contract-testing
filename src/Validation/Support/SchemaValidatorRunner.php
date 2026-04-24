@@ -34,13 +34,17 @@ final class SchemaValidatorRunner
     }
 
     /**
-     * Validate `$data` against `$jsonSchema` (both already converted to
-     * stdClass via {@see ObjectConverter::convert()}) and return a map of
-     * JSON Pointer path → list of human-readable error messages.
+     * Validate `$data` against `$jsonSchema` (typically both converted via
+     * {@see ObjectConverter::convert()}, although opis also accepts `true` /
+     * `false` top-level schemas and raw scalars) and return a map of JSON
+     * Pointer path → list of human-readable error messages.
      *
      * An empty array means the data validated successfully. The pointer key
      * matches opis's ErrorFormatter output, with `/` indicating the document
-     * root.
+     * root. Success is determined by `ValidationResult::isValid()` rather
+     * than by the formatter output shape, so a future opis change that
+     * returned `[]` for a suppressed/filtered error would still be reported
+     * as a failure (no silent pass).
      *
      * @return array<string, string[]>
      */
@@ -52,6 +56,17 @@ final class SchemaValidatorRunner
             return [];
         }
 
-        return $this->errorFormatter->format($result->error());
+        $error = $result->error();
+        if ($error === null) {
+            // Defensive: ValidationResult::isValid() is defined as
+            // `$this->error === null`, so this branch is unreachable today.
+            // Return a synthetic entry rather than letting a null slip to
+            // ErrorFormatter::format() and producing a TypeError, so the
+            // validator still surfaces *something* if the opis invariant
+            // ever changes.
+            return ['/' => ['Schema validation failed but opis reported no error detail.']];
+        }
+
+        return $this->errorFormatter->format($error);
     }
 }
