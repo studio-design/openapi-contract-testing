@@ -9,6 +9,9 @@ use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
+use function array_intersect;
+use function array_values;
+
 class OpenApiCoverageTrackerTest extends TestCase
 {
     protected function setUp(): void
@@ -156,6 +159,26 @@ class OpenApiCoverageTrackerTest extends TestCase
         $this->assertSame(['GET /v1/pets', 'POST /v1/pets'], $result['skippedOnly']);
         $this->assertSame(2, $result['skippedOnlyCount']);
         $this->assertSame(3, $result['coveredCount']);
+    }
+
+    #[Test]
+    public function skipped_only_preserves_covered_order(): void
+    {
+        // Pins the invariant that skippedOnly entries share ordering with
+        // covered (both derive from the same sorted iteration). Without
+        // this, a maintainer could switch covered to insertion order and
+        // accidentally diverge the two lists while the prior sort test
+        // still passed on naturally-sorted inputs.
+        OpenApiCoverageTracker::record('petstore-3.0', 'POST', '/v1/pets', schemaValidated: true);
+        OpenApiCoverageTracker::record('petstore-3.0', 'GET', '/v1/pets', schemaValidated: false);
+        OpenApiCoverageTracker::record('petstore-3.0', 'GET', '/v1/pets/{petId}', schemaValidated: false);
+
+        $result = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+
+        $this->assertSame(
+            array_values(array_intersect($result['covered'], $result['skippedOnly'])),
+            $result['skippedOnly'],
+        );
     }
 
     #[Test]

@@ -157,6 +157,32 @@ class MarkdownCoverageRendererTest extends TestCase
     }
 
     #[Test]
+    public function each_spec_with_skipped_only_gets_its_own_note(): void
+    {
+        // Guards against a regression where the note were hoisted outside
+        // the per-spec loop (producing one note for the whole report) or
+        // duplicated (producing two notes for one spec).
+        $results = [
+            'front' => self::coverageResult(
+                covered: ['GET /v1/pets'],
+                uncovered: [],
+                total: 1,
+                skippedOnly: ['GET /v1/pets'],
+            ),
+            'admin' => self::coverageResult(
+                covered: ['GET /v1/users'],
+                uncovered: [],
+                total: 1,
+                skippedOnly: ['GET /v1/users'],
+            ),
+        ];
+
+        $output = MarkdownCoverageRenderer::render($results);
+
+        $this->assertSame(2, substr_count($output, '> :warning:'));
+    }
+
+    #[Test]
     public function omits_note_when_no_skipped_only(): void
     {
         $results = [

@@ -4,20 +4,15 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\PHPUnit;
 
+use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
+
 use function array_flip;
 use function count;
 use function implode;
 use function round;
 
 /**
- * @phpstan-type CoverageResult array{
- *     covered: string[],
- *     uncovered: string[],
- *     total: int,
- *     coveredCount: int,
- *     skippedOnly: string[],
- *     skippedOnlyCount: int,
- * }
+ * @phpstan-import-type CoverageResult from OpenApiCoverageTracker
  */
 final class MarkdownCoverageRenderer
 {

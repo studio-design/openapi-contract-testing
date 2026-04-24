@@ -10,15 +10,21 @@ use function in_array;
 use function sort;
 use function strtoupper;
 
+/**
+ * @phpstan-type CoverageResult array{
+ *     covered: string[],
+ *     uncovered: string[],
+ *     total: int,
+ *     coveredCount: int,
+ *     skippedOnly: string[],
+ *     skippedOnlyCount: int,
+ * }
+ */
 final class OpenApiCoverageTracker
 {
     /**
-     * Internal storage tracks two flags per endpoint so we can distinguish
-     * endpoints that were only ever exercised under a skip (e.g. 5xx bodies
-     * matched `skip_response_codes`) from ones whose body was actually
-     * schema-validated at least once. "validated" is monotonic — once true,
-     * a later skip does not demote it — matching how coverage semantics
-     * accumulate across a test suite.
+     * `validated` is monotonic — once true, a later skipped record does not
+     * demote it — so ordering of observations across a suite does not matter.
      *
      * @var array<string, array<string, array{validated: bool, skipped: bool}>>
      */
@@ -43,10 +49,8 @@ final class OpenApiCoverageTracker
     }
 
     /**
-     * Back-compat external shape: flatten the internal 2-flag entry to
-     * `true` so existing consumers (e.g. OpenApiCoverageExtension's
-     * emptiness check) keep working without any change. The richer
-     * skipped-only signal is exposed via computeCoverage() instead.
+     * Flattens the internal 2-flag entry to `true` to preserve the public
+     * shape. Richer skipped-only data lives on computeCoverage().
      *
      * @return array<string, array<string, true>>
      */
@@ -69,14 +73,7 @@ final class OpenApiCoverageTracker
     }
 
     /**
-     * @return array{
-     *     covered: string[],
-     *     uncovered: string[],
-     *     total: int,
-     *     coveredCount: int,
-     *     skippedOnly: string[],
-     *     skippedOnlyCount: int,
-     * }
+     * @return CoverageResult
      */
     public static function computeCoverage(string $specName): array
     {

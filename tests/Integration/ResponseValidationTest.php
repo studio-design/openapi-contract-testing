@@ -144,10 +144,6 @@ class ResponseValidationTest extends TestCase
     #[Test]
     public function response_500_records_endpoint_as_skipped_only(): void
     {
-        // 500 matches the default skip pattern; the validator returns a
-        // skipped result, and the tracker call mirrors what the Laravel
-        // trait does at src/Laravel/ValidatesOpenApiSchema.php:477 —
-        // schemaValidated derives from !isSkipped().
         $result = $this->validator->validate(
             'petstore-3.0',
             'GET',
@@ -155,11 +151,8 @@ class ResponseValidationTest extends TestCase
             500,
             ['anything' => 'goes'],
         );
-        // Record before asserting so the `schemaValidated: !isSkipped()`
-        // expression mirrors the Laravel trait's dynamic form at
-        // src/Laravel/ValidatesOpenApiSchema.php:477 — asserting first would
-        // let phpstan narrow isSkipped() to a constant and flag the negation
-        // as always-false.
+        // Record before asserting isSkipped() — asserting first lets phpstan
+        // narrow the bool to a constant and flag !isSkipped() as always-false.
         if ($result->matchedPath() !== null) {
             OpenApiCoverageTracker::record(
                 'petstore-3.0',
@@ -218,8 +211,8 @@ class ResponseValidationTest extends TestCase
     #[Test]
     public function response_500_then_200_keeps_endpoint_validated(): void
     {
-        // Reverse order of the previous test — the monotonic "validated"
-        // flag means ordering does not matter.
+        // Reverse order of the previous test — monotonic `validated` means
+        // ordering does not matter.
         $skip = $this->validator->validate(
             'petstore-3.0',
             'GET',

@@ -474,13 +474,8 @@ trait ValidatesOpenApiSchema
         // Note: under auto_assert, this records coverage for every Laravel HTTP
         // call — including responses with no explicit contract-test intent.
         //
-        // schemaValidated distinguishes "body was checked against the schema"
-        // from "body validation was suppressed by skip_response_codes" so the
-        // coverage report can flag endpoints that were only ever exercised
-        // under a skip (e.g. a happy path that silently returns 500 in every
-        // test run). Non-skip no-body branches (204 No Content, non-JSON
-        // content types) still count as validated — they are deliberate spec
-        // matches, not skips.
+        // 204 and non-JSON still count as validated; only skip_response_codes
+        // matches (isSkipped() === true) suppress body validation.
         if ($result->matchedPath() !== null) {
             OpenApiCoverageTracker::record(
                 $specName,

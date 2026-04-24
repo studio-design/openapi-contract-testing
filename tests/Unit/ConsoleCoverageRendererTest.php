@@ -359,6 +359,32 @@ class ConsoleCoverageRendererTest extends TestCase
     }
 
     #[Test]
+    public function header_fragment_scales_across_specs_and_counts(): void
+    {
+        // Guards against a regression where the fragment were joined across
+        // specs, or where `N > 1` were rendered differently from `N == 1`.
+        $results = [
+            'front' => self::coverageResult(
+                covered: ['GET /v1/pets', 'POST /v1/pets'],
+                uncovered: [],
+                total: 2,
+                skippedOnly: ['GET /v1/pets', 'POST /v1/pets'],
+            ),
+            'admin' => self::coverageResult(
+                covered: ['GET /v1/users'],
+                uncovered: [],
+                total: 1,
+            ),
+        ];
+
+        $output = ConsoleCoverageRenderer::render($results, ConsoleOutput::DEFAULT);
+
+        $this->assertStringContainsString('[front] 2/2 endpoints (100%), 2 skipped-only', $output);
+        $this->assertStringContainsString('[admin] 1/1 endpoints (100%)', $output);
+        $this->assertSame(1, substr_count($output, 'skipped-only'));
+    }
+
+    #[Test]
     public function uncovered_only_mode_omits_legend_and_per_row_markers(): void
     {
         $results = [
@@ -372,9 +398,7 @@ class ConsoleCoverageRendererTest extends TestCase
 
         $output = ConsoleCoverageRenderer::render($results, ConsoleOutput::UNCOVERED_ONLY);
 
-        // Header still carries the skipped-only count.
         $this->assertStringContainsString(', 1 skipped-only', $output);
-        // Per-row output and legend are suppressed in UNCOVERED_ONLY mode.
         $this->assertStringContainsString('Covered: 2 endpoints', $output);
         $this->assertStringNotContainsString('⚠', $output);
     }
