@@ -4,24 +4,17 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
-use const PHP_INT_MAX;
-
 use InvalidArgumentException;
-use Opis\JsonSchema\Errors\ErrorFormatter;
-use Opis\JsonSchema\Validator;
-use stdClass;
+use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
+use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
+use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 
-use function array_is_list;
 use function array_keys;
 use function implode;
-use function is_array;
 use function preg_last_error_msg;
 use function preg_match;
 use function sprintf;
-use function str_ends_with;
-use function strstr;
 use function strtolower;
-use function trim;
 
 final class OpenApiResponseValidator
 {
@@ -34,8 +27,7 @@ final class OpenApiResponseValidator
 
     /** @var array<string, OpenApiPathMatcher> */
     private array $pathMatchers = [];
-    private Validator $opisValidator;
-    private ErrorFormatter $errorFormatter;
+    private readonly SchemaValidatorRunner $runner;
 
     /** @var array<string, string> Raw pattern (as supplied) => anchored pattern ready for preg_match. */
     private readonly array $skipPatterns;
@@ -48,23 +40,11 @@ final class OpenApiResponseValidator
      *                                    path is still reported so coverage is recorded.
      */
     public function __construct(
-        private readonly int $maxErrors = 20,
+        int $maxErrors = 20,
         array $skipResponseCodes = self::DEFAULT_SKIP_RESPONSE_CODES,
     ) {
-        if ($this->maxErrors < 0) {
-            throw new InvalidArgumentException(
-                sprintf('maxErrors must be 0 (unlimited) or a positive integer, got %d.', $this->maxErrors),
-            );
-        }
-
         $this->skipPatterns = self::compileSkipPatterns($skipResponseCodes);
-
-        $resolvedMaxErrors = $this->maxErrors === 0 ? PHP_INT_MAX : $this->maxErrors;
-        $this->opisValidator = new Validator(
-            max_errors: $resolvedMaxErrors,
-            stop_at_first_error: $resolvedMaxErrors === 1,
-        );
-        $this->errorFormatter = new ErrorFormatter();
+        $this->runner = new SchemaValidatorRunner($maxErrors);
     }
 
     public function validate(
@@ -135,11 +115,11 @@ final class OpenApiResponseValidator
         // non-JSON types are checked for spec presence only, while JSON-compatible types
         // fall through to schema validation against the first JSON media type in the spec.
         if ($responseContentType !== null) {
-            $normalizedType = $this->normalizeMediaType($responseContentType);
+            $normalizedType = ContentTypeMatcher::normalizeMediaType($responseContentType);
 
-            if (!$this->isJsonContentType($normalizedType)) {
+            if (!ContentTypeMatcher::isJsonContentType($normalizedType)) {
                 // Non-JSON response: check if the content type is defined in the spec.
-                if ($this->isContentTypeInSpec($normalizedType, $content)) {
+                if (ContentTypeMatcher::isContentTypeInSpec($normalizedType, $content)) {
                     return OpenApiValidationResult::success($matchedPath);
                 }
 
@@ -156,7 +136,7 @@ final class OpenApiResponseValidator
             // the same regardless of the specific JSON media type.
         }
 
-        $jsonContentType = $this->findJsonContentType($content);
+        $jsonContentType = ContentTypeMatcher::findJsonContentType($content);
 
         // If no JSON-compatible content type is defined, skip body validation.
         // This validator only handles JSON schemas; non-JSON types (e.g. text/html,
@@ -179,19 +159,17 @@ final class OpenApiResponseValidator
         $schema = $content[$jsonContentType]['schema'];
         $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Response);
 
-        $schemaObject = self::toObject($jsonSchema);
-        $dataObject = self::toObject($responseBody);
+        $schemaObject = ObjectConverter::convert($jsonSchema);
+        $dataObject = ObjectConverter::convert($responseBody);
 
-        $result = $this->opisValidator->validate($dataObject, $schemaObject);
+        $formatted = $this->runner->validate($schemaObject, $dataObject);
 
-        if ($result->isValid()) {
+        if ($formatted === []) {
             return OpenApiValidationResult::success($matchedPath);
         }
 
-        $formattedErrors = $this->errorFormatter->format($result->error());
-
         $errors = [];
-        foreach ($formattedErrors as $path => $messages) {
+        foreach ($formatted as $path => $messages) {
             foreach ($messages as $message) {
                 $errors[] = "[{$path}] {$message}";
             }
@@ -241,34 +219,6 @@ final class OpenApiResponseValidator
     }
 
     /**
-     * Recursively convert PHP arrays to stdClass objects, matching the
-     * behaviour of json_decode(json_encode($data)) without the intermediate
-     * JSON string allocation.
-     */
-    private static function toObject(mixed $value): mixed
-    {
-        if (!is_array($value)) {
-            return $value;
-        }
-
-        if ($value === [] || array_is_list($value)) {
-            /** @var list<mixed> $value */
-            foreach ($value as $i => $item) {
-                $value[$i] = self::toObject($item);
-            }
-
-            return $value;
-        }
-
-        $object = new stdClass();
-        foreach ($value as $key => $item) {
-            $object->{$key} = self::toObject($item);
-        }
-
-        return $object;
-    }
-
-    /**
      * Returns the raw pattern (as supplied by the caller) that matched, or
      * null if no pattern matched. `preg_match` returning false (runtime
      * failure) is impossible in practice because compileSkipPatterns already
@@ -296,67 +246,5 @@ final class OpenApiResponseValidator
     private function getPathMatcher(string $specName, array $specPaths): OpenApiPathMatcher
     {
         return $this->pathMatchers[$specName] ??= new OpenApiPathMatcher($specPaths, OpenApiSpecLoader::getStripPrefixes());
-    }
-
-    /**
-     * Find the first JSON-compatible content type from the response spec.
-     *
-     * Matches "application/json" exactly and any type with a "+json" structured
-     * syntax suffix (RFC 6838), such as "application/problem+json" and
-     * "application/vnd.api+json". Matching is case-insensitive.
-     *
-     * @param array<string, array<string, mixed>> $content
-     */
-    private function findJsonContentType(array $content): ?string
-    {
-        foreach ($content as $contentType => $mediaType) {
-            $lower = strtolower($contentType);
-
-            if ($this->isJsonContentType($lower)) {
-                return $contentType;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Extract the media type portion before any parameters (e.g. charset),
-     * and return it lower-cased.
-     *
-     * Example: "text/html; charset=utf-8" → "text/html"
-     */
-    private function normalizeMediaType(string $contentType): string
-    {
-        $mediaType = strstr($contentType, ';', true);
-
-        return strtolower(trim($mediaType !== false ? $mediaType : $contentType));
-    }
-
-    /**
-     * Check whether the given (already normalised, lower-cased) response content
-     * type matches any content type key defined in the spec. Spec keys are
-     * lower-cased before comparison.
-     *
-     * @param array<string, array<string, mixed>> $content
-     */
-    private function isContentTypeInSpec(string $responseContentType, array $content): bool
-    {
-        foreach ($content as $specContentType => $mediaType) {
-            if (strtolower($specContentType) === $responseContentType) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * True for "application/json" or any "+json" structured syntax suffix (RFC 6838).
-     * Expects a lower-cased media type without parameters.
-     */
-    private function isJsonContentType(string $lowerContentType): bool
-    {
-        return $lowerContentType === 'application/json' || str_ends_with($lowerContentType, '+json');
     }
 }

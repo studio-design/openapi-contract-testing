@@ -4,20 +4,16 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit;
 
-use const JSON_THROW_ON_ERROR;
-
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
 use function array_map;
 use function count;
 use function implode;
-use function json_encode;
 use function range;
 
 class OpenApiResponseValidatorTest extends TestCase
@@ -36,42 +32,6 @@ class OpenApiResponseValidatorTest extends TestCase
     {
         OpenApiSpecLoader::reset();
         parent::tearDown();
-    }
-
-    // ========================================
-    // toObject equivalence tests
-    // ========================================
-
-    /**
-     * @return iterable<string, array{mixed}>
-     */
-    public static function provideTo_object_matches_json_roundtripCases(): iterable
-    {
-        yield 'null' => [null];
-        yield 'string' => ['hello'];
-        yield 'integer' => [42];
-        yield 'float' => [3.14];
-        yield 'boolean true' => [true];
-        yield 'boolean false' => [false];
-        yield 'empty array' => [[]];
-        yield 'sequential array' => [[1, 2, 3]];
-        yield 'associative array' => [['key' => 'value', 'num' => 1]];
-        yield 'nested associative' => [['a' => ['b' => ['c' => 'deep']]]];
-        yield 'list of objects' => [[['id' => 1, 'name' => 'a'], ['id' => 2, 'name' => 'b']]];
-        yield 'non-sequential int keys' => [[1 => 'a', 3 => 'b']];
-        yield 'mixed nested' => [
-            [
-                'users' => [
-                    ['id' => 1, 'tags' => ['admin', 'user'], 'meta' => ['active' => true]],
-                ],
-                'total' => 1,
-                'filters' => [],
-            ],
-        ];
-        yield 'numeric string keys' => [['200' => ['description' => 'OK']]];
-        yield 'deeply nested list' => [[[['a']]]];
-        yield 'null in array' => [[null, 'a', null]];
-        yield 'empty nested object' => [['data' => []]];
     }
 
     /**
@@ -1126,21 +1086,5 @@ class OpenApiResponseValidatorTest extends TestCase
         );
 
         $this->assertTrue($result->isValid(), 'errors: ' . implode(' | ', $result->errors()));
-    }
-
-    #[Test]
-    #[DataProvider('provideTo_object_matches_json_roundtripCases')]
-    public function to_object_matches_json_roundtrip(mixed $input): void
-    {
-        $method = new ReflectionMethod(OpenApiResponseValidator::class, 'toObject');
-
-        $actual = $method->invoke(null, $input);
-
-        // Re-encode both to JSON to compare structural equivalence
-        // without relying on object identity (assertSame fails on stdClass).
-        $expectedJson = json_encode($input, JSON_THROW_ON_ERROR);
-        $actualJson = (string) json_encode($actual, JSON_THROW_ON_ERROR);
-
-        $this->assertSame($expectedJson, $actualJson);
     }
 }
