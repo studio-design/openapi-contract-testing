@@ -85,9 +85,14 @@ final class OpenApiCoverageExtension implements Extension
      * requiring a real PHPUnit `Configuration`, which is a `final readonly`
      * class with over 150 ctor parameters and is not reasonable to stub.
      *
+     * `$facade` is nullable so unit tests can exercise the eager-load path
+     * without supplying a real `Facade`. Its shape changed between PHPUnit
+     * 11/12 (class) and 13 (interface), so a portable stub is not possible;
+     * skipping subscriber registration in tests is the clean fix.
+     *
      * @internal
      */
-    public function setupExtension(Facade $facade, ParameterCollection $parameters, ?string $githubSummaryPath): void
+    public function setupExtension(?Facade $facade, ParameterCollection $parameters, ?string $githubSummaryPath): void
     {
         if ($parameters->has('spec_base_path')) {
             $basePath = $parameters->get('spec_base_path');
@@ -139,6 +144,10 @@ final class OpenApiCoverageExtension implements Extension
         $consoleOutput = ConsoleOutput::resolve(
             $parameters->has('console_output') ? $parameters->get('console_output') : null,
         );
+
+        if ($facade === null) {
+            return;
+        }
 
         $facade->registerSubscriber(new class ($specs, $outputFile, $consoleOutput, $githubSummaryPath) implements ExecutionFinishedSubscriber {
             /**

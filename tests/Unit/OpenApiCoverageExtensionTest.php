@@ -4,11 +4,8 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit;
 
-use PHPUnit\Event\Subscriber;
-use PHPUnit\Event\Tracer\Tracer;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use PHPUnit\Runner\Extension\Facade;
 use PHPUnit\Runner\Extension\ParameterCollection;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
@@ -70,7 +67,7 @@ class OpenApiCoverageExtensionTest extends TestCase
         $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('Unresolvable $ref');
 
-        $extension->setupExtension($this->stubFacade(), $parameters, null);
+        $extension->setupExtension(null, $parameters, null);
     }
 
     #[Test]
@@ -82,7 +79,7 @@ class OpenApiCoverageExtensionTest extends TestCase
             'specs' => 'does-not-exist',
         ]);
 
-        $extension->setupExtension($this->stubFacade(), $parameters, null);
+        $extension->setupExtension(null, $parameters, null);
 
         $this->assertStringContainsString('WARNING', $this->readStderr());
         $this->assertStringContainsString('does-not-exist', $this->readStderr());
@@ -97,7 +94,7 @@ class OpenApiCoverageExtensionTest extends TestCase
             'specs' => 'refs-valid',
         ]);
 
-        $extension->setupExtension($this->stubFacade(), $parameters, null);
+        $extension->setupExtension(null, $parameters, null);
 
         $this->assertSame('', $this->readStderr());
     }
@@ -118,7 +115,7 @@ class OpenApiCoverageExtensionTest extends TestCase
         ]);
 
         try {
-            $extension->setupExtension($this->stubFacade(), $parameters, $tmp);
+            $extension->setupExtension(null, $parameters, $tmp);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException) {
             // Expected — the FATAL block must still have been written before re-throw.
@@ -143,7 +140,7 @@ class OpenApiCoverageExtensionTest extends TestCase
         ]);
 
         try {
-            $extension->setupExtension($this->stubFacade(), $parameters, null);
+            $extension->setupExtension(null, $parameters, null);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::MalformedJson, $e->reason);
@@ -164,7 +161,7 @@ class OpenApiCoverageExtensionTest extends TestCase
         ]);
 
         try {
-            $extension->setupExtension($this->stubFacade(), $parameters, null);
+            $extension->setupExtension(null, $parameters, null);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::BasePathNotConfigured, $e->reason);
@@ -183,7 +180,7 @@ class OpenApiCoverageExtensionTest extends TestCase
             'specs' => 'does-not-exist,refs-valid',
         ]);
 
-        $extension->setupExtension($this->stubFacade(), $parameters, null);
+        $extension->setupExtension(null, $parameters, null);
 
         $this->assertStringContainsString("WARNING: Skipping spec 'does-not-exist'", $this->readStderr());
         // refs-valid must have loaded cleanly — its content is cached.
@@ -206,7 +203,7 @@ class OpenApiCoverageExtensionTest extends TestCase
         $this->expectException(InvalidOpenApiSpecException::class);
         $this->expectExceptionMessage('Unresolvable $ref');
 
-        $extension->setupExtension($this->stubFacade(), $parameters, null);
+        $extension->setupExtension(null, $parameters, null);
     }
 
     private function readStderr(): string
@@ -217,24 +214,5 @@ class OpenApiCoverageExtensionTest extends TestCase
         rewind($this->stderrBuffer);
 
         return (string) stream_get_contents($this->stderrBuffer);
-    }
-
-    private function stubFacade(): Facade
-    {
-        return new class implements Facade {
-            public function registerSubscribers(Subscriber ...$subscribers): void {}
-
-            public function registerSubscriber(Subscriber $subscriber): void {}
-
-            public function registerTracer(Tracer $tracer): void {}
-
-            public function replaceOutput(): void {}
-
-            public function replaceProgressOutput(): void {}
-
-            public function replaceResultOutput(): void {}
-
-            public function requireCodeCoverageCollection(): void {}
-        };
     }
 }
