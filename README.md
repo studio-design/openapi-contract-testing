@@ -569,7 +569,16 @@ The package auto-detects the OAS version from the `openapi` field and handles sc
 | `prefixItems` | N/A | Converted to `items` array (Draft 07 tuple) |
 | `$dynamicRef` / `$dynamicAnchor` | N/A | Removed (not in Draft 07) |
 | `examples` (array) | N/A | Removed (OAS extension) |
-| `readOnly` / `writeOnly` | Removed (OAS-only in 3.0) | Preserved (valid in Draft 07) |
+| `readOnly` / `writeOnly` | Semantic enforcement (see below). Forbidden properties become boolean `false` subschemas; the keyword is dropped as OAS-only on surviving properties | Semantic enforcement (see below). Forbidden properties become boolean `false` subschemas; the keyword is preserved on surviving properties (valid in Draft 07) |
+
+### `readOnly` / `writeOnly` enforcement
+
+Both validators apply OpenAPI's asymmetric semantics instead of letting the keywords pass as no-ops:
+
+- **Response validation** (`OpenApiResponseValidator`, Laravel trait): any property marked `writeOnly: true` must **not** appear in the response body. If it does, validation fails with the offending property named in the error. A `writeOnly + required` entry is treated as absent on the response side, so a compliant response that omits the property still validates.
+- **Request validation** (`OpenApiRequestValidator`): any property marked `readOnly: true` must **not** appear in the request body. `readOnly + required` is treated as absent on the request side, so a compliant request that omits the property still validates.
+
+Detection looks at each property schema's own top-level `readOnly` / `writeOnly`; markers nested inside the property's `allOf` / `oneOf` / `anyOf` children are not enforced in the current release.
 
 ## API Reference
 

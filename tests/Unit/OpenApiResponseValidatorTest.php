@@ -1089,6 +1089,45 @@ class OpenApiResponseValidatorTest extends TestCase
         $this->assertSame('/pets', $result->matchedPath());
     }
 
+    // ========================================
+    // readOnly / writeOnly enforcement
+    // ========================================
+
+    #[Test]
+    public function response_body_containing_write_only_property_fails_validation(): void
+    {
+        // The spec marks `password` as writeOnly — the server must not include
+        // it in a response.
+        $result = $this->validator->validate(
+            'readwrite',
+            'POST',
+            '/users',
+            201,
+            ['id' => 1, 'name' => 'Ada', 'password' => 'leaked-secret'],
+        );
+
+        $this->assertFalse($result->isValid(), 'writeOnly password should be rejected in response');
+        $errorMessage = implode(' | ', $result->errors());
+        $this->assertStringContainsString('password', $errorMessage);
+    }
+
+    #[Test]
+    public function response_body_without_write_only_property_passes_even_when_spec_lists_it_required(): void
+    {
+        // The spec lists `password` in `required`, but since the property is
+        // writeOnly the response side must treat it as absent — and a compliant
+        // response that omits it should validate.
+        $result = $this->validator->validate(
+            'readwrite',
+            'POST',
+            '/users',
+            201,
+            ['id' => 1, 'name' => 'Ada'],
+        );
+
+        $this->assertTrue($result->isValid(), 'errors: ' . implode(' | ', $result->errors()));
+    }
+
     #[Test]
     #[DataProvider('provideTo_object_matches_json_roundtripCases')]
     public function to_object_matches_json_roundtrip(mixed $input): void

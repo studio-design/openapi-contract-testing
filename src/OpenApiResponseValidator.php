@@ -177,7 +177,7 @@ final class OpenApiResponseValidator
 
         /** @var array<string, mixed> $schema */
         $schema = $content[$jsonContentType]['schema'];
-        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version);
+        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Response);
 
         $schemaObject = self::toObject($jsonSchema);
         $dataObject = self::toObject($responseBody);

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting;
 
 use function array_is_list;
+use function in_array;
 use function is_array;
 use function is_string;
 
@@ -37,13 +38,22 @@ final class OpenApiSchemaConverter
     /**
      * Convert an OpenAPI schema to a JSON Schema Draft 07 compatible schema.
      *
+     * `$context` drives asymmetric handling of `readOnly` / `writeOnly`:
+     * in `Request` context, `readOnly` properties are turned into forbidden
+     * subschemas (boolean `false`) and stripped from `required`; in `Response`
+     * context the same happens for `writeOnly`. See `SchemaContext` for the
+     * motivating OpenAPI semantics.
+     *
      * @param array<string, mixed> $schema
      *
      * @return array<string, mixed>
      */
-    public static function convert(array $schema, OpenApiVersion $version = OpenApiVersion::V3_0): array
-    {
-        self::convertInPlace($schema, $version);
+    public static function convert(
+        array $schema,
+        OpenApiVersion $version = OpenApiVersion::V3_0,
+        SchemaContext $context = SchemaContext::Response,
+    ): array {
+        self::convertInPlace($schema, $version, $context);
 
         return $schema;
     }
@@ -51,11 +61,10 @@ final class OpenApiSchemaConverter
     /**
      * @param array<string, mixed> $schema
      */
-    private static function convertInPlace(array &$schema, OpenApiVersion $version): void
+    private static function convertInPlace(array &$schema, OpenApiVersion $version, SchemaContext $context): void
     {
         if ($version === OpenApiVersion::V3_0) {
             self::handleNullable($schema);
-            self::removeKeys($schema, self::OPENAPI_3_0_KEYS);
         } else {
             self::handlePrefixItems($schema);
             self::removeKeys($schema, self::DRAFT_2020_12_KEYS);
@@ -63,10 +72,24 @@ final class OpenApiSchemaConverter
 
         self::removeKeys($schema, self::OPENAPI_COMMON_KEYS);
 
+        // Enforce readOnly/writeOnly on this object's own `properties` before
+        // recursing: the recursive call's 3.0 key scrub will strip the child's
+        // top-level marker, so an enforcement pass that looks at child
+        // subschemas only sees the keyword while we are still at the parent.
+        // It also avoids needlessly descending into a subtree we're about to
+        // replace with boolean `false`.
+        if (isset($schema['properties']) && is_array($schema['properties'])) {
+            self::enforceContextOnProperties($schema, $context);
+        }
+
+        if ($version === OpenApiVersion::V3_0) {
+            self::removeKeys($schema, self::OPENAPI_3_0_KEYS);
+        }
+
         if (isset($schema['properties']) && is_array($schema['properties'])) {
             foreach ($schema['properties'] as &$property) {
                 if (is_array($property)) {
-                    self::convertInPlace($property, $version);
+                    self::convertInPlace($property, $version, $context);
                 }
             }
             unset($property);
@@ -76,12 +99,12 @@ final class OpenApiSchemaConverter
             if (array_is_list($schema['items'])) {
                 foreach ($schema['items'] as &$item) {
                     if (is_array($item)) {
-                        self::convertInPlace($item, $version);
+                        self::convertInPlace($item, $version, $context);
                     }
                 }
                 unset($item);
             } else {
-                self::convertInPlace($schema['items'], $version);
+                self::convertInPlace($schema['items'], $version, $context);
             }
         }
 
@@ -89,7 +112,7 @@ final class OpenApiSchemaConverter
             if (isset($schema[$combiner]) && is_array($schema[$combiner])) {
                 foreach ($schema[$combiner] as &$item) {
                     if (is_array($item)) {
-                        self::convertInPlace($item, $version);
+                        self::convertInPlace($item, $version, $context);
                     }
                 }
                 unset($item);
@@ -97,12 +120,72 @@ final class OpenApiSchemaConverter
         }
 
         if (isset($schema['additionalProperties']) && is_array($schema['additionalProperties'])) {
-            self::convertInPlace($schema['additionalProperties'], $version);
+            self::convertInPlace($schema['additionalProperties'], $version, $context);
         }
 
         if (isset($schema['not']) && is_array($schema['not'])) {
-            self::convertInPlace($schema['not'], $version);
+            self::convertInPlace($schema['not'], $version, $context);
         }
+    }
+
+    /**
+     * Replace the subschema of every context-forbidden property with boolean
+     * `false` (Draft-07 canonical "this property must not appear") and prune
+     * forbidden names from the parent `required` array.
+     *
+     * Detection only looks at the property's own top-level `readOnly` /
+     * `writeOnly`; markers buried inside a property's `allOf` / `oneOf` /
+     * `anyOf` children are not handled (known limitation).
+     *
+     * @param array<string, mixed> $schema
+     */
+    private static function enforceContextOnProperties(array &$schema, SchemaContext $context): void
+    {
+        /** @var array<string, mixed> $properties */
+        $properties = $schema['properties'];
+        $forbiddenKeyword = $context->forbiddenKeyword();
+        $forbiddenNames = [];
+
+        foreach ($properties as $name => $property) {
+            if (!is_array($property)) {
+                continue;
+            }
+
+            if (($property[$forbiddenKeyword] ?? null) !== true) {
+                continue;
+            }
+
+            $properties[$name] = false;
+            $forbiddenNames[] = $name;
+        }
+
+        if ($forbiddenNames === []) {
+            return;
+        }
+
+        $schema['properties'] = $properties;
+
+        if (!isset($schema['required']) || !is_array($schema['required'])) {
+            return;
+        }
+
+        /** @var array<int, mixed> $required */
+        $required = $schema['required'];
+        $filtered = [];
+        foreach ($required as $entry) {
+            if (is_string($entry) && in_array($entry, $forbiddenNames, true)) {
+                continue;
+            }
+            $filtered[] = $entry;
+        }
+
+        if ($filtered === []) {
+            unset($schema['required']);
+
+            return;
+        }
+
+        $schema['required'] = $filtered;
     }
 
     /**
