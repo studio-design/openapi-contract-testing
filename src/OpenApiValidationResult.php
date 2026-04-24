@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
+use InvalidArgumentException;
+
 use function implode;
 
 final class OpenApiValidationResult
@@ -28,9 +30,23 @@ final class OpenApiValidationResult
         return new self(OpenApiValidationOutcome::Success, [], $matchedPath);
     }
 
-    /** @param string[] $errors */
+    /**
+     * Reject `failure([])` so a Failure always carries at least one error
+     * message. Without this guard, `errorMessage()` would return an empty
+     * string and the Failure would surface as a silent assertion failure.
+     *
+     * @param string[] $errors
+     *
+     * @throws InvalidArgumentException when $errors is empty
+     */
     public static function failure(array $errors, ?string $matchedPath = null): self
     {
+        if ($errors === []) {
+            throw new InvalidArgumentException(
+                'OpenApiValidationResult::failure() requires at least one error message.',
+            );
+        }
+
         return new self(OpenApiValidationOutcome::Failure, $errors, $matchedPath);
     }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\OpenApiValidationOutcome;
@@ -46,6 +47,15 @@ class OpenApiValidationResultTest extends TestCase
         $this->assertFalse($result->isSkipped());
         $this->assertSame($errors, $result->errors());
         $this->assertNull($result->matchedPath());
+    }
+
+    #[Test]
+    public function failure_with_empty_errors_throws(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('failure() requires at least one error message');
+
+        OpenApiValidationResult::failure([]);
     }
 
     #[Test]
