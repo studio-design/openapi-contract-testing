@@ -14,7 +14,8 @@ enum InvalidOpenApiSpecReason
     /**
      * @deprecated Use the more specific external-ref reasons instead:
      *             `LocalRefNotFound`, `LocalRefUnreadable`, `LocalRefRequiresSourceFile`,
-     *             `RemoteRefNotImplemented`, or `FileSchemeNotSupported`. Kept for
+     *             `RemoteRefDisallowed`, `HttpClientNotConfigured`,
+     *             `RemoteRefFetchFailed`, or `FileSchemeNotSupported`. Kept for
      *             backwards compatibility with consumers that branched on this case
      *             before the resolver learned to follow external `$ref` targets.
      *             No production code throws this reason any more.

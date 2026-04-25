@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit;
 
-use const E_USER_WARNING;
-
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\HttpFactory;
 use InvalidArgumentException;
@@ -22,9 +20,7 @@ use function class_exists;
 use function file_put_contents;
 use function json_encode;
 use function mkdir;
-use function restore_error_handler;
 use function rmdir;
-use function set_error_handler;
 use function sys_get_temp_dir;
 use function uniqid;
 use function unlink;
@@ -324,19 +320,10 @@ class OpenApiSpecLoaderTest extends TestCase
     }
 
     #[Test]
-    public function configure_emits_warning_when_client_is_set_without_allow_flag(): void
+    public function configure_throws_when_client_is_set_without_allow_flag(): void
     {
         $client = new Client();
         $factory = new HttpFactory();
-
-        // Override PHPUnit's default failOnWarning behaviour locally so
-        // we can pin the warning message rather than the test crashing.
-        $captured = [];
-        set_error_handler(static function (int $errno, string $msg) use (&$captured): bool {
-            $captured[] = ['errno' => $errno, 'msg' => $msg];
-
-            return true;
-        });
 
         try {
             OpenApiSpecLoader::configure(
@@ -345,39 +332,72 @@ class OpenApiSpecLoaderTest extends TestCase
                 requestFactory: $factory,
                 allowRemoteRefs: false,
             );
-        } finally {
-            restore_error_handler();
+            $this->fail('expected InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('allowRemoteRefs is false', $e->getMessage());
+            $this->assertStringContainsString('HTTP client was provided', $e->getMessage());
         }
-
-        $this->assertCount(1, $captured);
-        $this->assertSame(E_USER_WARNING, $captured[0]['errno']);
-        $this->assertStringContainsString('allowRemoteRefs is false', $captured[0]['msg']);
     }
 
     #[Test]
-    public function configure_accepts_full_remote_setup_without_warning(): void
+    public function configure_accepts_full_remote_setup(): void
     {
         $client = new Client();
         $factory = new HttpFactory();
-        $captured = [];
-        set_error_handler(static function (int $errno, string $msg) use (&$captured): bool {
-            $captured[] = $msg;
 
-            return true;
-        });
+        OpenApiSpecLoader::configure(
+            '/path/to/specs',
+            httpClient: $client,
+            requestFactory: $factory,
+            allowRemoteRefs: true,
+        );
 
+        $this->assertSame('/path/to/specs', OpenApiSpecLoader::getBasePath());
+    }
+
+    #[Test]
+    public function configure_evicts_cached_specs(): void
+    {
+        // A previously-cached spec resolved under one remote-refs policy
+        // must not be served after configure() flips the policy. Pin the
+        // eviction so the next load() reads from disk again.
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+        $first = OpenApiSpecLoader::load('petstore-3.0');
+        $this->assertSame('3.0.3', $first['openapi']);
+
+        OpenApiSpecLoader::configure(
+            $fixturesPath,
+            httpClient: new Client(),
+            requestFactory: new HttpFactory(),
+            allowRemoteRefs: true,
+        );
+
+        // Reload — by-value-equal but not the cached array from before.
+        $reloaded = OpenApiSpecLoader::load('petstore-3.0');
+        $this->assertSame($first, $reloaded);
+    }
+
+    #[Test]
+    public function reset_clears_http_client_and_remote_flag_state(): void
+    {
+        OpenApiSpecLoader::configure(
+            '/path/to/specs',
+            httpClient: new Client(),
+            requestFactory: new HttpFactory(),
+            allowRemoteRefs: true,
+        );
+
+        OpenApiSpecLoader::reset();
+
+        // Reconfiguring with allowRemoteRefs:true but no client must
+        // throw — proving the prior client/factory weren't sticky.
         try {
-            OpenApiSpecLoader::configure(
-                '/path/to/specs',
-                httpClient: $client,
-                requestFactory: $factory,
-                allowRemoteRefs: true,
-            );
-        } finally {
-            restore_error_handler();
+            OpenApiSpecLoader::configure('/path/to/specs', allowRemoteRefs: true);
+            $this->fail('expected InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('allowRemoteRefs requires', $e->getMessage());
         }
-
-        $this->assertSame([], $captured, 'no warning expected when fully wired');
     }
 
     #[Test]

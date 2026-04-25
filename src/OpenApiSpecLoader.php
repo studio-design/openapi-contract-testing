@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
-use const E_USER_WARNING;
 use const JSON_THROW_ON_ERROR;
 
 use InvalidArgumentException;
@@ -24,7 +23,6 @@ use function json_decode;
 use function realpath;
 use function rtrim;
 use function sprintf;
-use function trigger_error;
 
 final class OpenApiSpecLoader
 {
@@ -49,6 +47,11 @@ final class OpenApiSpecLoader
     /**
      * Configure the spec loader.
      *
+     * Existing cached specs are evicted on every call so a config change
+     * (especially flipping `$allowRemoteRefs`) takes effect on the next
+     * `load()`. Without this, a previously cached spec resolved under
+     * the old policy would silently keep serving.
+     *
      * @param string[] $stripPrefixes
      * @param null|ClientInterface $httpClient PSR-18 client used to fetch HTTP(S) `$ref`
      *                                         targets. Required when `$allowRemoteRefs` is true.
@@ -58,9 +61,10 @@ final class OpenApiSpecLoader
      *                              every external HTTP(S) ref throws `RemoteRefDisallowed` so a
      *                              spec can never silently reach the network during tests.
      *
-     * @throws InvalidArgumentException when `$allowRemoteRefs` is true but the client/factory
-     *                                  pair is incomplete — surfaces the misconfiguration at
-     *                                  configure-time rather than at first remote ref.
+     * @throws InvalidArgumentException for any misconfigured pair: `$allowRemoteRefs` true
+     *                                  without client/factory, OR client provided without
+     *                                  `$allowRemoteRefs` true. Both are surfaced at
+     *                                  configure-time so the error never sits silent.
      */
     public static function configure(
         string $basePath,
@@ -77,16 +81,16 @@ final class OpenApiSpecLoader
         }
 
         if (!$allowRemoteRefs && $httpClient !== null) {
-            // The user wired a client but forgot to flip the switch. Warn
-            // loudly so the misconfiguration doesn't sit silent: their
-            // expectation is "HTTP refs work" and our behaviour is "every
-            // HTTP ref throws RemoteRefDisallowed". E_USER_WARNING is what
-            // PHPUnit elevates to a test failure under failOnWarning.
-            trigger_error(
+            // The user wired a client but forgot to flip the switch.
+            // Warning-level signals (E_USER_WARNING) are too easy to
+            // suppress (custom error handlers, error_reporting masks);
+            // surface as a hard exception so the misconfiguration cannot
+            // sit silent. Symmetric with the allowRemoteRefs-without-client
+            // check above — both halves of the pairing are enforced.
+            throw new InvalidArgumentException(
                 'OpenApiSpecLoader::configure(): an HTTP client was provided but '
-                . 'allowRemoteRefs is false. HTTP $refs will be rejected. '
-                . 'Pass allowRemoteRefs: true to enable remote resolution.',
-                E_USER_WARNING,
+                . 'allowRemoteRefs is false. HTTP $refs would be rejected silently. '
+                . 'Either pass allowRemoteRefs: true, or omit the client entirely.',
             );
         }
 
@@ -95,6 +99,10 @@ final class OpenApiSpecLoader
         self::$httpClient = $httpClient;
         self::$requestFactory = $requestFactory;
         self::$allowRemoteRefs = $allowRemoteRefs;
+        // A previous configure() call may have cached specs under a
+        // different remote-refs policy. Evict so the next load() runs
+        // with the new client/flag combination.
+        self::$cache = [];
     }
 
     public static function getBasePath(): string

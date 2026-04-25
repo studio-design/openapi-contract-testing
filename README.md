@@ -649,7 +649,13 @@ Example GitHub Actions workflow step to post the report as a PR comment:
 
 Local `$ref` is resolved automatically. HTTP(S) `$ref` is **disabled by default**: a spec containing `$ref: 'https://example.com/pet.yaml'` rejects with `RemoteRefDisallowed` until you opt in. This keeps tests offline-by-default and prevents an attacker-controlled spec from making the test runner reach arbitrary URLs.
 
-To enable HTTP refs, supply a PSR-18 client + PSR-17 request factory and flip `allowRemoteRefs`:
+To enable HTTP refs, install a PSR-18 client + PSR-17 request factory and pass them along with `allowRemoteRefs: true`:
+
+```bash
+# Install your preferred PSR-18 client (Guzzle 7+ shown; Symfony HttpClient + adapter, Buzz,
+# or any other PSR-18 implementation works the same).
+composer require --dev guzzlehttp/guzzle
+```
 
 ```php
 use GuzzleHttp\Client;
@@ -658,24 +664,27 @@ use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
 OpenApiSpecLoader::configure(
     basePath: 'openapi/',
-    httpClient: new Client(),       // any PSR-18 implementation
-    requestFactory: new HttpFactory(), // any PSR-17 implementation
+    httpClient: new Client(),       // PSR-18 ClientInterface
+    requestFactory: new HttpFactory(), // PSR-17 RequestFactoryInterface
     allowRemoteRefs: true,
 );
 ```
 
-Pick whichever client your project already uses (Guzzle, Symfony HttpClient + adapter, Buzz, …). The library does not bundle one.
+The library does not bundle an HTTP client — pick whichever your project already uses. (Guzzle 7+ implements PSR-18 directly; Guzzle 6 needs an adapter.)
 
 Misconfiguration is caught early:
 
 | Setup | Result |
 | --- | --- |
-| `allowRemoteRefs: true` without `$httpClient` | `InvalidArgumentException` at `configure()` |
-| `$httpClient` set but `allowRemoteRefs: false` | `E_USER_WARNING` at `configure()` (PHPUnit's `failOnWarning` elevates this) |
+| `allowRemoteRefs: true` without `$httpClient` / `$requestFactory` | `InvalidArgumentException` at `configure()` |
+| `$httpClient` set but `allowRemoteRefs: false` | `InvalidArgumentException` at `configure()` (silent misuse impossible) |
 | `allowRemoteRefs: true` + client + ref to URL that 4xx/5xx | `InvalidOpenApiSpecException` with reason `RemoteRefFetchFailed` |
+| `allowRemoteRefs: true` + client + ref to URL that 3xx | `RemoteRefFetchFailed` with redirect target — configure your PSR-18 client to follow redirects, or use the canonical URL |
 | `allowRemoteRefs: true` + client + ref to URL with no detectable format | reason `UnsupportedExtension` (URL extension or `Content-Type` header is required) |
 
-Format detection prefers the URL's filename extension (`.json` / `.yaml` / `.yml`) and falls back to the response's `Content-Type` (`application/json`, `application/*+json`, `application/yaml`, `text/yaml`, etc.). Schema Registry endpoints that expose opaque URLs work out of the box as long as they set the right Content-Type.
+Format detection prefers the URL's filename extension (`.json` / `.yaml` / `.yml`) and falls back to the response's `Content-Type` (`application/json`, `application/*+json`, `application/yaml`, `text/yaml`, etc.). URLs without a recognisable extension still work as long as the server sets a usable `Content-Type`.
+
+Inside an HTTP-loaded document, relative `$refs` resolve against the URL per RFC 3986: a `$ref: './pet.yaml'` inside `https://example.com/openapi.json` fetches `https://example.com/pet.yaml`.
 
 ## OpenAPI 3.0 vs 3.1
 

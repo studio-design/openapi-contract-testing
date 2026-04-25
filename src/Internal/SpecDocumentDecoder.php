@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Internal;
 
+use const JSON_ERROR_DEPTH;
 use const JSON_THROW_ON_ERROR;
 
 use JsonException;
@@ -11,6 +12,7 @@ use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
+use Throwable;
 
 use function get_debug_type;
 use function is_array;
@@ -43,9 +45,21 @@ final class SpecDocumentDecoder
         try {
             $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
+            // The depth-limit case has a different ergonomic story than a
+            // syntax error — surface it explicitly so the user knows the
+            // fix is "increase nesting tolerance" rather than "fix your JSON".
+            $message = $e->getCode() === JSON_ERROR_DEPTH
+                ? sprintf(
+                    'JSON $ref target %s exceeds the 512-level nesting limit (likely a deeply '
+                    . 'recursive schema). %s',
+                    $context,
+                    $e->getMessage(),
+                )
+                : sprintf('Failed to parse JSON $ref target %s: %s', $context, $e->getMessage());
+
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::MalformedJson,
-                sprintf('Failed to parse JSON $ref target %s: %s', $context, $e->getMessage()),
+                $message,
                 ref: $context,
                 previous: $e,
             );
@@ -76,6 +90,19 @@ final class SpecDocumentDecoder
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::MalformedYaml,
                 sprintf('Failed to parse YAML $ref target %s: %s', $context, $e->getMessage()),
+                ref: $context,
+                previous: $e,
+            );
+        } catch (Throwable $e) {
+            // Symfony's parser raises non-ParseException classes for some
+            // inputs (e.g. \InvalidArgumentException on malformed Unicode,
+            // \Error on memory exhaustion mid-parse). Without this catch
+            // those propagate as raw stack traces and never receive an
+            // InvalidOpenApiSpecReason tag. Re-wrap so consumers can
+            // branch on `$reason` consistently.
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::MalformedYaml,
+                sprintf('YAML $ref target %s failed to decode: %s', $context, $e->getMessage()),
                 ref: $context,
                 previous: $e,
             );

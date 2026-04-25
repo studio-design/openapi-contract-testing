@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Tests\Helpers;
 
 use GuzzleHttp\Psr7\Response;
-use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
-use RuntimeException;
 
 use function array_keys;
 use function implode;
@@ -87,5 +85,3 @@ final class FakeHttpClient implements ClientInterface
         return $this->sentUrls;
     }
 }
-
-final class FakeHttpClientUnexpectedRequest extends RuntimeException implements ClientExceptionInterface {}

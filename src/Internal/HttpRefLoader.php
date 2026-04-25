@@ -9,10 +9,12 @@ use const PATHINFO_EXTENSION;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
+use RuntimeException;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
 
 use function pathinfo;
+use function preg_replace;
 use function preg_split;
 use function rtrim;
 use function sprintf;
@@ -55,8 +57,6 @@ final class HttpRefLoader
      *
      * @param array<string, array<string, mixed>> $documentCache by-ref cache keyed by canonical URL
      *
-     * @return array{absoluteUri: string, decoded: array<string, mixed>}
-     *
      * @throws InvalidOpenApiSpecException when the URL cannot be fetched, decoded, or has no detectable format
      */
     public static function loadDocument(
@@ -64,13 +64,14 @@ final class HttpRefLoader
         ClientInterface $client,
         RequestFactoryInterface $requestFactory,
         array &$documentCache,
-    ): array {
+    ): LoadedDocument {
         $canonicalUri = self::canonicalizeUri($url);
 
         if (isset($documentCache[$canonicalUri])) {
-            return ['absoluteUri' => $canonicalUri, 'decoded' => $documentCache[$canonicalUri]];
+            return new LoadedDocument($canonicalUri, $documentCache[$canonicalUri]);
         }
 
+        $safeUrl = self::redactUserInfo($url);
         $request = $requestFactory->createRequest('GET', $canonicalUri);
 
         try {
@@ -78,22 +79,61 @@ final class HttpRefLoader
         } catch (ClientExceptionInterface $e) {
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::RemoteRefFetchFailed,
-                sprintf('HTTP $ref fetch failed: %s (%s)', $url, $e->getMessage()),
-                ref: $url,
+                sprintf('HTTP $ref fetch failed: %s (%s)', $safeUrl, $e->getMessage()),
+                ref: $safeUrl,
                 previous: $e,
             );
         }
 
         $status = $response->getStatusCode();
-        if ($status < 200 || $status >= 300) {
+        if ($status >= 300 && $status < 400) {
+            // Surface the redirect explicitly: PSR-18 clients diverge on
+            // whether they auto-follow (Guzzle defaults to follow, Symfony
+            // to not). A bare 3xx is almost always "user's client has
+            // redirect-following disabled", not a server bug. Including
+            // the Location target makes the next step obvious.
+            $location = $response->getHeaderLine('Location');
+
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::RemoteRefFetchFailed,
-                sprintf('HTTP $ref fetch returned status %d: %s', $status, $url),
-                ref: $url,
+                sprintf(
+                    'HTTP $ref fetch returned redirect status %d: %s%s. '
+                    . 'Configure your PSR-18 client to follow redirects, '
+                    . 'or pin the spec to the canonical URL.',
+                    $status,
+                    $safeUrl,
+                    $location !== '' ? sprintf(' (Location: %s)', $location) : '',
+                ),
+                ref: $safeUrl,
+            );
+        }
+        if ($status < 200 || $status >= 400) {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::RemoteRefFetchFailed,
+                sprintf('HTTP $ref fetch returned status %d: %s', $status, $safeUrl),
+                ref: $safeUrl,
             );
         }
 
-        $body = (string) $response->getBody();
+        // Read via getContents() rather than (string) cast so a stream
+        // I/O failure surfaces as a real exception (PSR-7 permits
+        // __toString() to silently return '' on read errors, which
+        // would then mis-classify as MalformedJson/Yaml).
+        $bodyStream = $response->getBody();
+
+        try {
+            if ($bodyStream->isSeekable()) {
+                $bodyStream->rewind();
+            }
+            $body = $bodyStream->getContents();
+        } catch (RuntimeException $e) {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::RemoteRefFetchFailed,
+                sprintf('HTTP $ref response body unreadable: %s (%s)', $safeUrl, $e->getMessage()),
+                ref: $safeUrl,
+                previous: $e,
+            );
+        }
 
         $format = self::detectFormat($canonicalUri, $response->getHeaderLine('Content-Type'));
         if ($format === null) {
@@ -102,30 +142,37 @@ final class HttpRefLoader
                 sprintf(
                     'HTTP $ref %s has no detectable format (no .json/.yaml/.yml extension on the URL '
                     . 'and no recognised Content-Type header).',
-                    $url,
+                    $safeUrl,
                 ),
-                ref: $url,
+                ref: $safeUrl,
             );
         }
 
         $decoded = $format === 'json'
-            ? SpecDocumentDecoder::decodeJson($body, $url)
-            : SpecDocumentDecoder::decodeYaml($body, $url);
+            ? SpecDocumentDecoder::decodeJson($body, $safeUrl)
+            : SpecDocumentDecoder::decodeYaml($body, $safeUrl);
 
         $documentCache[$canonicalUri] = $decoded;
 
-        return ['absoluteUri' => $canonicalUri, 'decoded' => $decoded];
+        return new LoadedDocument($canonicalUri, $decoded);
     }
 
     /**
-     * Light canonicalisation: trim trailing whitespace. Full URI
-     * normalisation (case-folding scheme/host, removing default ports,
-     * resolving `..`) is intentionally out of scope — spec authors are
-     * trusted to write canonical URLs, and over-aggressive normalisation
-     * could merge cache entries for URIs that the server distinguishes.
+     * Strip `user:pass@` from a URL before it lands in error messages or
+     * logs. Spec authors occasionally embed credentials in `$ref` URLs
+     * for testing, and we don't want them leaking into stderr / CI logs.
      */
+    private static function redactUserInfo(string $url): string
+    {
+        $redacted = preg_replace('#(://)[^/@\s]+@#', '$1', $url);
+
+        return $redacted ?? $url;
+    }
+
     private static function canonicalizeUri(string $url): string
     {
+        // Trim only — case-folding scheme/host or removing default ports
+        // could collapse URIs the server treats as distinct.
         return trim($url);
     }
 
@@ -150,8 +197,11 @@ final class HttpRefLoader
             return null;
         }
 
-        // Drop charset / boundary parameters before the equality check.
-        $type = trim((string) (preg_split('/\s*;\s*/', $type)[0] ?? ''));
+        // RFC-violating servers occasionally emit duplicate Content-Type
+        // headers; PSR-7's getHeaderLine() concatenates them with `, `,
+        // and a server may also tack on a charset / boundary with `;`.
+        // Split on either separator so the first usable type wins.
+        $type = trim((string) (preg_split('/\s*[,;]\s*/', $type)[0] ?? ''));
 
         // application/json, application/openapi+json, application/problem+json …
         if ($type === 'application/json' || str_ends_with($type, '+json')) {

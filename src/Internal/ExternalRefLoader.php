@@ -56,11 +56,9 @@ final class ExternalRefLoader
      *
      * @param array<string, array<string, mixed>> $documentCache by-ref cache keyed by absolute path
      *
-     * @return array{absolutePath: string, decoded: array<string, mixed>}
-     *
      * @throws InvalidOpenApiSpecException when the file cannot be located, decoded, or has an unsupported extension
      */
-    public static function loadDocument(string $refPath, string $sourceFile, array &$documentCache): array
+    public static function loadDocument(string $refPath, string $sourceFile, array &$documentCache): LoadedDocument
     {
         $candidate = str_starts_with($refPath, '/')
             ? $refPath
@@ -97,7 +95,7 @@ final class ExternalRefLoader
         }
 
         if (isset($documentCache[$absolutePath])) {
-            return ['absolutePath' => $absolutePath, 'decoded' => $documentCache[$absolutePath]];
+            return new LoadedDocument($absolutePath, $documentCache[$absolutePath]);
         }
 
         $extension = strtolower((string) pathinfo($absolutePath, PATHINFO_EXTENSION));
@@ -121,7 +119,7 @@ final class ExternalRefLoader
 
         $documentCache[$absolutePath] = $decoded;
 
-        return ['absolutePath' => $absolutePath, 'decoded' => $decoded];
+        return new LoadedDocument($absolutePath, $decoded);
     }
 
     /** @return array<string, mixed> */

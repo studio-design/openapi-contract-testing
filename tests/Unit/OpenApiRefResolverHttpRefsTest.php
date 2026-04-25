@@ -140,9 +140,9 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
     #[Test]
     public function resolves_cross_source_local_to_remote_chain(): void
     {
-        // Local root → local file → remote URL → leaf. Mirrors a real
-        // hybrid setup where some schemas live in the repo and others are
-        // pulled from a Schema Registry.
+        // Local root → local file → remote URL → leaf. Pins that the
+        // resolver correctly switches loaders when a `$ref` crosses
+        // protocols mid-chain.
         $rootPath = $this->workDir . '/openapi.json';
         file_put_contents($rootPath, '{}');
         file_put_contents(
@@ -303,6 +303,149 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::UnresolvableRef, $e->reason);
+        }
+    }
+
+    #[Test]
+    public function document_cache_is_per_resolution_call_not_global_for_http_refs(): void
+    {
+        // The same client is used across two separate resolve() calls;
+        // each call must perform its own fetch. If a future refactor
+        // hoists the cache to a static field, hot-reloading specs in
+        // test watchers would silently see stale URLs.
+        $url = 'https://example.com/pet.json';
+        $callCount = 0;
+        $client = new FakeHttpClient([
+            $url => static function () use (&$callCount): Response {
+                $callCount++;
+
+                return new Response(200, ['Content-Type' => 'application/json'], '{"v":' . $callCount . '}');
+            },
+        ]);
+
+        $spec1 = ['components' => ['schemas' => ['Pet' => ['$ref' => $url]]]];
+        $first = OpenApiRefResolver::resolve(
+            $spec1,
+            httpClient: $client,
+            requestFactory: $this->factory,
+            allowRemoteRefs: true,
+        );
+        $this->assertSame(['v' => 1], $first['components']['schemas']['Pet']);
+
+        $spec2 = ['components' => ['schemas' => ['Pet' => ['$ref' => $url]]]];
+        $second = OpenApiRefResolver::resolve(
+            $spec2,
+            httpClient: $client,
+            requestFactory: $this->factory,
+            allowRemoteRefs: true,
+        );
+        $this->assertSame(['v' => 2], $second['components']['schemas']['Pet']);
+        $this->assertSame(2, $callCount);
+    }
+
+    #[Test]
+    public function relative_ref_inside_http_document_resolves_against_url_per_rfc3986(): void
+    {
+        // Inside a document loaded over HTTP, `$ref: './pet.yaml'` must
+        // resolve against the source URL — not against any local
+        // filesystem path. Without this, dirname() on the URL would
+        // produce nonsense like `dirname('https:')` and the user would
+        // see a confusing LocalRefNotFound.
+        $rootUrl = 'https://example.com/openapi.json';
+        $childUrl = 'https://example.com/schemas/pet.yaml';
+        $client = new FakeHttpClient([
+            $rootUrl => FakeHttpClient::jsonResponse('{"$ref":"./schemas/pet.yaml"}'),
+            $childUrl => FakeHttpClient::yamlResponse("type: object\nrequired:\n  - id\n"),
+        ]);
+
+        $spec = ['components' => ['schemas' => ['Pet' => ['$ref' => $rootUrl]]]];
+
+        $resolved = OpenApiRefResolver::resolve(
+            $spec,
+            httpClient: $client,
+            requestFactory: $this->factory,
+            allowRemoteRefs: true,
+        );
+
+        $this->assertSame(
+            ['type' => 'object', 'required' => ['id']],
+            $resolved['components']['schemas']['Pet'],
+        );
+    }
+
+    #[Test]
+    public function relative_ref_with_parent_dir_resolves_against_http_base(): void
+    {
+        $rootUrl = 'https://example.com/api/v1/openapi.json';
+        $childUrl = 'https://example.com/api/shared.json';
+        $client = new FakeHttpClient([
+            $rootUrl => FakeHttpClient::jsonResponse('{"$ref":"../shared.json"}'),
+            $childUrl => FakeHttpClient::jsonResponse('{"type":"string"}'),
+        ]);
+
+        $spec = ['components' => ['schemas' => ['X' => ['$ref' => $rootUrl]]]];
+
+        $resolved = OpenApiRefResolver::resolve(
+            $spec,
+            httpClient: $client,
+            requestFactory: $this->factory,
+            allowRemoteRefs: true,
+        );
+
+        $this->assertSame(['type' => 'string'], $resolved['components']['schemas']['X']);
+    }
+
+    #[Test]
+    public function absolute_path_ref_inside_http_document_resolves_to_same_host(): void
+    {
+        $rootUrl = 'https://example.com/openapi.json';
+        $childUrl = 'https://example.com/registry/Pet.json';
+        $client = new FakeHttpClient([
+            $rootUrl => FakeHttpClient::jsonResponse('{"$ref":"/registry/Pet.json"}'),
+            $childUrl => FakeHttpClient::jsonResponse('{"type":"integer"}'),
+        ]);
+
+        $spec = ['components' => ['schemas' => ['X' => ['$ref' => $rootUrl]]]];
+
+        $resolved = OpenApiRefResolver::resolve(
+            $spec,
+            httpClient: $client,
+            requestFactory: $this->factory,
+            allowRemoteRefs: true,
+        );
+
+        $this->assertSame(['type' => 'integer'], $resolved['components']['schemas']['X']);
+    }
+
+    #[Test]
+    public function fetch_failure_includes_chain_for_multi_hop_diagnostics(): void
+    {
+        // When a fetch fails 3+ hops deep, the leaf URL alone is poor
+        // diagnostic. The error message should include the $ref chain
+        // so the developer knows which spec entry triggered the cascade.
+        $a = 'https://example.com/a.json';
+        $b = 'https://example.com/b.json';
+        $c = 'https://example.com/missing.json';
+        $client = new FakeHttpClient([
+            $a => FakeHttpClient::jsonResponse('{"$ref":"' . $b . '"}'),
+            $b => FakeHttpClient::jsonResponse('{"$ref":"' . $c . '"}'),
+            $c => new Response(404),
+        ]);
+
+        $spec = ['components' => ['schemas' => ['Leaf' => ['$ref' => $a]]]];
+
+        try {
+            OpenApiRefResolver::resolve(
+                $spec,
+                httpClient: $client,
+                requestFactory: $this->factory,
+                allowRemoteRefs: true,
+            );
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
+            $this->assertStringContainsString('via $ref chain', $e->getMessage());
+            $this->assertStringContainsString($a, $e->getMessage());
         }
     }
 

@@ -36,8 +36,8 @@ class HttpRefLoaderTest extends TestCase
         $cache = [];
         $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
 
-        $this->assertSame($url, $result['absoluteUri']);
-        $this->assertSame(['type' => 'object', 'required' => ['id']], $result['decoded']);
+        $this->assertSame($url, $result->canonicalIdentifier);
+        $this->assertSame(['type' => 'object', 'required' => ['id']], $result->decoded);
     }
 
     #[Test]
@@ -51,15 +51,15 @@ class HttpRefLoaderTest extends TestCase
         $cache = [];
         $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
 
-        $this->assertSame(['type' => 'object', 'required' => ['id']], $result['decoded']);
+        $this->assertSame(['type' => 'object', 'required' => ['id']], $result->decoded);
     }
 
     #[Test]
     public function falls_back_to_content_type_when_url_has_no_extension(): void
     {
-        // Schema Registry endpoints frequently expose JSON via opaque
-        // URLs (e.g. `/registry/Pet`) without a file extension. The
-        // Content-Type header is the only format cue.
+        // Some servers expose JSON via opaque URLs (e.g. `/registry/Pet`)
+        // without a file extension. The Content-Type header is the only
+        // format cue.
         $url = 'https://registry.example.com/Pet';
         $client = new FakeHttpClient([
             $url => new Response(200, ['Content-Type' => 'application/json'], '{"type":"string"}'),
@@ -68,7 +68,7 @@ class HttpRefLoaderTest extends TestCase
         $cache = [];
         $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
 
-        $this->assertSame(['type' => 'string'], $result['decoded']);
+        $this->assertSame(['type' => 'string'], $result->decoded);
     }
 
     #[Test]
@@ -82,7 +82,7 @@ class HttpRefLoaderTest extends TestCase
         $cache = [];
         $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
 
-        $this->assertSame(['type' => 'object'], $result['decoded']);
+        $this->assertSame(['type' => 'object'], $result->decoded);
     }
 
     #[Test]
@@ -96,7 +96,7 @@ class HttpRefLoaderTest extends TestCase
         $cache = [];
         $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
 
-        $this->assertSame(['type' => 'integer'], $result['decoded']);
+        $this->assertSame(['type' => 'integer'], $result->decoded);
     }
 
     #[Test]
@@ -227,6 +227,108 @@ class HttpRefLoaderTest extends TestCase
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::MalformedYaml, $e->reason);
+        }
+    }
+
+    #[Test]
+    public function rejects_3xx_redirect_with_hint_pointing_at_location(): void
+    {
+        // Surface the redirect explicitly: PSR-18 clients vary on whether
+        // they auto-follow (Guzzle does, Symfony does not). A bare 302
+        // landing here is almost always "user's client has redirect-following
+        // disabled", and the error message must point at the next step.
+        $url = 'https://example.com/redirect.json';
+        $client = new FakeHttpClient([
+            $url => new Response(302, ['Location' => 'https://example.com/canonical.json']),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
+            $this->assertStringContainsString('302', $e->getMessage());
+            $this->assertStringContainsString('https://example.com/canonical.json', $e->getMessage());
+            $this->assertStringContainsString('redirect', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function url_extension_takes_precedence_over_conflicting_content_type(): void
+    {
+        // Pin the documented priority: extension wins, even if the
+        // server's Content-Type disagrees. A YAML URL whose server
+        // mistakenly returns `application/json` should still parse as YAML.
+        $url = 'https://example.com/pet.yaml';
+        $client = new FakeHttpClient([
+            $url => new Response(200, ['Content-Type' => 'application/json'], "type: object\n"),
+        ]);
+
+        $cache = [];
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+
+        $this->assertSame(['type' => 'object'], $result->decoded);
+    }
+
+    #[Test]
+    public function throws_unsupported_extension_when_content_type_header_is_empty(): void
+    {
+        $url = 'https://example.com/opaque-resource';
+        $client = new FakeHttpClient([
+            $url => new Response(200, [], 'whatever'),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::UnsupportedExtension, $e->reason);
+        }
+    }
+
+    #[Test]
+    public function tolerates_duplicate_content_type_headers_concatenated_with_comma(): void
+    {
+        // RFC 7230 §3.2.2 forbids it, but real servers occasionally send
+        // duplicate Content-Type headers. PSR-7 getHeaderLine() concatenates
+        // them with `, `; the detector must split on `,` as well as `;`
+        // so the first usable type wins.
+        $url = 'https://example.com/registry/Schema';
+        $client = new FakeHttpClient([
+            $url => new Response(
+                200,
+                ['Content-Type' => ['application/json', 'application/json']],
+                '{"type":"object"}',
+            ),
+        ]);
+
+        $cache = [];
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+
+        $this->assertSame(['type' => 'object'], $result->decoded);
+    }
+
+    #[Test]
+    public function redacts_userinfo_credentials_from_error_messages(): void
+    {
+        // Spec authors occasionally embed credentials in $ref URLs for
+        // testing; those must not leak into stderr / CI logs via error
+        // messages.
+        $url = 'https://alice:secret@example.com/private/pet.json';
+        $client = new FakeHttpClient([
+            $url => new Response(404),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertStringNotContainsString('secret', $e->getMessage());
+            $this->assertStringNotContainsString('alice', $e->getMessage());
+            $this->assertStringContainsString('example.com', $e->getMessage());
         }
     }
 
