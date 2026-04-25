@@ -6,9 +6,11 @@ namespace Studio\OpenApiContractTesting\Tests\Integration;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\OpenApiValidationResult;
 
 class ResponseValidationTest extends TestCase
 {
@@ -33,7 +35,6 @@ class ResponseValidationTest extends TestCase
     #[Test]
     public function full_pipeline_v30_validate_and_track_coverage(): void
     {
-        // Validate a valid response
         $result = $this->validator->validate(
             'petstore-3.0',
             'GET',
@@ -43,12 +44,8 @@ class ResponseValidationTest extends TestCase
         );
         $this->assertTrue($result->isValid());
 
-        // Track coverage
-        if ($result->matchedPath() !== null) {
-            OpenApiCoverageTracker::record('petstore-3.0', 'GET', $result->matchedPath());
-        }
+        $this->recordResult('petstore-3.0', 'GET', $result);
 
-        // Validate another endpoint
         $result2 = $this->validator->validate(
             'petstore-3.0',
             'POST',
@@ -57,24 +54,18 @@ class ResponseValidationTest extends TestCase
             ['data' => ['id' => 2, 'name' => 'Whiskers', 'tag' => 'cat']],
         );
         $this->assertTrue($result2->isValid());
+        $this->recordResult('petstore-3.0', 'POST', $result2);
 
-        if ($result2->matchedPath() !== null) {
-            OpenApiCoverageTracker::record('petstore-3.0', 'POST', $result2->matchedPath());
-        }
-
-        // Check coverage
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
-        $this->assertSame(23, $coverage['total']);
-        $this->assertSame(2, $coverage['coveredCount']);
-        $this->assertContains('GET /v1/pets', $coverage['covered']);
-        $this->assertContains('POST /v1/pets', $coverage['covered']);
-        $this->assertContains('GET /v1/health', $coverage['uncovered']);
-        $this->assertContains('GET /v1/logout', $coverage['uncovered']);
-        $this->assertContains('GET /v1/pets/search', $coverage['uncovered']);
-        $this->assertContains('DELETE /v1/pets/{petId}', $coverage['uncovered']);
-        $this->assertContains('GET /v1/pets/{petId}', $coverage['uncovered']);
-        $this->assertContains('PATCH /v1/pets/{petId}', $coverage['uncovered']);
-        $this->assertContains('PUT /v1/pets/{petId}', $coverage['uncovered']);
+        $this->assertSame(23, $coverage['endpointTotal']);
+        $this->assertGreaterThanOrEqual(2, $coverage['endpointFullyCovered'] + $coverage['endpointPartial']);
+
+        $endpoints = $this->indexEndpoints($coverage['endpoints']);
+        $this->assertSame('partial', $endpoints['GET /v1/pets']['state']);
+        // POST /v1/pets has multiple declared responses (201, 409 ×2, 415);
+        // recording only 201 leaves the others uncovered → partial state.
+        $this->assertSame('partial', $endpoints['POST /v1/pets']['state']);
+        $this->assertSame('uncovered', $endpoints['GET /v1/health']['state']);
     }
 
     #[Test]
@@ -89,13 +80,12 @@ class ResponseValidationTest extends TestCase
         );
         $this->assertTrue($result->isValid());
 
-        if ($result->matchedPath() !== null) {
-            OpenApiCoverageTracker::record('petstore-3.1', 'GET', $result->matchedPath());
-        }
+        $this->recordResult('petstore-3.1', 'GET', $result);
 
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.1');
-        $this->assertSame(19, $coverage['total']);
-        $this->assertSame(1, $coverage['coveredCount']);
+        $this->assertSame(19, $coverage['endpointTotal']);
+        $endpoints = $this->indexEndpoints($coverage['endpoints']);
+        $this->assertContains($endpoints['GET /v1/pets']['state'], ['partial', 'all-covered']);
     }
 
     #[Test]
@@ -110,13 +100,11 @@ class ResponseValidationTest extends TestCase
         );
         $this->assertTrue($result->isValid());
 
-        if ($result->matchedPath() !== null) {
-            OpenApiCoverageTracker::record('petstore-3.0', 'GET', $result->matchedPath());
-        }
+        $this->recordResult('petstore-3.0', 'GET', $result);
 
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
-        $this->assertSame(1, $coverage['coveredCount']);
-        $this->assertContains('GET /v1/logout', $coverage['covered']);
+        $endpoints = $this->indexEndpoints($coverage['endpoints']);
+        $this->assertSame('all-covered', $endpoints['GET /v1/logout']['state']);
     }
 
     #[Test]
@@ -132,17 +120,17 @@ class ResponseValidationTest extends TestCase
         );
         $this->assertTrue($result->isValid());
 
-        if ($result->matchedPath() !== null) {
-            OpenApiCoverageTracker::record('petstore-3.0', 'POST', $result->matchedPath());
-        }
+        $this->recordResult('petstore-3.0', 'POST', $result);
 
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
-        $this->assertSame(1, $coverage['coveredCount']);
-        $this->assertContains('POST /v1/pets', $coverage['covered']);
+        $endpoints = $this->indexEndpoints($coverage['endpoints']);
+        // text/html is one of two declared 409 content-types; the other (application/json)
+        // remains uncovered, so the endpoint as a whole is partial.
+        $this->assertSame('partial', $endpoints['POST /v1/pets']['state']);
     }
 
     #[Test]
-    public function response_500_records_endpoint_as_skipped_only(): void
+    public function response_500_marks_skipped_response_with_range_reconciliation(): void
     {
         $result = $this->validator->validate(
             'petstore-3.0',
@@ -151,28 +139,30 @@ class ResponseValidationTest extends TestCase
             500,
             ['anything' => 'goes'],
         );
-        // Record before asserting isSkipped() — asserting first lets phpstan
-        // narrow the bool to a constant and flag !isSkipped() as always-false.
-        if ($result->matchedPath() !== null) {
-            OpenApiCoverageTracker::record(
-                'petstore-3.0',
-                'GET',
-                $result->matchedPath(),
-                schemaValidated: !$result->isSkipped(),
-            );
-        }
+        $this->recordResult('petstore-3.0', 'GET', $result);
 
         $this->assertTrue($result->isValid());
         $this->assertTrue($result->isSkipped());
 
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
-        $this->assertContains('GET /v1/pets', $coverage['covered']);
-        $this->assertSame(['GET /v1/pets'], $coverage['skippedOnly']);
-        $this->assertSame(1, $coverage['skippedOnlyCount']);
+        $endpoints = $this->indexEndpoints($coverage['endpoints']);
+        $this->assertSame('partial', $endpoints['GET /v1/pets']['state']);
+        // petstore-3.0 declares `500: application/json` literally — recording
+        // matches it exactly, so it shows up as `skipped` (not in
+        // unexpectedObservations).
+        $hadSkipped = false;
+        foreach ($endpoints['GET /v1/pets']['responses'] as $row) {
+            if ($row['statusKey'] === '500' && $row['state'] === 'skipped') {
+                $hadSkipped = true;
+
+                break;
+            }
+        }
+        $this->assertTrue($hadSkipped, 'Expected a skipped row for status 500');
     }
 
     #[Test]
-    public function response_200_then_500_keeps_endpoint_validated(): void
+    public function response_200_then_500_keeps_pair_validated_independently(): void
     {
         $ok = $this->validator->validate(
             'petstore-3.0',
@@ -181,12 +171,7 @@ class ResponseValidationTest extends TestCase
             200,
             ['data' => [['id' => 1, 'name' => 'Fido', 'tag' => null]]],
         );
-        OpenApiCoverageTracker::record(
-            'petstore-3.0',
-            'GET',
-            $ok->matchedPath() ?? '/v1/pets',
-            schemaValidated: !$ok->isSkipped(),
-        );
+        $this->recordResult('petstore-3.0', 'GET', $ok);
 
         $skip = $this->validator->validate(
             'petstore-3.0',
@@ -195,24 +180,23 @@ class ResponseValidationTest extends TestCase
             500,
             ['anything' => 'goes'],
         );
-        OpenApiCoverageTracker::record(
-            'petstore-3.0',
-            'GET',
-            $skip->matchedPath() ?? '/v1/pets',
-            schemaValidated: !$skip->isSkipped(),
-        );
+        $this->recordResult('petstore-3.0', 'GET', $skip);
 
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
-        $this->assertContains('GET /v1/pets', $coverage['covered']);
-        $this->assertSame([], $coverage['skippedOnly']);
-        $this->assertSame(0, $coverage['skippedOnlyCount']);
+        $endpoints = $this->indexEndpoints($coverage['endpoints']);
+        $rowsByKey = [];
+        foreach ($endpoints['GET /v1/pets']['responses'] as $row) {
+            $rowsByKey[$row['statusKey'] . ':' . $row['contentTypeKey']] = $row;
+        }
+
+        // 200:application/json validated independently of 500 skipped.
+        $this->assertSame('validated', $rowsByKey['200:application/json']['state']);
+        $this->assertSame('skipped', $rowsByKey['500:application/json']['state']);
     }
 
     #[Test]
-    public function response_500_then_200_keeps_endpoint_validated(): void
+    public function response_500_then_200_keeps_pair_validated_independently(): void
     {
-        // Reverse order of the previous test — monotonic `validated` means
-        // ordering does not matter.
         $skip = $this->validator->validate(
             'petstore-3.0',
             'GET',
@@ -220,12 +204,7 @@ class ResponseValidationTest extends TestCase
             500,
             ['anything' => 'goes'],
         );
-        OpenApiCoverageTracker::record(
-            'petstore-3.0',
-            'GET',
-            $skip->matchedPath() ?? '/v1/pets',
-            schemaValidated: !$skip->isSkipped(),
-        );
+        $this->recordResult('petstore-3.0', 'GET', $skip);
 
         $ok = $this->validator->validate(
             'petstore-3.0',
@@ -234,17 +213,17 @@ class ResponseValidationTest extends TestCase
             200,
             ['data' => [['id' => 1, 'name' => 'Fido', 'tag' => null]]],
         );
-        OpenApiCoverageTracker::record(
-            'petstore-3.0',
-            'GET',
-            $ok->matchedPath() ?? '/v1/pets',
-            schemaValidated: !$ok->isSkipped(),
-        );
+        $this->recordResult('petstore-3.0', 'GET', $ok);
 
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
-        $this->assertContains('GET /v1/pets', $coverage['covered']);
-        $this->assertSame([], $coverage['skippedOnly']);
-        $this->assertSame(0, $coverage['skippedOnlyCount']);
+        $endpoints = $this->indexEndpoints($coverage['endpoints']);
+        $rowsByKey = [];
+        foreach ($endpoints['GET /v1/pets']['responses'] as $row) {
+            $rowsByKey[$row['statusKey'] . ':' . $row['contentTypeKey']] = $row;
+        }
+
+        $this->assertSame('validated', $rowsByKey['200:application/json']['state']);
+        $this->assertSame('skipped', $rowsByKey['500:application/json']['state']);
     }
 
     #[Test]
@@ -261,5 +240,44 @@ class ResponseValidationTest extends TestCase
         $this->assertFalse($result->isValid());
         $this->assertNotEmpty($result->errors());
         $this->assertNotEmpty($result->errorMessage());
+    }
+
+    /**
+     * Mirror what {@see ValidatesOpenApiSchema}
+     * does so the integration test exercises the same coverage path.
+     */
+    private function recordResult(
+        string $specName,
+        string $method,
+        OpenApiValidationResult $result,
+    ): void {
+        if ($result->matchedPath() === null) {
+            return;
+        }
+
+        OpenApiCoverageTracker::recordResponse(
+            $specName,
+            $method,
+            $result->matchedPath(),
+            $result->matchedStatusCode() ?? '0',
+            $result->matchedContentType(),
+            schemaValidated: !$result->isSkipped(),
+            skipReason: $result->skipReason(),
+        );
+    }
+
+    /**
+     * @param list<array{endpoint: string, method: string, path: string, operationId: ?string, state: string, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}> $endpoints
+     *
+     * @return array<string, array{endpoint: string, method: string, path: string, operationId: ?string, state: string, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}>
+     */
+    private function indexEndpoints(array $endpoints): array
+    {
+        $indexed = [];
+        foreach ($endpoints as $endpoint) {
+            $indexed[$endpoint['endpoint']] = $endpoint;
+        }
+
+        return $indexed;
     }
 }

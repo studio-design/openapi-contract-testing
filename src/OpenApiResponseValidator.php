@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting;
 
 use InvalidArgumentException;
+use RuntimeException;
+use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidationResult;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseHeaderValidator;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
@@ -103,9 +105,12 @@ final class OpenApiResponseValidator
         // (path / method not in spec) still fail loudly so typos stay visible.
         $matchingPattern = $this->matchingSkipPattern($statusCodeStr);
         if ($matchingPattern !== null) {
+            // matchedStatusCode here is the literal HTTP status string, not a
+            // spec key — see OpenApiValidationResult::skipped() for why.
             return OpenApiValidationResult::skipped(
                 $matchedPath,
                 sprintf('status %s matched skip pattern %s', $statusCodeStr, $matchingPattern),
+                $statusCodeStr,
             );
         }
 
@@ -117,7 +122,7 @@ final class OpenApiResponseValidator
 
         $responseSpec = $responses[$statusCodeStr];
 
-        $bodyErrors = $this->validateBody(
+        $bodyResult = $this->validateBody(
             $specName,
             $method,
             $matchedPath,
@@ -140,13 +145,22 @@ final class OpenApiResponseValidator
         // Order is body errors first, headers second. Tests that pin
         // specific positions rely on this; reordering would silently
         // change diagnostic flow without breaking behaviour.
-        $errors = array_merge($bodyErrors, $headerErrors);
+        $errors = array_merge($bodyResult->errors, $headerErrors);
 
         if ($errors === []) {
-            return OpenApiValidationResult::success($matchedPath);
+            return OpenApiValidationResult::success(
+                $matchedPath,
+                $statusCodeStr,
+                $bodyResult->matchedContentType,
+            );
         }
 
-        return OpenApiValidationResult::failure($errors, $matchedPath);
+        return OpenApiValidationResult::failure(
+            $errors,
+            $matchedPath,
+            $statusCodeStr,
+            $bodyResult->matchedContentType,
+        );
     }
 
     /**
@@ -191,8 +205,6 @@ final class OpenApiResponseValidator
 
     /**
      * @param array<string, mixed> $responseSpec
-     *
-     * @return string[]
      */
     private function validateBody(
         string $specName,
@@ -203,28 +215,23 @@ final class OpenApiResponseValidator
         mixed $responseBody,
         ?string $responseContentType,
         OpenApiVersion $version,
-    ): array {
+    ): ResponseBodyValidationResult {
         // 204 No Content (and similar) declare no `content` block. Nothing
         // to validate — return empty so the result aggregates cleanly.
         if (!isset($responseSpec['content'])) {
-            return [];
+            return new ResponseBodyValidationResult([], null);
         }
 
         /** @var array<string, array<string, mixed>> $content */
         $content = $responseSpec['content'];
 
-        // ValidatorErrorBoundary::safely() converts a RuntimeException thrown from
-        // body validation (e.g. opis/json-schema SchemaException — InvalidKeywordException,
-        // UnresolvedReferenceException, ...) into an error-string entry rather than
-        // letting it abort the orchestrator. Preserves observability symmetry with
-        // OpenApiRequestValidator. \LogicException and \Error still bubble so
-        // programmer bugs are not masked.
-        return ValidatorErrorBoundary::safely(
-            'response-body',
-            $specName,
-            $method,
-            $matchedPath,
-            fn(): array => $this->bodyValidator->validate(
+        // Inlined try/catch mirrors ValidatorErrorBoundary::safely() for the
+        // body validator: same narrow `RuntimeException` catch, same error
+        // formatting. The boundary returns string[]; the body validator now
+        // returns a richer DTO carrying matchedContentType, so we can't reuse
+        // the helper as-is. \LogicException and \Error still bubble.
+        try {
+            return $this->bodyValidator->validate(
                 $specName,
                 $method,
                 $matchedPath,
@@ -233,8 +240,27 @@ final class OpenApiResponseValidator
                 $responseBody,
                 $responseContentType,
                 $version,
-            ),
-        );
+            );
+        } catch (RuntimeException $e) {
+            $previous = $e->getPrevious();
+            $previousSuffix = $previous !== null
+                ? sprintf(' (caused by %s: %s)', $previous::class, $previous->getMessage())
+                : '';
+
+            return new ResponseBodyValidationResult(
+                [sprintf(
+                    "[%s] %s %s in '%s' spec: %s threw: %s%s",
+                    'response-body',
+                    $method,
+                    $matchedPath,
+                    $specName,
+                    $e::class,
+                    $e->getMessage(),
+                    $previousSuffix,
+                )],
+                null,
+            );
+        }
     }
 
     /**

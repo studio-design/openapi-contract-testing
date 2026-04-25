@@ -532,60 +532,72 @@ Notes:
 
 After running tests, the PHPUnit extension prints a coverage report. The output format is controlled by the `console_output` parameter (or `OPENAPI_CONSOLE_OUTPUT` environment variable).
 
+Coverage is tracked at **`(method, path, statusCode, contentType)` granularity**: a `GET /v1/pets` test that only exercises `200 application/json` does not count `404` or `application/problem+json` as covered. Per-endpoint markers reflect the resolved state across all declared response definitions:
+
+| Marker | Meaning |
+|--------|---------|
+| `✓` / `:white_check_mark:` | All declared `(status, content-type)` pairs validated |
+| `◐` / `:large_orange_diamond:` | Some pairs validated, others uncovered |
+| `⚠` / `:warning:` | Pair was skipped (e.g. `5XX` matched the default skip pattern) |
+| `✗` / `:x:` | No pair validated for this endpoint |
+| `·` / `:information_source:` | Endpoint reached via request-validation but no response asserted |
+
+The report also breaks the coverage rate into two numbers — the strict endpoint rate (all declared responses validated) and the response-level rate (`responseCovered / responseTotal`).
+
 ### `default` mode (default)
 
-Shows covered endpoints individually and uncovered as a count:
+Shows endpoint summary lines only:
 
 ```
 OpenAPI Contract Test Coverage
 ==================================================
 
-[front] 12/45 endpoints (26.7%)
+[front] endpoints: 12/45 fully covered (26.7%), 8 partial, 25 uncovered
+        responses: 38/120 covered (31.7%), 4 skipped, 78 uncovered
 --------------------------------------------------
-Covered:
-  ✓ GET /v1/pets
-  ✓ POST /v1/pets
-  ✓ GET /v1/pets/{petId}
-  ✓ DELETE /v1/pets/{petId}
-Uncovered: 41 endpoints
+Legend: ✓=validated  ⚠=skipped  ✗=uncovered  ◐=partial  ·=request-only  *=any/no content-type
+  ✓ GET /v1/pets                    (3/3 responses)
+  ◐ POST /v1/pets                   (1/2 responses)
+  ⚠ DELETE /v1/pets/{petId}         (1/2 responses, 1 skipped)
+  ✗ PUT /v1/pets/{petId}            (0/2 responses)
 ```
 
 ### `all` mode
 
-Shows both covered and uncovered endpoints individually:
+Shows endpoint summaries with per-response sub-rows:
 
 ```
-OpenAPI Contract Test Coverage
-==================================================
-
-[front] 12/45 endpoints (26.7%)
+[front] endpoints: 12/45 fully covered (26.7%), 8 partial, 25 uncovered
+        responses: 38/120 covered (31.7%), 4 skipped, 78 uncovered
 --------------------------------------------------
-Covered:
-  ✓ GET /v1/pets
-  ✓ POST /v1/pets
-  ✓ GET /v1/pets/{petId}
-  ✓ DELETE /v1/pets/{petId}
-Uncovered:
-  ✗ PUT /v1/pets/{petId}
-  ✗ GET /v1/owners
-  ...
+Legend: ✓=validated  ⚠=skipped  ✗=uncovered  ◐=partial  ·=request-only  *=any/no content-type
+  ✓ GET /v1/pets                    (3/3 responses)
+      ✓ 200  application/json                 [12]
+      ✓ 400  application/problem+json         [1]
+      ✓ 422  Application/Problem+JSON         [1]
+  ◐ POST /v1/pets                   (1/2 responses)
+      ✓ 201  application/json                 [3]
+      ✗ 422  application/problem+json         uncovered
+  ⚠ DELETE /v1/pets/{petId}         (1/2 responses, 1 skipped)
+      ✓ 204  *                                [2]
+      ⚠ 5XX  *                                skipped: status 503 matched skip pattern 5\d\d
 ```
 
 ### `uncovered_only` mode
 
-Shows uncovered endpoints individually and covered as a count — useful for large APIs where you want to focus on missing coverage:
+Shows sub-rows only for partial / uncovered endpoints, keeping fully-covered ones compact:
 
 ```
-OpenAPI Contract Test Coverage
-==================================================
-
-[front] 12/45 endpoints (26.7%)
+[front] endpoints: 12/45 fully covered (26.7%), 8 partial, 25 uncovered
+        responses: 38/120 covered (31.7%), 4 skipped, 78 uncovered
 --------------------------------------------------
-Covered: 12 endpoints
-Uncovered:
-  ✗ PUT /v1/pets/{petId}
-  ✗ GET /v1/owners
-  ...
+Legend: ✓=validated  ⚠=skipped  ✗=uncovered  ◐=partial  ·=request-only  *=any/no content-type
+  ✓ GET /v1/pets                    (3/3 responses)
+  ◐ POST /v1/pets                   (1/2 responses)
+      ✗ 422  application/problem+json         uncovered
+  ✗ PUT /v1/pets/{petId}            (0/2 responses)
+      ✗ 200  application/json                 uncovered
+      ✗ 404  application/problem+json         uncovered
 ```
 
 You can set the mode via `phpunit.xml`:
@@ -762,13 +774,39 @@ OpenApiSpecLoader::reset(); // For testing
 
 ### `OpenApiCoverageTracker`
 
-Tracks which endpoints have been validated.
+Tracks which endpoints have been exercised, at `(method, path, statusCode, contentType)` granularity. The Laravel trait records via the tracker automatically; framework-agnostic adapters call it directly.
 
 ```php
-OpenApiCoverageTracker::record('front', 'GET', '/v1/pets');
+// Request-side: an endpoint was reached without a response assertion
+OpenApiCoverageTracker::recordRequest('front', 'GET', '/v1/pets');
+
+// Response-side: full granularity (status + content-type spec keys)
+OpenApiCoverageTracker::recordResponse(
+    specName: 'front',
+    method: 'GET',
+    path: '/v1/pets',
+    statusKey: '200',                  // spec key, or literal status when skipped
+    contentTypeKey: 'application/json',// spec key (case preserved); null → "*"
+    schemaValidated: true,             // false → state=skipped
+    skipReason: null,
+);
+
 $coverage = OpenApiCoverageTracker::computeCoverage('front');
-// ['covered' => [...], 'uncovered' => [...], 'total' => 45, 'coveredCount' => 12]
+// [
+//   'endpoints' => [...per-endpoint EndpointSummary, includes per-response sub-rows...],
+//   'endpointTotal' => 45,
+//   'endpointFullyCovered' => 12,
+//   'endpointPartial' => 8,
+//   'endpointUncovered' => 25,
+//   'responseTotal' => 120,
+//   'responseCovered' => 38,
+//   'responseSkipped' => 4,
+//   'responseUncovered' => 78,
+//   ...
+// ]
 ```
+
+`hasAnyCoverage(spec): bool` is a fast presence check. `getCovered()` is retained as a diagnostic shim returning `array<spec, array<"METHOD path", true>>`. See [CHANGELOG.md](CHANGELOG.md) for the migration from the pre-#111 endpoint-level shape.
 
 ## Development
 

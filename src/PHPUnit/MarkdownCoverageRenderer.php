@@ -6,17 +6,22 @@ namespace Studio\OpenApiContractTesting\PHPUnit;
 
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 
-use function array_flip;
-use function count;
 use function implode;
 use function round;
+use function sprintf;
 
 /**
  * @phpstan-import-type CoverageResult from OpenApiCoverageTracker
+ * @phpstan-import-type EndpointSummary from OpenApiCoverageTracker
+ * @phpstan-import-type ResponseRow from OpenApiCoverageTracker
  */
 final class MarkdownCoverageRenderer
 {
-    private const SKIPPED_ONLY_NOTE = '> :warning: response body validation skipped (e.g. 5xx default skip) — endpoint was exercised but its body was never checked against the schema.';
+    private const MARKER_ALL_COVERED = ':white_check_mark:';
+    private const MARKER_PARTIAL = ':large_orange_diamond:';
+    private const MARKER_SKIPPED = ':warning:';
+    private const MARKER_UNCOVERED = ':x:';
+    private const MARKER_REQUEST_ONLY = ':information_source:';
 
     /**
      * @param array<string, CoverageResult> $results
@@ -30,47 +35,169 @@ final class MarkdownCoverageRenderer
         $lines = ['## OpenAPI Contract Test Coverage', ''];
 
         foreach ($results as $specName => $result) {
-            $total = $result['total'];
-            $coveredCount = $result['coveredCount'];
-            $percentage = $total > 0
-                ? round($coveredCount / $total * 100, 1)
-                : 0;
+            $endpointPct = self::percentage($result['endpointFullyCovered'], $result['endpointTotal']);
+            $responsePct = self::percentage($result['responseCovered'], $result['responseTotal']);
 
-            $lines[] = "### {$specName} — {$coveredCount}/{$total} endpoints ({$percentage}%)";
+            $lines[] = sprintf(
+                '### %s — endpoints: %d/%d fully covered (%s%%)',
+                $specName,
+                $result['endpointFullyCovered'],
+                $result['endpointTotal'],
+                self::formatPercent($endpointPct),
+            );
+            $lines[] = sprintf(
+                '_responses: %d/%d covered (%s%%) — %d skipped, %d uncovered, %d partial endpoints, %d uncovered endpoints_',
+                $result['responseCovered'],
+                $result['responseTotal'],
+                self::formatPercent($responsePct),
+                $result['responseSkipped'],
+                $result['responseUncovered'],
+                $result['endpointPartial'],
+                $result['endpointUncovered'],
+            );
             $lines[] = '';
 
-            if ($result['skippedOnlyCount'] > 0) {
-                $lines[] = self::SKIPPED_ONLY_NOTE;
-                $lines[] = '';
+            if ($result['endpoints'] === []) {
+                continue;
             }
 
-            if ($result['covered'] !== []) {
-                $skipSet = array_flip($result['skippedOnly']);
-                $lines[] = '| Status | Endpoint |';
-                $lines[] = '|--------|----------|';
-                foreach ($result['covered'] as $endpoint) {
-                    $marker = isset($skipSet[$endpoint]) ? ':warning:' : ':white_check_mark:';
-                    $lines[] = "| {$marker} | `{$endpoint}` |";
-                }
-                $lines[] = '';
+            $lines[] = '| Status | Endpoint | Responses |';
+            $lines[] = '|--------|----------|-----------|';
+            foreach ($result['endpoints'] as $endpoint) {
+                $lines[] = sprintf(
+                    '| %s | `%s` | %s |',
+                    self::endpointMarker($endpoint['state']),
+                    $endpoint['endpoint'],
+                    self::endpointResponsesSummary($endpoint),
+                );
+            }
+            $lines[] = '';
+
+            $lines[] = '<details>';
+            $lines[] = '<summary>Per-response detail</summary>';
+            $lines[] = '';
+
+            foreach ($result['endpoints'] as $endpoint) {
+                $lines = [...$lines, ...self::renderEndpointDetail($endpoint)];
             }
 
-            $uncoveredCount = count($result['uncovered']);
-            if ($uncoveredCount > 0) {
-                $lines[] = '<details>';
-                $lines[] = "<summary>{$uncoveredCount} uncovered endpoints</summary>";
-                $lines[] = '';
-                $lines[] = '| Endpoint |';
-                $lines[] = '|----------|';
-                foreach ($result['uncovered'] as $endpoint) {
-                    $lines[] = "| `{$endpoint}` |";
-                }
-                $lines[] = '';
-                $lines[] = '</details>';
-                $lines[] = '';
-            }
+            $lines[] = '</details>';
+            $lines[] = '';
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * @param EndpointSummary $endpoint
+     *
+     * @return list<string>
+     */
+    private static function renderEndpointDetail(array $endpoint): array
+    {
+        $heading = $endpoint['operationId'] !== null
+            ? sprintf('#### `%s` (%s)', $endpoint['endpoint'], $endpoint['operationId'])
+            : sprintf('#### `%s`', $endpoint['endpoint']);
+        $lines = [$heading];
+
+        if ($endpoint['responses'] === []) {
+            $lines[] = $endpoint['requestReached']
+                ? '_request reached, no response definitions in spec_'
+                : '_no response definitions in spec_';
+            $lines[] = '';
+
+            return $lines;
+        }
+
+        $lines[] = '| Status | Content-Type | State |';
+        $lines[] = '|--------|--------------|-------|';
+        foreach ($endpoint['responses'] as $row) {
+            $lines[] = sprintf(
+                '| %s %s | %s | %s |',
+                self::responseMarker($row['state']),
+                $row['statusKey'],
+                $row['contentTypeKey'],
+                self::responseStateLabel($row),
+            );
+        }
+
+        if ($endpoint['unexpectedObservations'] !== []) {
+            $lines[] = '';
+            $lines[] = '_Unexpected observations (status / content-type not in spec):_';
+            foreach ($endpoint['unexpectedObservations'] as $obs) {
+                $lines[] = sprintf('- `%s` `%s`', $obs['statusKey'], $obs['contentTypeKey']);
+            }
+        }
+
+        $lines[] = '';
+
+        return $lines;
+    }
+
+    /**
+     * @param EndpointSummary $endpoint
+     */
+    private static function endpointResponsesSummary(array $endpoint): string
+    {
+        if ($endpoint['totalResponseCount'] === 0) {
+            return $endpoint['requestReached'] ? 'request only' : 'no spec entries';
+        }
+
+        $line = sprintf('%d/%d', $endpoint['coveredResponseCount'], $endpoint['totalResponseCount']);
+        $extras = [];
+        if ($endpoint['skippedResponseCount'] > 0) {
+            $extras[] = sprintf('%d skipped', $endpoint['skippedResponseCount']);
+        }
+        $uncovered = $endpoint['totalResponseCount']
+            - $endpoint['coveredResponseCount']
+            - $endpoint['skippedResponseCount'];
+        if ($uncovered > 0) {
+            $extras[] = sprintf('%d uncovered', $uncovered);
+        }
+
+        return $extras === [] ? $line : sprintf('%s (%s)', $line, implode(', ', $extras));
+    }
+
+    private static function endpointMarker(string $state): string
+    {
+        return match ($state) {
+            'all-covered' => self::MARKER_ALL_COVERED,
+            'partial' => self::MARKER_PARTIAL,
+            'request-only' => self::MARKER_REQUEST_ONLY,
+            default => self::MARKER_UNCOVERED,
+        };
+    }
+
+    private static function responseMarker(string $state): string
+    {
+        return match ($state) {
+            'validated' => self::MARKER_ALL_COVERED,
+            'skipped' => self::MARKER_SKIPPED,
+            default => self::MARKER_UNCOVERED,
+        };
+    }
+
+    /**
+     * @param ResponseRow $row
+     */
+    private static function responseStateLabel(array $row): string
+    {
+        return match ($row['state']) {
+            'validated' => sprintf('validated (%d hits)', $row['hits']),
+            'skipped' => $row['skipReason'] !== null
+                ? sprintf('skipped (%s)', $row['skipReason'])
+                : 'skipped',
+            default => 'uncovered',
+        };
+    }
+
+    private static function percentage(int $covered, int $total): float|int
+    {
+        return $total > 0 ? round($covered / $total * 100, 1) : 0;
+    }
+
+    private static function formatPercent(float|int $value): string
+    {
+        return (string) $value;
     }
 }
