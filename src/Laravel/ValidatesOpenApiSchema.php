@@ -466,6 +466,10 @@ trait ValidatesOpenApiSchema
             $response->getStatusCode(),
             $this->extractJsonBody($response, $content, $contentType),
             $contentType !== '' ? $contentType : null,
+            // Symfony's HeaderBag::all() returns array<string, list<string>>
+            // with lower-cased keys; the validator's HeaderNormalizer is
+            // idempotent so this is safe to pass through unchanged.
+            $response->headers->all(),
         );
 
         // Record coverage for any matched endpoint, including those where body

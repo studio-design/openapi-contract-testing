@@ -1128,4 +1128,112 @@ class OpenApiResponseValidatorTest extends TestCase
         $this->assertStringContainsString('[response-body]', $joined);
         $this->assertStringContainsString('InvalidKeywordException', $joined);
     }
+
+    // ========================================
+    // Response header validation
+    // ========================================
+
+    #[Test]
+    public function null_response_headers_argument_preserves_legacy_body_only_behaviour(): void
+    {
+        // Existing callers that pre-date the headers parameter pass null (or
+        // omit it entirely). The spec defines a required Location header, but
+        // because `null` opts out of header validation, the body-only path
+        // continues to pass.
+        $result = $this->validator->validate(
+            'response-headers',
+            'POST',
+            '/pets',
+            201,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+    }
+
+    #[Test]
+    public function detects_missing_required_response_header(): void
+    {
+        $result = $this->validator->validate(
+            'response-headers',
+            'POST',
+            '/pets',
+            201,
+            ['id' => 1],
+            'application/json',
+            [],
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertContains(
+            '[response-header.Location] required header is missing.',
+            $result->errors(),
+        );
+    }
+
+    #[Test]
+    public function passes_when_required_header_is_present_and_optional_is_valid(): void
+    {
+        $result = $this->validator->validate(
+            'response-headers',
+            'POST',
+            '/pets',
+            201,
+            ['id' => 1],
+            'application/json',
+            [
+                'Location' => 'https://example.com/pets/1',
+                'X-RateLimit-Remaining' => '42',
+            ],
+        );
+
+        $this->assertTrue($result->isValid());
+    }
+
+    #[Test]
+    public function detects_optional_header_schema_violation(): void
+    {
+        $result = $this->validator->validate(
+            'response-headers',
+            'POST',
+            '/pets',
+            201,
+            ['id' => 1],
+            'application/json',
+            [
+                'Location' => 'https://example.com/pets/1',
+                'X-RateLimit-Remaining' => '-5',
+            ],
+        );
+
+        $this->assertFalse($result->isValid());
+        $joined = implode(' | ', $result->errors());
+        $this->assertStringContainsString('[response-header.X-RateLimit-Remaining]', $joined);
+    }
+
+    #[Test]
+    public function combines_body_and_header_errors_in_single_result(): void
+    {
+        // Body fails (missing required `id`) AND headers fail (missing Location).
+        // Both error sets must surface so the developer sees the full picture
+        // in one assertion failure rather than chasing them sequentially.
+        $result = $this->validator->validate(
+            'response-headers',
+            'POST',
+            '/pets',
+            201,
+            ['name' => 'fido'],
+            'application/json',
+            [],
+        );
+
+        $this->assertFalse($result->isValid());
+        $joined = implode(' | ', $result->errors());
+        // Body errors use the opis JSON-Pointer prefix (`[/]`); header errors
+        // use the `[response-header.<Name>]` prefix. Both categories must
+        // appear so the developer sees the full picture in one assertion.
+        $this->assertStringContainsString('id', $joined);
+        $this->assertStringContainsString('[response-header.Location]', $joined);
+    }
 }

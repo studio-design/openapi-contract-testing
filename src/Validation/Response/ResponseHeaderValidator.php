@@ -1,0 +1,173 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Studio\OpenApiContractTesting\Validation\Response;
+
+use Studio\OpenApiContractTesting\OpenApiSchemaConverter;
+use Studio\OpenApiContractTesting\OpenApiVersion;
+use Studio\OpenApiContractTesting\SchemaContext;
+use Studio\OpenApiContractTesting\Validation\Support\HeaderNormalizer;
+use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
+use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
+use Studio\OpenApiContractTesting\Validation\Support\TypeCoercer;
+
+use function array_key_first;
+use function count;
+use function get_debug_type;
+use function in_array;
+use function is_array;
+use function is_scalar;
+use function sprintf;
+use function strtolower;
+
+/**
+ * Validate the response-side `headers` block against the OpenAPI spec.
+ *
+ * HTTP header names are case-insensitive (RFC 7230) so both spec keys
+ * and caller-supplied header keys are lower-cased before matching.
+ * Error messages preserve the spec's original casing so authors can
+ * grep their OpenAPI document directly. The `[response-header.<Name>]`
+ * prefix distinguishes these errors from request-side `[header.<Name>]`
+ * and body `[body]` errors when they share an `OpenApiValidationResult`.
+ *
+ * Per OAS 3.0/3.1, a `Content-Type` entry under `responses.<code>.headers`
+ * SHALL be ignored — the response's actual content type is governed by
+ * content negotiation, not arbitrary header definitions. The validator
+ * skips it explicitly so a misplaced spec definition cannot fail tests.
+ *
+ * Header values arriving as `array<string>` (Laravel/Symfony's HeaderBag
+ * models repeated occurrences this way) are unwrapped to a single value
+ * when the array holds exactly one element. Multi-value arrays against
+ * scalar schemas produce a hard error — frameworks disagree on which of
+ * the repeated values "wins" (Laravel: first, Symfony: last), so silently
+ * picking one would mask a drift the contract test exists to expose.
+ * Empty arrays are treated as missing.
+ */
+final class ResponseHeaderValidator
+{
+    /**
+     * Per OAS 3.0/3.1: response headers map "Content-Type" SHALL be ignored.
+     * Lower-cased so the lookup is case-insensitive.
+     */
+    private const IGNORED_HEADER_NAMES = ['content-type'];
+
+    public function __construct(
+        private readonly SchemaValidatorRunner $runner,
+    ) {}
+
+    /**
+     * @param array<string, mixed> $headersSpec the `responses.<code>.headers` map
+     * @param array<array-key, mixed> $actualHeaders the response's actual headers, as returned by HeaderBag::all()
+     *
+     * @return string[]
+     */
+    public function validate(array $headersSpec, array $actualHeaders, OpenApiVersion $version): array
+    {
+        if ($headersSpec === []) {
+            return [];
+        }
+
+        $errors = [];
+        $normalizedHeaders = HeaderNormalizer::normalize($actualHeaders);
+
+        foreach ($headersSpec as $name => $headerObject) {
+            // Spec keys are always strings per OAS, but the parameter type
+            // is array<string, mixed> so the static analyser sees them as
+            // already-typed strings; skip non-arrays only.
+            if (!is_array($headerObject)) {
+                continue;
+            }
+
+            $lowerName = strtolower($name);
+
+            if (in_array($lowerName, self::IGNORED_HEADER_NAMES, true)) {
+                continue;
+            }
+
+            $required = ($headerObject['required'] ?? false) === true;
+
+            // Required headers without a schema would silently pass every
+            // response, so surface as a hard spec error. Optional entries
+            // without a schema have nothing to validate — let them through.
+            if (!isset($headerObject['schema']) || !is_array($headerObject['schema'])) {
+                if ($required) {
+                    $errors[] = sprintf(
+                        '[response-header.%s] required header has no schema — cannot validate.',
+                        $name,
+                    );
+                }
+
+                continue;
+            }
+
+            /** @var array<string, mixed> $schema */
+            $schema = $headerObject['schema'];
+
+            $rawValue = $normalizedHeaders[$lowerName] ?? null;
+
+            // `null` and `[]` (empty repeated-header array) both collapse to
+            // "missing". A repeated header that arrived zero times is
+            // semantically absent.
+            if ($rawValue === null || $rawValue === []) {
+                if ($required) {
+                    $errors[] = sprintf('[response-header.%s] required header is missing.', $name);
+                }
+
+                continue;
+            }
+
+            if (is_array($rawValue)) {
+                if (count($rawValue) > 1) {
+                    $errors[] = sprintf(
+                        '[response-header.%s] multiple values received (count=%d) but schema expects a single value; refusing to pick one silently.',
+                        $name,
+                        count($rawValue),
+                    );
+
+                    continue;
+                }
+
+                $rawValue = $rawValue[array_key_first($rawValue)];
+            }
+
+            // Same post-unwrap missing guard as the pre-unwrap branch:
+            // `['X-Foo' => [null]]` is shaped identically to an absent
+            // header. Letting it through would either silently pass against
+            // a `nullable` schema or surface as a `/` type mismatch from opis.
+            if ($rawValue === null) {
+                if ($required) {
+                    $errors[] = sprintf('[response-header.%s] required header is missing.', $name);
+                }
+
+                continue;
+            }
+
+            if (!is_scalar($rawValue)) {
+                $errors[] = sprintf(
+                    '[response-header.%s] value must be a scalar (string|int|bool|float); got %s.',
+                    $name,
+                    get_debug_type($rawValue),
+                );
+
+                continue;
+            }
+
+            $coerced = TypeCoercer::coercePrimitive($rawValue, $schema);
+            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Response);
+
+            $schemaObject = ObjectConverter::convert($jsonSchema);
+            $dataObject = ObjectConverter::convert($coerced);
+
+            $formatted = $this->runner->validate($schemaObject, $dataObject);
+            foreach ($formatted as $path => $messages) {
+                $suffix = $path === '/' ? '' : $path;
+                foreach ($messages as $message) {
+                    $errors[] = sprintf('[response-header.%s%s] %s', $name, $suffix, $message);
+                }
+            }
+        }
+
+        return $errors;
+    }
+}
