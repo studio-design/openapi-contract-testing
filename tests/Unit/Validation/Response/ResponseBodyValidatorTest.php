@@ -164,6 +164,83 @@ class ResponseBodyValidatorTest extends TestCase
     }
 
     #[Test]
+    public function validate_accepts_empty_object_body_against_type_object(): void
+    {
+        // PHP's `json_decode('{}', true) === []` — the Laravel trait's
+        // associative-array decoding loses the {} vs [] distinction. Without
+        // schema-aware coercion the validator would reject `[]` against
+        // `type: object`. Pin the fix so empty-{} responses validate.
+        $content = [
+            'application/json' => [
+                'schema' => ['type' => 'object'],
+            ],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/p',
+            200,
+            $content,
+            [],
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $result->errors);
+    }
+
+    #[Test]
+    public function validate_accepts_empty_object_body_against_oas_31_nullable_object(): void
+    {
+        // OAS 3.1 type-array form: `type: ["object", "null"]`. Same coercion.
+        $content = [
+            'application/json' => [
+                'schema' => ['type' => ['object', 'null']],
+            ],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/p',
+            200,
+            $content,
+            [],
+            'application/json',
+            OpenApiVersion::V3_1,
+        );
+
+        $this->assertSame([], $result->errors);
+    }
+
+    #[Test]
+    public function validate_does_not_coerce_empty_array_when_schema_is_array_type(): void
+    {
+        // Coercion must NOT fire when the schema actually wants an array —
+        // an empty array is a legitimate value for `type: array` (with no
+        // minItems constraint).
+        $content = [
+            'application/json' => [
+                'schema' => ['type' => 'array', 'items' => ['type' => 'string']],
+            ],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/p',
+            200,
+            $content,
+            [],
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $result->errors);
+    }
+
+    #[Test]
     public function validate_flags_schema_mismatch(): void
     {
         $content = [

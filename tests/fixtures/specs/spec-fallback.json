@@ -1,0 +1,105 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Spec response key fallback fixture",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/with-default": {
+      "get": {
+        "operationId": "withDefault",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            }
+          },
+          "default": {
+            "description": "Anything else",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["error"],
+                  "properties": {"error": {"type": "string"}}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/with-5xx": {
+      "get": {
+        "operationId": "with5xx",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            }
+          },
+          "5XX": {
+            "description": "Server error range",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["title"],
+                  "properties": {"title": {"type": "string"}}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/with-exact-and-range": {
+      "get": {
+        "operationId": "withExactAndRange",
+        "responses": {
+          "503": {
+            "description": "Specific 503 — should win over 5XX",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["specific"],
+                  "properties": {"specific": {"type": "boolean"}}
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Other 5xx",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/lowercase-range": {
+      "get": {
+        "operationId": "lowercaseRange",
+        "responses": {
+          "5xx": {
+            "description": "lowercase variant",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

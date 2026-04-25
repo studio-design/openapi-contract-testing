@@ -114,13 +114,27 @@ final class OpenApiResponseValidator
             );
         }
 
-        if (!isset($responses[$statusCodeStr])) {
+        // Spec lookup priority per OpenAPI 3.0/3.1:
+        //   1. Exact code match (e.g. spec declares "503", response is 503)
+        //   2. Range key match (e.g. spec declares "5XX", response is 503)
+        //   3. `default` catch-all
+        // Explicit codes take precedence over range keys; range keys take
+        // precedence over `default`. Without this fallback, a spec that
+        // documents only `default` (or only `5XX`) would fail every real
+        // status — both patterns are common (Problem Details responses
+        // typically use `default` for the error envelope).
+        $matchedResponseKey = self::resolveResponseKey($responses, $statusCodeStr);
+        if ($matchedResponseKey === null) {
             return OpenApiValidationResult::failure([
                 "Status code {$statusCode} not defined for {$method} {$matchedPath} in '{$specName}' spec.",
             ], $matchedPath);
         }
 
-        $responseSpec = $responses[$statusCodeStr];
+        // Coverage tracking records under the spec key actually matched
+        // (e.g. "5XX" or "default"), not the literal status — that lets
+        // the renderer surface the spec's intent rather than the wire value.
+        $statusCodeStr = $matchedResponseKey;
+        $responseSpec = $responses[$matchedResponseKey];
 
         $bodyResult = $this->validateBody(
             $specName,
@@ -222,6 +236,41 @@ final class OpenApiResponseValidator
         }
 
         return $compiled;
+    }
+
+    /**
+     * Resolve a literal HTTP status to the spec's response key, applying
+     * OpenAPI's three-tier fallback: exact match → range key → `default`.
+     * Returns the matched spec key or null when no rule matches.
+     *
+     * Range key format is `1XX`/`2XX`/`3XX`/`4XX`/`5XX` (case-insensitive
+     * per spec; we accept both `5XX` and `5xx`). Returns the spec author's
+     * literal key so coverage / error messages reflect what they wrote.
+     *
+     * @param array<string, mixed> $responses
+     */
+    private static function resolveResponseKey(array $responses, string $statusCodeStr): ?string
+    {
+        if (isset($responses[$statusCodeStr])) {
+            return $statusCodeStr;
+        }
+
+        // Range key match — preserve the spec author's exact casing.
+        if (preg_match('/^[1-5][0-9]{2}$/', $statusCodeStr) === 1) {
+            $leadingDigit = $statusCodeStr[0];
+            foreach (array_keys($responses) as $key) {
+                $keyStr = (string) $key;
+                if (preg_match('/^([1-5])[xX]{2}$/', $keyStr, $m) === 1 && $m[1] === $leadingDigit) {
+                    return $keyStr;
+                }
+            }
+        }
+
+        if (isset($responses['default'])) {
+            return 'default';
+        }
+
+        return null;
     }
 
     /**

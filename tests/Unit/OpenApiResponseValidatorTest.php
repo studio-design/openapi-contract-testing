@@ -1411,6 +1411,152 @@ class OpenApiResponseValidatorTest extends TestCase
     }
 
     // ========================================
+    // Spec response key fallback: default + 5XX/range keys (#125, #126)
+    // ========================================
+
+    #[Test]
+    public function default_response_key_validates_unenumerated_status(): void
+    {
+        // Spec declares only `200` and `default`. A 418 response should
+        // validate against the `default` schema rather than failing with
+        // "Status code 418 not defined".
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $result = $validator->validate(
+            'spec-fallback',
+            'GET',
+            '/with-default',
+            418,
+            ['error' => 'teapot'],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('default', $result->matchedStatusCode());
+        $this->assertSame('application/json', $result->matchedContentType());
+    }
+
+    #[Test]
+    public function default_response_key_still_validates_schema_mismatch(): void
+    {
+        // Falling back to `default` does not bypass schema validation —
+        // a body that doesn't match `default`'s schema still fails.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $result = $validator->validate(
+            'spec-fallback',
+            'GET',
+            '/with-default',
+            418,
+            ['wrong_key' => 'no error field'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertSame('default', $result->matchedStatusCode());
+    }
+
+    #[Test]
+    public function range_key_5xx_validates_503_response(): void
+    {
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $result = $validator->validate(
+            'spec-fallback',
+            'GET',
+            '/with-5xx',
+            503,
+            ['title' => 'Service Unavailable'],
+            'application/problem+json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('5XX', $result->matchedStatusCode());
+        $this->assertSame('application/problem+json', $result->matchedContentType());
+    }
+
+    #[Test]
+    public function exact_status_key_takes_precedence_over_range_key(): void
+    {
+        // Spec declares both `503` (specific) and `5XX` (range). 503 must
+        // match the specific key — and the test pins it via the unique
+        // `specific: true` field that only the 503 schema requires.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $result = $validator->validate(
+            'spec-fallback',
+            'GET',
+            '/with-exact-and-range',
+            503,
+            ['specific' => true],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('503', $result->matchedStatusCode());
+    }
+
+    #[Test]
+    public function range_key_falls_through_to_5_x_x_for_other_5xx_codes(): void
+    {
+        // 599 isn't declared explicitly, so the 5XX range key matches.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $result = $validator->validate(
+            'spec-fallback',
+            'GET',
+            '/with-exact-and-range',
+            599,
+            ['anything' => 'goes'],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('5XX', $result->matchedStatusCode());
+    }
+
+    #[Test]
+    public function lowercase_range_key_5xx_is_accepted(): void
+    {
+        // OpenAPI permits both upper and lower case for the X in range keys
+        // (`5XX` and `5xx` are both legal). The matched key preserves the
+        // spec author's casing so coverage reports show what they wrote.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $result = $validator->validate(
+            'spec-fallback',
+            'GET',
+            '/lowercase-range',
+            503,
+            ['anything' => 'goes'],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('5xx', $result->matchedStatusCode());
+    }
+
+    #[Test]
+    public function range_key_does_not_match_outside_its_range(): void
+    {
+        // A 4xx response against a spec that only declares 5XX should still
+        // fail (assuming default is not declared and skip patterns are off).
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $result = $validator->validate(
+            'spec-fallback',
+            'GET',
+            '/with-5xx',
+            418,
+            [],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('Status code 418 not defined', $result->errors()[0]);
+    }
+
+    // ========================================
     // matchedStatusCode / matchedContentType propagation (#111)
     // ========================================
 

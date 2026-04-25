@@ -31,7 +31,7 @@ This library fills a gap left by existing PHP OpenAPI testing tools: **endpoint 
 | OpenAPI 3.1 | ✅ | ⚠️ | ❌ | ⚠️ | ⚠️ |
 | Response body validation | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Request validation (body + params) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Response header validation | ❌ | ⚠️ | ✅ | ✅ | ✅ |
+| Response header validation | ✅ | ⚠️ | ✅ | ✅ | ✅ |
 | **Endpoint coverage tracking** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Skip-by-status-code (default 5xx)** | ✅ | ❌ | ❌ | ❌ | ✅ |
 | PHPUnit integration | ✅ | ✅ | ❌ | ⚠️ | ✅ |
@@ -63,6 +63,14 @@ This library fills a gap left by existing PHP OpenAPI testing tools: **endpoint 
 ```bash
 composer require --dev studio-design/openapi-contract-testing
 ```
+
+> **YAML specs require `symfony/yaml`.** It is listed under `suggest` so it isn't installed automatically. If your spec is JSON, you can skip this. If your spec is `.yaml` / `.yml`, add it explicitly:
+>
+> ```bash
+> composer require --dev symfony/yaml
+> ```
+>
+> Without it, the loader throws `InvalidOpenApiSpecException` with a clear "requires symfony/yaml" message the first time it tries to read a YAML file.
 
 ## Setup
 
