@@ -6,6 +6,62 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project is **pre-1.0**, so breaking changes may land in any minor release
 until 1.0.0 ships. Each entry below tags whether it is breaking.
 
+## v0.13.0 — 2026-04-25
+
+Spec compliance + critical bug fix surfaced by the v0.12.0 dogfood
+session against a real Laravel 12 project.
+
+### Fixed
+
+- **#124 — Empty `{}` body validates against `type: object`** (was the
+  v1.0 blocker from dogfood). PHP's `json_decode('{}', true) === []`
+  collided with the body validator preserving `[]` as a JSON array, so
+  the natural Laravel `$response->json()` path failed against a spec
+  declaring `type: object`. The body validator now coerces `[]` to
+  `stdClass` when the schema's top-level type explicitly accepts an
+  object (`type: object` or `type: ["object", ...]` in OAS 3.1).
+  Composition keywords (`oneOf` / `anyOf` / `allOf`) intentionally do
+  NOT trigger coercion — type-mismatch errors still surface for
+  `type: array` schemas where the empty-array body is genuinely wrong.
+
+### Added
+
+- **#125 — `default` response key support**. The validator now
+  consults `responses.default` when the literal status code isn't
+  declared. Validation still runs the schema; the matched key is
+  reported as `"default"` in `OpenApiValidationResult::matchedStatusCode()`
+  and in coverage rows.
+- **#126 — `1XX`/`2XX`/`3XX`/`4XX`/`5XX` range key support** (case-insensitive
+  per spec; both `5XX` and `5xx` accepted). The validator now matches
+  range keys when no exact status key is declared. The matched spec
+  key (preserving the spec author's casing) flows through to coverage.
+- Lookup priority is **exact > range > default** (the conventional
+  resolution shared by major OpenAPI tooling — the spec describes the
+  three forms but does not normatively rank them). Specs that declare
+  both `503` and `5XX` resolve `503` to the explicit entry; `599` falls
+  through to `5XX`; `418` falls through to `default` if declared.
+- `tests/fixtures/specs/spec-fallback.json` exercises every priority
+  branch in the new lookup.
+
+### Changed
+
+- **`OpenApiValidationResult::matchedStatusCode()` semantics shift**:
+  pre-v0.13, this always returned the literal HTTP status string (e.g.
+  `"503"`). With the new fallback, it returns the **spec key** the
+  validator actually matched — so a spec declaring only `5XX` now
+  reports `matchedStatusCode() === "5XX"` for a 503 response. Callers
+  building `503 → row` maps from the result will see the key change
+  for any status that resolves via fallback. Skipped responses still
+  report the literal status (skip happens before key resolution).
+
+### Documentation
+
+- **#123** — README comparison table now correctly shows `✅` for
+  response header validation (was `❌` despite shipping in v0.12.0).
+- **#127** — README Installation section calls out the
+  `symfony/yaml` requirement for YAML specs as a dedicated callout
+  block, not buried in the Requirements list.
+
 ## v0.12.0 — 2026-04-25
 
 This release closes Sprint A — every issue scheduled before v1.0 except the

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Validation\Response;
 
+use stdClass;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\OpenApiValidationResult;
@@ -15,6 +16,9 @@ use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 
 use function array_keys;
 use function implode;
+use function in_array;
+use function is_array;
+use function is_string;
 
 final class ResponseBodyValidator
 {
@@ -107,6 +111,19 @@ final class ResponseBodyValidator
         $schema = $content[$jsonContentType]['schema'];
         $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Response);
 
+        // PHP's `json_decode($json, true)` returns `[]` for both `[]` and `{}`.
+        // The Laravel trait's response decoder uses associative-array decoding
+        // (so callers can treat the body as an array), which means an empty
+        // `{}` body lands here as PHP `[]`. ObjectConverter preserves empty
+        // arrays as JSON arrays, so the schema's `type: object` would then
+        // reject the body with a misleading "must match the type: object"
+        // error. Coerce `[]` → stdClass when the schema explicitly accepts
+        // an object so the empty-object-against-type-object case (very
+        // common for status acks and "no items yet" responses) validates.
+        if ($responseBody === [] && self::schemaAcceptsObject($schema)) {
+            $responseBody = new stdClass();
+        }
+
         $schemaObject = ObjectConverter::convert($jsonSchema);
         $dataObject = ObjectConverter::convert($responseBody);
 
@@ -120,5 +137,30 @@ final class ResponseBodyValidator
         }
 
         return new ResponseBodyValidationResult($errors, $jsonContentType);
+    }
+
+    /**
+     * Whether the schema's top-level type explicitly accepts a JSON object.
+     * Handles OAS 3.0 (`type: object`) and OAS 3.1 (`type: ["object", "null"]`).
+     * Composition keywords (`oneOf` / `anyOf` / `allOf`) are intentionally
+     * NOT walked — coercion only fires for the unambiguous case so a real
+     * type-mismatch error still surfaces for `type: array` schemas where the
+     * empty-array body is genuinely wrong.
+     *
+     * @param array<string, mixed> $schema
+     */
+    private static function schemaAcceptsObject(array $schema): bool
+    {
+        $type = $schema['type'] ?? null;
+
+        if (is_string($type)) {
+            return $type === 'object';
+        }
+
+        if (is_array($type)) {
+            return in_array('object', $type, true);
+        }
+
+        return false;
     }
 }

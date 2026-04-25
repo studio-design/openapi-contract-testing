@@ -1,0 +1,193 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Spec response key fallback fixture",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/with-default": {
+      "get": {
+        "operationId": "withDefault",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            }
+          },
+          "default": {
+            "description": "Anything else",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["error"],
+                  "properties": {"error": {"type": "string"}}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/with-5xx": {
+      "get": {
+        "operationId": "with5xx",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            }
+          },
+          "5XX": {
+            "description": "Server error range",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["title"],
+                  "properties": {"title": {"type": "string"}}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/with-exact-and-range": {
+      "get": {
+        "operationId": "withExactAndRange",
+        "responses": {
+          "503": {
+            "description": "Specific 503 — should win over 5XX",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["specific"],
+                  "properties": {"specific": {"type": "boolean"}}
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Other 5xx",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/lowercase-range": {
+      "get": {
+        "operationId": "lowercaseRange",
+        "responses": {
+          "5xx": {
+            "description": "lowercase variant",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/with-range-and-default": {
+      "get": {
+        "operationId": "rangeAndDefault",
+        "responses": {
+          "5XX": {
+            "description": "Range key — should win over default for 5xx",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["from5xx"],
+                  "properties": {"from5xx": {"type": "boolean"}}
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Catch-all for non-5xx",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["fromDefault"],
+                  "properties": {"fromDefault": {"type": "boolean"}}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/with-each-range": {
+      "get": {
+        "operationId": "eachRange",
+        "responses": {
+          "1XX": {"description": "1xx", "content": {"application/json": {"schema": {"type": "object"}}}},
+          "2XX": {"description": "2xx", "content": {"application/json": {"schema": {"type": "object"}}}},
+          "3XX": {"description": "3xx", "content": {"application/json": {"schema": {"type": "object"}}}},
+          "4XX": {"description": "4xx", "content": {"application/json": {"schema": {"type": "object"}}}}
+        }
+      }
+    },
+    "/with-default-only": {
+      "get": {
+        "operationId": "defaultOnly200ExactCheck",
+        "responses": {
+          "200": {
+            "description": "Specific 200 — should win over default",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["fromExact200"],
+                  "properties": {"fromExact200": {"type": "boolean"}}
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "default — must NOT match for status 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["fromDefault"],
+                  "properties": {"fromDefault": {"type": "boolean"}}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/with-typo-and-default": {
+      "get": {
+        "operationId": "typoAndDefault",
+        "responses": {
+          "40": {
+            "description": "Typo (truncated 404) — should trigger malformed-key warning when fallback fires",
+            "content": {"application/json": {"schema": {"type": "object"}}}
+          },
+          "default": {
+            "description": "default catches the unmatched real status",
+            "content": {"application/json": {"schema": {"type": "object"}}}
+          }
+        }
+      }
+    }
+  }
+}
