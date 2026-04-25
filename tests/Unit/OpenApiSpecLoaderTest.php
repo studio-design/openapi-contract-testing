@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit;
 
+use const E_USER_WARNING;
+
+use GuzzleHttp\Client;
+use GuzzleHttp\Psr7\HttpFactory;
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Internal\YamlAvailability;
@@ -17,7 +22,9 @@ use function class_exists;
 use function file_put_contents;
 use function json_encode;
 use function mkdir;
+use function restore_error_handler;
 use function rmdir;
+use function set_error_handler;
 use function sys_get_temp_dir;
 use function uniqid;
 use function unlink;
@@ -299,6 +306,78 @@ class OpenApiSpecLoaderTest extends TestCase
             @unlink($tempDir . '/root.json');
             @rmdir($tempDir);
         }
+    }
+
+    #[Test]
+    public function configure_throws_invalid_argument_when_allow_remote_refs_without_client(): void
+    {
+        try {
+            OpenApiSpecLoader::configure(
+                '/path/to/specs',
+                allowRemoteRefs: true,
+            );
+            $this->fail('expected InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('allowRemoteRefs', $e->getMessage());
+            $this->assertStringContainsString('PSR-18', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function configure_emits_warning_when_client_is_set_without_allow_flag(): void
+    {
+        $client = new Client();
+        $factory = new HttpFactory();
+
+        // Override PHPUnit's default failOnWarning behaviour locally so
+        // we can pin the warning message rather than the test crashing.
+        $captured = [];
+        set_error_handler(static function (int $errno, string $msg) use (&$captured): bool {
+            $captured[] = ['errno' => $errno, 'msg' => $msg];
+
+            return true;
+        });
+
+        try {
+            OpenApiSpecLoader::configure(
+                '/path/to/specs',
+                httpClient: $client,
+                requestFactory: $factory,
+                allowRemoteRefs: false,
+            );
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertCount(1, $captured);
+        $this->assertSame(E_USER_WARNING, $captured[0]['errno']);
+        $this->assertStringContainsString('allowRemoteRefs is false', $captured[0]['msg']);
+    }
+
+    #[Test]
+    public function configure_accepts_full_remote_setup_without_warning(): void
+    {
+        $client = new Client();
+        $factory = new HttpFactory();
+        $captured = [];
+        set_error_handler(static function (int $errno, string $msg) use (&$captured): bool {
+            $captured[] = $msg;
+
+            return true;
+        });
+
+        try {
+            OpenApiSpecLoader::configure(
+                '/path/to/specs',
+                httpClient: $client,
+                requestFactory: $factory,
+                allowRemoteRefs: true,
+            );
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertSame([], $captured, 'no warning expected when fully wired');
     }
 
     #[Test]

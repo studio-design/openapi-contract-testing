@@ -38,7 +38,7 @@ This library fills a gap left by existing PHP OpenAPI testing tools: **endpoint 
 | Pest plugin | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Laravel auto-assert | ✅ | ✅ | ❌ | ❌ | ✅ |
 | Symfony HttpFoundation | ❌ | ❌ | ⚠️ | ✅ | ❌ |
-| External `$ref` auto-resolution | ❌ | ✅ | ✅ | ✅ | ✅ |
+| External `$ref` auto-resolution | ✅ | ✅ | ✅ | ✅ | ✅ |
 | YAML spec loading | ✅ | ⚠️ | ✅ | ✅ | ✅ |
 | **Auto-inject dummy bearer** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **GitHub Step Summary output** | ✅ | ❌ | ❌ | ❌ | ❌ |
@@ -56,7 +56,7 @@ This library fills a gap left by existing PHP OpenAPI testing tools: **endpoint 
 
 - PHP 8.2+
 - PHPUnit 11, 12, or 13
-- [Redocly CLI](https://redocly.com/docs/cli/) (recommended for `$ref` resolution / bundling)
+- A PSR-18 HTTP client + PSR-17 request factory (e.g. Guzzle, Symfony HttpClient) — only required when resolving HTTP(S) `$ref`s
 
 ## Installation
 
@@ -66,15 +66,19 @@ composer require --dev studio-design/openapi-contract-testing
 
 ## Setup
 
-### 1. Bundle your OpenAPI spec
+### 1. Provide your OpenAPI spec
 
-This package expects a **bundled** (all `$ref`s resolved) JSON spec file. Use [Redocly CLI](https://redocly.com/docs/cli/commands/bundle/) to bundle:
+Internal `$ref` (`#/components/schemas/...`) and local-filesystem `$ref` (`./schemas/pet.yaml`, `../shared/error.json`) are resolved automatically — **no pre-bundling required**. Point the loader at your spec's entry file:
 
-```bash
-npx @redocly/cli bundle openapi/root.yaml --dereferenced -o openapi/bundled/front.json
+```
+openapi/
+├── root.yaml          # paths reference ./schemas/*.yaml
+└── schemas/
+    ├── pet.yaml
+    └── error.json
 ```
 
-> **Important:** The `--dereferenced` flag is required. Without it, `$ref` pointers (e.g., `#/components/schemas/...`) are preserved in the output, causing `UnresolvedReferenceException` at validation time. The underlying JSON Schema validator (`opis/json-schema`) does not resolve OpenAPI `$ref` references.
+HTTP(S) `$ref` (`https://example.com/schemas/pet.yaml`) is **opt-in** for security and CI predictability — see [HTTP `$ref` resolution](#http-ref-resolution) below. If you prefer the legacy bundled-spec workflow, the loader still accepts the output of `npx @redocly/cli bundle --dereferenced` unchanged.
 
 ### 2. Configure PHPUnit extension
 
@@ -639,6 +643,39 @@ Example GitHub Actions workflow step to post the report as a PR comment:
   with:
     path: coverage-report.md
 ```
+
+<a id="http-ref-resolution"></a>
+## HTTP `$ref` resolution (opt-in)
+
+Local `$ref` is resolved automatically. HTTP(S) `$ref` is **disabled by default**: a spec containing `$ref: 'https://example.com/pet.yaml'` rejects with `RemoteRefDisallowed` until you opt in. This keeps tests offline-by-default and prevents an attacker-controlled spec from making the test runner reach arbitrary URLs.
+
+To enable HTTP refs, supply a PSR-18 client + PSR-17 request factory and flip `allowRemoteRefs`:
+
+```php
+use GuzzleHttp\Client;
+use GuzzleHttp\Psr7\HttpFactory;
+use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+
+OpenApiSpecLoader::configure(
+    basePath: 'openapi/',
+    httpClient: new Client(),       // any PSR-18 implementation
+    requestFactory: new HttpFactory(), // any PSR-17 implementation
+    allowRemoteRefs: true,
+);
+```
+
+Pick whichever client your project already uses (Guzzle, Symfony HttpClient + adapter, Buzz, …). The library does not bundle one.
+
+Misconfiguration is caught early:
+
+| Setup | Result |
+| --- | --- |
+| `allowRemoteRefs: true` without `$httpClient` | `InvalidArgumentException` at `configure()` |
+| `$httpClient` set but `allowRemoteRefs: false` | `E_USER_WARNING` at `configure()` (PHPUnit's `failOnWarning` elevates this) |
+| `allowRemoteRefs: true` + client + ref to URL that 4xx/5xx | `InvalidOpenApiSpecException` with reason `RemoteRefFetchFailed` |
+| `allowRemoteRefs: true` + client + ref to URL with no detectable format | reason `UnsupportedExtension` (URL extension or `Content-Type` header is required) |
+
+Format detection prefers the URL's filename extension (`.json` / `.yaml` / `.yml`) and falls back to the response's `Content-Type` (`application/json`, `application/*+json`, `application/yaml`, `text/yaml`, etc.). Schema Registry endpoints that expose opaque URLs work out of the box as long as they set the right Content-Type.
 
 ## OpenAPI 3.0 vs 3.1
 

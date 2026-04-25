@@ -23,7 +23,18 @@ enum InvalidOpenApiSpecReason
     case LocalRefNotFound;
     case LocalRefUnreadable;
     case LocalRefRequiresSourceFile;
+    /**
+     * @deprecated Use `RemoteRefDisallowed` (when `allowRemoteRefs` is false)
+     *             or `HttpClientNotConfigured` (when the flag is on but no
+     *             PSR-18 client + PSR-17 factory have been provided). Kept
+     *             for backwards compatibility with consumers that branched
+     *             on this case before HTTP `$ref` resolution shipped.
+     *             No production code throws this reason any more.
+     */
     case RemoteRefNotImplemented;
+    case RemoteRefDisallowed;
+    case RemoteRefFetchFailed;
+    case HttpClientNotConfigured;
     case FileSchemeNotSupported;
     case EmptyRef;
     case CircularRef;
