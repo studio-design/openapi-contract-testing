@@ -87,7 +87,11 @@ final class OpenApiSpecLoader
         };
 
         try {
-            $resolved = OpenApiRefResolver::resolve($decoded);
+            // Pass the absolute spec file path so the resolver can
+            // walk external `$ref` targets (e.g. `./schemas/pet.yaml`)
+            // relative to it. Without this, every non-internal `$ref`
+            // would throw `LocalRefRequiresSourceFile`.
+            $resolved = OpenApiRefResolver::resolve($decoded, $path);
         } catch (InvalidOpenApiSpecException $e) {
             // The resolver is stateless and therefore cannot know which spec
             // produced the throw. Re-wrap once so consumers (e.g. the coverage

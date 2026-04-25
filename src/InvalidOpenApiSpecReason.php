@@ -12,6 +12,11 @@ namespace Studio\OpenApiContractTesting;
 enum InvalidOpenApiSpecReason
 {
     case ExternalRef;
+    case LocalRefNotFound;
+    case LocalRefDecodeFailed;
+    case LocalRefRequiresSourceFile;
+    case RemoteRefNotImplemented;
+    case FileSchemeNotSupported;
     case CircularRef;
     case UnresolvableRef;
     case NonStringRef;

@@ -239,15 +239,48 @@ class OpenApiSpecLoaderTest extends TestCase
     }
 
     #[Test]
-    public function load_throws_on_external_ref(): void
+    public function load_throws_local_ref_not_found_when_external_target_missing(): void
     {
+        // The fixture references `other-spec.json` which intentionally
+        // does not exist in the fixtures directory. Now that local
+        // external refs are supported, the resolver attempts the load
+        // and surfaces a precise file-not-found error instead of the
+        // old blanket "external refs unsupported" rejection.
         $fixturesPath = __DIR__ . '/../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
-        $this->expectException(InvalidOpenApiSpecException::class);
-        $this->expectExceptionMessage('External $ref');
+        try {
+            OpenApiSpecLoader::load('refs-external');
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::LocalRefNotFound, $e->reason);
+            $this->assertSame('refs-external', $e->specName);
+            $this->assertStringContainsString('other-spec.json', $e->getMessage());
+        }
+    }
 
-        OpenApiSpecLoader::load('refs-external');
+    #[Test]
+    public function load_resolves_local_external_refs_in_multi_file_yaml_spec(): void
+    {
+        // The multi-file fixture's root yaml references ./schemas/pet.yaml
+        // for both list and detail responses, plus a JSON-pointer fragment
+        // ref into schemas/error.json. All should inline cleanly without
+        // any pre-bundling step.
+        $fixturesPath = __DIR__ . '/../fixtures/specs/external-refs';
+        OpenApiSpecLoader::configure($fixturesPath);
+
+        $spec = OpenApiSpecLoader::load('multi-file');
+
+        $listSchema = $spec['paths']['/pets']['get']['responses']['200']['content']['application/json']['schema'];
+        $this->assertSame('array', $listSchema['type']);
+        $this->assertSame(['id', 'name'], $listSchema['items']['required']);
+
+        $detailSchema = $spec['paths']['/pets/{petId}']['get']['responses']['200']['content']['application/json']['schema'];
+        $this->assertSame('object', $detailSchema['type']);
+        $this->assertSame('integer', $detailSchema['properties']['id']['type']);
+
+        $errorSchema = $spec['paths']['/pets/{petId}']['get']['responses']['404']['content']['application/problem+json']['schema'];
+        $this->assertSame(['code', 'message'], $errorSchema['required']);
     }
 
     #[Test]

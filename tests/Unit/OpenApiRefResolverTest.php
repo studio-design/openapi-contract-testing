@@ -7,6 +7,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\OpenApiRefResolver;
 
 class OpenApiRefResolverTest extends TestCase
@@ -322,8 +323,12 @@ class OpenApiRefResolverTest extends TestCase
     }
 
     #[Test]
-    public function throws_on_external_file_ref(): void
+    public function throws_local_ref_requires_source_file_when_no_source_passed(): void
     {
+        // Legacy single-arg `resolve()` cannot decide where `./other.json`
+        // lives, so external refs are rejected up front rather than
+        // silently mishandled. See OpenApiRefResolverExternalRefsTest for
+        // the positive paths when a source file is supplied.
         $spec = [
             'components' => [
                 'schemas' => [
@@ -332,15 +337,20 @@ class OpenApiRefResolverTest extends TestCase
             ],
         ];
 
-        $this->expectException(InvalidOpenApiSpecException::class);
-        $this->expectExceptionMessage('External $ref');
-
-        OpenApiRefResolver::resolve($spec);
+        try {
+            OpenApiRefResolver::resolve($spec);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::LocalRefRequiresSourceFile, $e->reason);
+            $this->assertStringContainsString('other.json', $e->getMessage());
+        }
     }
 
     #[Test]
-    public function throws_on_external_url_ref(): void
+    public function throws_remote_ref_not_implemented_for_url_ref(): void
     {
+        // HTTP(S) refs are reserved for a follow-up PR with explicit
+        // opt-in semantics around remote network access.
         $spec = [
             'components' => [
                 'schemas' => [
@@ -349,10 +359,12 @@ class OpenApiRefResolverTest extends TestCase
             ],
         ];
 
-        $this->expectException(InvalidOpenApiSpecException::class);
-        $this->expectExceptionMessage('External $ref');
-
-        OpenApiRefResolver::resolve($spec);
+        try {
+            OpenApiRefResolver::resolve($spec);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefNotImplemented, $e->reason);
+        }
     }
 
     #[Test]
