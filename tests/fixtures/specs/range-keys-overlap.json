@@ -1,0 +1,32 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Range Keys Overlap Fixture",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/widgets": {
+      "get": {
+        "operationId": "overlap",
+        "responses": {
+          "5XX": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            }
+          },
+          "default": {
+            "description": "Catch-all",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

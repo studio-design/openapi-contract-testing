@@ -9,6 +9,7 @@ use const JSON_THROW_ON_ERROR;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\EndpointCoverageState;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
@@ -107,7 +108,7 @@ class ValidatesOpenApiSchemaAutoValidateRequestTest extends TestCase
         }
         $this->assertNotNull($endpoint);
         $this->assertTrue($endpoint['requestReached']);
-        $this->assertSame('request-only', $endpoint['state']);
+        $this->assertSame(EndpointCoverageState::RequestOnly, $endpoint['state']);
         $this->assertSame(0, $endpoint['skippedResponseCount']);
     }
 

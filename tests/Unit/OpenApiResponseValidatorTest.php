@@ -1111,8 +1111,8 @@ class OpenApiResponseValidatorTest extends TestCase
         // Response-side symmetry for the request-side regression guard. The
         // fixture's 200 response schema carries the same malformed `pattern`
         // ("[unterminated") that opis rejects with InvalidKeywordException.
-        // Without ValidatorErrorBoundary::safely() this would escape as an
-        // uncaught throw; post-fix it is a structured [response-body] failure.
+        // Without the inlined try/catch this would escape as an uncaught
+        // throw; post-fix it is a structured [response-body] failure.
         $result = $this->validator->validate(
             'body-validator-throws',
             'POST',
@@ -1127,6 +1127,11 @@ class OpenApiResponseValidatorTest extends TestCase
         $joined = implode(' | ', $result->errors());
         $this->assertStringContainsString('[response-body]', $joined);
         $this->assertStringContainsString('InvalidKeywordException', $joined);
+        // Pin the absence of "(caused by ...)" when the thrown exception
+        // has no previous — without this assertion the suffix-formatting
+        // branch could regress to always emitting it (or omitting it
+        // unconditionally) and tests would still pass.
+        $this->assertStringNotContainsString('(caused by', $joined);
     }
 
     // ========================================

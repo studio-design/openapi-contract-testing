@@ -142,6 +142,27 @@ final class OpenApiResponseValidator
             $version,
         );
 
+        // The body validator returns ([], null) for two distinct cases:
+        // (a) 204-style — spec has no `content` block; nothing to validate,
+        //     legitimately Success.
+        // (b) Spec declares only non-JSON content types (e.g. `text/plain`)
+        //     and we have no schema engine for them; the result is "we
+        //     didn't actually check anything". Without this branch the
+        //     orchestrator would mark the response as a clean Success and
+        //     coverage would credit the spec's declared content-type as
+        //     validated even though no validation occurred.
+        // Distinguishing them requires looking at the spec — `content`
+        // present + non-empty + bodyResult.matchedContentType null + body
+        // had no errors → case (b).
+        $hasContentBlock = isset($responseSpec['content']) && is_array($responseSpec['content']) && $responseSpec['content'] !== [];
+        if ($bodyResult->errors === [] && $bodyResult->matchedContentType === null && $hasContentBlock && $headerErrors === []) {
+            return OpenApiValidationResult::skipped(
+                $matchedPath,
+                'spec declares only non-JSON content types and the validator has no schema engine for them',
+                $statusCodeStr,
+            );
+        }
+
         // Order is body errors first, headers second. Tests that pin
         // specific positions rely on this; reordering would silently
         // change diagnostic flow without breaking behaviour.

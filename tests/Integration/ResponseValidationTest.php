@@ -6,11 +6,13 @@ namespace Studio\OpenApiContractTesting\Tests\Integration;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\EndpointCoverageState;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\OpenApiValidationResult;
+use Studio\OpenApiContractTesting\ResponseCoverageState;
 
 class ResponseValidationTest extends TestCase
 {
@@ -61,11 +63,11 @@ class ResponseValidationTest extends TestCase
         $this->assertGreaterThanOrEqual(2, $coverage['endpointFullyCovered'] + $coverage['endpointPartial']);
 
         $endpoints = $this->indexEndpoints($coverage['endpoints']);
-        $this->assertSame('partial', $endpoints['GET /v1/pets']['state']);
+        $this->assertSame(EndpointCoverageState::Partial, $endpoints['GET /v1/pets']['state']);
         // POST /v1/pets has multiple declared responses (201, 409 ×2, 415);
         // recording only 201 leaves the others uncovered → partial state.
-        $this->assertSame('partial', $endpoints['POST /v1/pets']['state']);
-        $this->assertSame('uncovered', $endpoints['GET /v1/health']['state']);
+        $this->assertSame(EndpointCoverageState::Partial, $endpoints['POST /v1/pets']['state']);
+        $this->assertSame(EndpointCoverageState::Uncovered, $endpoints['GET /v1/health']['state']);
     }
 
     #[Test]
@@ -85,12 +87,18 @@ class ResponseValidationTest extends TestCase
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.1');
         $this->assertSame(19, $coverage['endpointTotal']);
         $endpoints = $this->indexEndpoints($coverage['endpoints']);
-        $this->assertContains($endpoints['GET /v1/pets']['state'], ['partial', 'all-covered']);
+        $this->assertContains($endpoints['GET /v1/pets']['state'], [EndpointCoverageState::Partial, EndpointCoverageState::AllCovered]);
     }
 
     #[Test]
-    public function non_json_endpoint_skips_validation_and_records_coverage(): void
+    public function non_json_endpoint_records_skipped_when_no_content_type_supplied(): void
     {
+        // The spec for GET /v1/logout 200 declares only `text/html` — no JSON
+        // schema engine to validate against. Without an explicit response
+        // Content-Type, the validator cannot even check spec presence; it
+        // returns Skipped so coverage reflects that no validation actually
+        // occurred (vs the pre-#111 silent Success that would have inflated
+        // coverage of the `text/html` declaration).
         $result = $this->validator->validate(
             'petstore-3.0',
             'GET',
@@ -99,12 +107,38 @@ class ResponseValidationTest extends TestCase
             '<html><body>Logged out</body></html>',
         );
         $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
 
         $this->recordResult('petstore-3.0', 'GET', $result);
 
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
         $endpoints = $this->indexEndpoints($coverage['endpoints']);
-        $this->assertSame('all-covered', $endpoints['GET /v1/logout']['state']);
+        $this->assertSame(EndpointCoverageState::Partial, $endpoints['GET /v1/logout']['state']);
+        $this->assertSame(1, $endpoints['GET /v1/logout']['skippedResponseCount']);
+    }
+
+    #[Test]
+    public function non_json_endpoint_with_explicit_content_type_marks_validated(): void
+    {
+        // Same endpoint, but the caller supplies the actual response
+        // Content-Type. The body validator can confirm `text/html` is in
+        // the spec's content map and credits the coverage row as validated.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/logout',
+            200,
+            '<html><body>Logged out</body></html>',
+            'text/html',
+        );
+        $this->assertTrue($result->isValid());
+        $this->assertFalse($result->isSkipped());
+
+        $this->recordResult('petstore-3.0', 'GET', $result);
+
+        $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
+        $endpoints = $this->indexEndpoints($coverage['endpoints']);
+        $this->assertSame(EndpointCoverageState::AllCovered, $endpoints['GET /v1/logout']['state']);
     }
 
     #[Test]
@@ -126,7 +160,7 @@ class ResponseValidationTest extends TestCase
         $endpoints = $this->indexEndpoints($coverage['endpoints']);
         // text/html is one of two declared 409 content-types; the other (application/json)
         // remains uncovered, so the endpoint as a whole is partial.
-        $this->assertSame('partial', $endpoints['POST /v1/pets']['state']);
+        $this->assertSame(EndpointCoverageState::Partial, $endpoints['POST /v1/pets']['state']);
     }
 
     #[Test]
@@ -146,13 +180,13 @@ class ResponseValidationTest extends TestCase
 
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
         $endpoints = $this->indexEndpoints($coverage['endpoints']);
-        $this->assertSame('partial', $endpoints['GET /v1/pets']['state']);
+        $this->assertSame(EndpointCoverageState::Partial, $endpoints['GET /v1/pets']['state']);
         // petstore-3.0 declares `500: application/json` literally — recording
         // matches it exactly, so it shows up as `skipped` (not in
         // unexpectedObservations).
         $hadSkipped = false;
         foreach ($endpoints['GET /v1/pets']['responses'] as $row) {
-            if ($row['statusKey'] === '500' && $row['state'] === 'skipped') {
+            if ($row['statusKey'] === '500' && $row['state'] === ResponseCoverageState::Skipped) {
                 $hadSkipped = true;
 
                 break;
@@ -190,8 +224,8 @@ class ResponseValidationTest extends TestCase
         }
 
         // 200:application/json validated independently of 500 skipped.
-        $this->assertSame('validated', $rowsByKey['200:application/json']['state']);
-        $this->assertSame('skipped', $rowsByKey['500:application/json']['state']);
+        $this->assertSame(ResponseCoverageState::Validated, $rowsByKey['200:application/json']['state']);
+        $this->assertSame(ResponseCoverageState::Skipped, $rowsByKey['500:application/json']['state']);
     }
 
     #[Test]
@@ -222,8 +256,8 @@ class ResponseValidationTest extends TestCase
             $rowsByKey[$row['statusKey'] . ':' . $row['contentTypeKey']] = $row;
         }
 
-        $this->assertSame('validated', $rowsByKey['200:application/json']['state']);
-        $this->assertSame('skipped', $rowsByKey['500:application/json']['state']);
+        $this->assertSame(ResponseCoverageState::Validated, $rowsByKey['200:application/json']['state']);
+        $this->assertSame(ResponseCoverageState::Skipped, $rowsByKey['500:application/json']['state']);
     }
 
     #[Test]
@@ -267,9 +301,9 @@ class ResponseValidationTest extends TestCase
     }
 
     /**
-     * @param list<array{endpoint: string, method: string, path: string, operationId: ?string, state: string, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}> $endpoints
+     * @param list<array{endpoint: string, method: string, path: string, operationId: ?string, state: EndpointCoverageState, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}> $endpoints
      *
-     * @return array<string, array{endpoint: string, method: string, path: string, operationId: ?string, state: string, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}>
+     * @return array<string, array{endpoint: string, method: string, path: string, operationId: ?string, state: EndpointCoverageState, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}>
      */
     private function indexEndpoints(array $endpoints): array
     {

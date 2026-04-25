@@ -8,7 +8,7 @@ use InvalidArgumentException;
 
 use function implode;
 
-final class OpenApiValidationResult
+final readonly class OpenApiValidationResult
 {
     /**
      * Private so the three factories (success / failure / skipped) are the
@@ -31,12 +31,12 @@ final class OpenApiValidationResult
      * @param string[] $errors
      */
     private function __construct(
-        private readonly OpenApiValidationOutcome $outcome,
-        private readonly array $errors = [],
-        private readonly ?string $matchedPath = null,
-        private readonly ?string $skipReason = null,
-        private readonly ?string $matchedStatusCode = null,
-        private readonly ?string $matchedContentType = null,
+        private OpenApiValidationOutcome $outcome,
+        private array $errors = [],
+        private ?string $matchedPath = null,
+        private ?string $skipReason = null,
+        private ?string $matchedStatusCode = null,
+        private ?string $matchedContentType = null,
     ) {}
 
     public static function success(

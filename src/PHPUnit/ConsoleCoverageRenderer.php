@@ -6,7 +6,9 @@ namespace Studio\OpenApiContractTesting\PHPUnit;
 
 use const STR_PAD_RIGHT;
 
+use Studio\OpenApiContractTesting\EndpointCoverageState;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\ResponseCoverageState;
 
 use function round;
 use function sprintf;
@@ -89,7 +91,7 @@ final class ConsoleCoverageRenderer
             $showSubRows = match ($mode) {
                 ConsoleOutput::DEFAULT => false,
                 ConsoleOutput::ALL => true,
-                ConsoleOutput::UNCOVERED_ONLY => $endpoint['state'] !== 'all-covered',
+                ConsoleOutput::UNCOVERED_ONLY => $endpoint['state'] !== EndpointCoverageState::AllCovered,
             };
 
             $output .= sprintf(
@@ -104,7 +106,7 @@ final class ConsoleCoverageRenderer
             }
 
             foreach ($endpoint['responses'] as $row) {
-                if ($mode === ConsoleOutput::UNCOVERED_ONLY && $row['state'] === 'validated') {
+                if ($mode === ConsoleOutput::UNCOVERED_ONLY && $row['state'] === ResponseCoverageState::Validated) {
                     continue;
                 }
                 $output .= sprintf(
@@ -151,30 +153,30 @@ final class ConsoleCoverageRenderer
     private static function responseTail(array $row): string
     {
         return match ($row['state']) {
-            'validated' => sprintf('[%d]', $row['hits']),
-            'skipped' => $row['skipReason'] !== null
+            ResponseCoverageState::Validated => sprintf('[%d]', $row['hits']),
+            ResponseCoverageState::Skipped => $row['skipReason'] !== null
                 ? sprintf('skipped: %s', $row['skipReason'])
                 : 'skipped',
-            default => 'uncovered',
+            ResponseCoverageState::Uncovered => 'uncovered',
         };
     }
 
-    private static function endpointMarker(string $state): string
+    private static function endpointMarker(EndpointCoverageState $state): string
     {
         return match ($state) {
-            'all-covered' => self::MARKER_ALL_COVERED,
-            'partial' => self::MARKER_PARTIAL,
-            'request-only' => self::MARKER_REQUEST_ONLY,
-            default => self::MARKER_UNCOVERED,
+            EndpointCoverageState::AllCovered => self::MARKER_ALL_COVERED,
+            EndpointCoverageState::Partial => self::MARKER_PARTIAL,
+            EndpointCoverageState::RequestOnly => self::MARKER_REQUEST_ONLY,
+            EndpointCoverageState::Uncovered => self::MARKER_UNCOVERED,
         };
     }
 
-    private static function responseMarker(string $state): string
+    private static function responseMarker(ResponseCoverageState $state): string
     {
         return match ($state) {
-            'validated' => self::MARKER_ALL_COVERED,
-            'skipped' => self::MARKER_SKIPPED,
-            default => self::MARKER_UNCOVERED,
+            ResponseCoverageState::Validated => self::MARKER_ALL_COVERED,
+            ResponseCoverageState::Skipped => self::MARKER_SKIPPED,
+            ResponseCoverageState::Uncovered => self::MARKER_UNCOVERED,
         };
     }
 

@@ -6,8 +6,10 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\EndpointCoverageState;
 use Studio\OpenApiContractTesting\PHPUnit\ConsoleCoverageRenderer;
 use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
+use Studio\OpenApiContractTesting\ResponseCoverageState;
 
 use function explode;
 
@@ -98,6 +100,10 @@ class ConsoleCoverageRendererTest extends TestCase
         $this->assertStringContainsString('◐ POST /v1/pets', $output);
         $this->assertStringContainsString('422', $output);
         $this->assertStringContainsString('uncovered', $output);
+        // Pin the per-row validated suppression on the partial endpoint:
+        // POST /v1/pets has a validated 201:application/json sub-row that
+        // must NOT appear in UNCOVERED_ONLY mode (only the uncovered 422 row).
+        $this->assertStringNotContainsString('201    application/json', $output);
     }
 
     #[Test]
@@ -200,9 +206,9 @@ class ConsoleCoverageRendererTest extends TestCase
     }
 
     /**
-     * @param list<array{endpoint: string, method: string, path: string, operationId: ?string, state: string, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}> $endpoints
+     * @param list<array{endpoint: string, method: string, path: string, operationId: ?string, state: EndpointCoverageState, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}> $endpoints
      *
-     * @return array{endpoints: list<array{endpoint: string, method: string, path: string, operationId: ?string, state: string, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}>, endpointTotal: int, endpointFullyCovered: int, endpointPartial: int, endpointUncovered: int, endpointRequestOnly: int, responseTotal: int, responseCovered: int, responseSkipped: int, responseUncovered: int}
+     * @return array{endpoints: list<array{endpoint: string, method: string, path: string, operationId: ?string, state: EndpointCoverageState, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}>, endpointTotal: int, endpointFullyCovered: int, endpointPartial: int, endpointUncovered: int, endpointRequestOnly: int, responseTotal: int, responseCovered: int, responseSkipped: int, responseUncovered: int}
      */
     private static function coverage(
         array $endpoints,
@@ -231,10 +237,10 @@ class ConsoleCoverageRendererTest extends TestCase
     }
 
     /**
-     * @param list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}> $responses
+     * @param list<array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}> $responses
      * @param list<array{statusKey: string, contentTypeKey: string}> $unexpectedObservations
      *
-     * @return array{endpoint: string, method: string, path: string, operationId: ?string, state: string, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}
+     * @return array{endpoint: string, method: string, path: string, operationId: ?string, state: EndpointCoverageState, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}
      */
     private static function endpoint(
         string $endpoint,
@@ -254,7 +260,7 @@ class ConsoleCoverageRendererTest extends TestCase
             'method' => $method,
             'path' => $path,
             'operationId' => $operationId,
-            'state' => $state,
+            'state' => EndpointCoverageState::from($state),
             'requestReached' => $requestReached,
             'responses' => $responses,
             'coveredResponseCount' => $coveredResponseCount,
@@ -265,7 +271,7 @@ class ConsoleCoverageRendererTest extends TestCase
     }
 
     /**
-     * @return array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}
+     * @return array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}
      */
     private static function row(
         string $statusKey,
@@ -277,7 +283,7 @@ class ConsoleCoverageRendererTest extends TestCase
         return [
             'statusKey' => $statusKey,
             'contentTypeKey' => $contentTypeKey,
-            'state' => $state,
+            'state' => ResponseCoverageState::from($state),
             'hits' => $hits,
             'skipReason' => $skipReason,
         ];

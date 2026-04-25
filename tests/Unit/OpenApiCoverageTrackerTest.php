@@ -6,8 +6,14 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\EndpointCoverageState;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\ResponseCoverageState;
+
+use function implode;
+use function restore_error_handler;
+use function set_error_handler;
 
 class OpenApiCoverageTrackerTest extends TestCase
 {
@@ -49,7 +55,7 @@ class OpenApiCoverageTrackerTest extends TestCase
         );
 
         $endpoint = $this->endpointSummary('range-keys', 'GET /widgets-default');
-        $this->assertSame('all-covered', $endpoint['state']);
+        $this->assertSame(EndpointCoverageState::AllCovered, $endpoint['state']);
     }
 
     #[Test]
@@ -69,7 +75,7 @@ class OpenApiCoverageTrackerTest extends TestCase
         $endpoint = $this->endpointSummary('petstore-3.0', 'GET /v1/pets');
         $row = $this->responseRow($endpoint['responses'], '200', 'application/json');
         $this->assertSame(3, $row['hits']);
-        $this->assertSame('validated', $row['state']);
+        $this->assertSame(ResponseCoverageState::Validated, $row['state']);
     }
 
     #[Test]
@@ -95,7 +101,7 @@ class OpenApiCoverageTrackerTest extends TestCase
 
         $endpoint = $this->endpointSummary('petstore-3.0', 'GET /v1/pets');
         $row = $this->responseRow($endpoint['responses'], '200', 'application/json');
-        $this->assertSame('validated', $row['state']);
+        $this->assertSame(ResponseCoverageState::Validated, $row['state']);
         $this->assertNull($row['skipReason']);
     }
 
@@ -122,7 +128,7 @@ class OpenApiCoverageTrackerTest extends TestCase
 
         $endpoint = $this->endpointSummary('petstore-3.0', 'GET /v1/pets');
         $row = $this->responseRow($endpoint['responses'], '200', 'application/json');
-        $this->assertSame('validated', $row['state']);
+        $this->assertSame(ResponseCoverageState::Validated, $row['state']);
         $this->assertNull($row['skipReason']);
     }
 
@@ -158,7 +164,7 @@ class OpenApiCoverageTrackerTest extends TestCase
         );
 
         $endpoint = $this->endpointSummary('petstore-3.0', 'GET /v1/pets');
-        $this->assertSame('partial', $endpoint['state']);
+        $this->assertSame(EndpointCoverageState::Partial, $endpoint['state']);
         $this->assertSame(1, $endpoint['coveredResponseCount']);
         $this->assertSame(0, $endpoint['skippedResponseCount']);
         $this->assertSame(4, $endpoint['totalResponseCount']);
@@ -186,7 +192,7 @@ class OpenApiCoverageTrackerTest extends TestCase
         }
 
         $endpoint = $this->endpointSummary('petstore-3.0', 'GET /v1/pets');
-        $this->assertSame('all-covered', $endpoint['state']);
+        $this->assertSame(EndpointCoverageState::AllCovered, $endpoint['state']);
         $this->assertSame(4, $endpoint['coveredResponseCount']);
     }
 
@@ -195,9 +201,9 @@ class OpenApiCoverageTrackerTest extends TestCase
     {
         $endpoint = $this->endpointSummary('petstore-3.0', 'GET /v1/pets');
 
-        $this->assertSame('uncovered', $endpoint['state']);
+        $this->assertSame(EndpointCoverageState::Uncovered, $endpoint['state']);
         foreach ($endpoint['responses'] as $row) {
-            $this->assertSame('uncovered', $row['state']);
+            $this->assertSame(ResponseCoverageState::Uncovered, $row['state']);
         }
     }
 
@@ -207,7 +213,7 @@ class OpenApiCoverageTrackerTest extends TestCase
         OpenApiCoverageTracker::recordRequest('petstore-3.0', 'GET', '/v1/pets');
 
         $endpoint = $this->endpointSummary('petstore-3.0', 'GET /v1/pets');
-        $this->assertSame('request-only', $endpoint['state']);
+        $this->assertSame(EndpointCoverageState::RequestOnly, $endpoint['state']);
         $this->assertTrue($endpoint['requestReached']);
     }
 
@@ -229,7 +235,7 @@ class OpenApiCoverageTrackerTest extends TestCase
 
         $endpoint = $this->endpointSummary('petstore-3.0', 'GET /v1/pets');
         $row = $this->responseRow($endpoint['responses'], '422', 'Application/Problem+JSON');
-        $this->assertSame('validated', $row['state']);
+        $this->assertSame(ResponseCoverageState::Validated, $row['state']);
         // Spec author casing must be preserved verbatim in the report.
         $this->assertSame('Application/Problem+JSON', $row['contentTypeKey']);
     }
@@ -246,7 +252,7 @@ class OpenApiCoverageTrackerTest extends TestCase
 
         $endpoint = $this->endpointSummary('range-keys', 'GET /widgets');
         $row = $this->responseRow($endpoint['responses'], '5XX', 'application/json');
-        $this->assertSame('skipped', $row['state']);
+        $this->assertSame(ResponseCoverageState::Skipped, $row['state']);
         $this->assertSame('status 503 matched skip pattern 5\d\d', $row['skipReason']);
     }
 
@@ -266,7 +272,7 @@ class OpenApiCoverageTrackerTest extends TestCase
 
         $endpoint = $this->endpointSummary('range-keys', 'GET /widgets-default');
         $row = $this->responseRow($endpoint['responses'], 'default', 'application/json');
-        $this->assertSame('validated', $row['state']);
+        $this->assertSame(ResponseCoverageState::Validated, $row['state']);
     }
 
     #[Test]
@@ -348,6 +354,263 @@ class OpenApiCoverageTrackerTest extends TestCase
     }
 
     #[Test]
+    public function record_response_with_range_key_reconciles_to_literal_spec_status(): void
+    {
+        // Pin the symmetric branch in statusKeyMatches() — recordings normally
+        // carry literal statuses, but external callers (and future skip-pattern
+        // refactors) may pass spec range keys. The reverse direction must
+        // reconcile too.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '5XX',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        $endpoint = $this->endpointSummary('petstore-3.0', 'GET /v1/pets');
+        // petstore-3.0 declares 500:application/json literally; the 5XX recording
+        // should reconcile against it.
+        $row = $this->responseRow($endpoint['responses'], '500', 'application/json');
+        $this->assertSame(ResponseCoverageState::Validated, $row['state']);
+    }
+
+    #[Test]
+    public function default_spec_key_matches_literal_default_recording(): void
+    {
+        // Edge case: caller passes the literal string "default" as statusKey.
+        // statusKeyMatches() should resolve via the case-insensitive exact match
+        // BEFORE falling through to the `default` wildcard branch.
+        OpenApiCoverageTracker::recordResponse(
+            'range-keys',
+            'GET',
+            '/widgets-default',
+            'default',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        $endpoint = $this->endpointSummary('range-keys', 'GET /widgets-default');
+        $row = $this->responseRow($endpoint['responses'], 'default', 'application/json');
+        $this->assertSame(ResponseCoverageState::Validated, $row['state']);
+    }
+
+    #[Test]
+    public function endpoint_with_no_spec_responses_renders_request_only_when_request_fired(): void
+    {
+        // Pin the deriveEndpointState() $totalDeclared === 0 branch.
+        // The fixture's GET /widgets-no-responses operation has no responses
+        // block at all.
+        OpenApiCoverageTracker::recordRequest('range-keys', 'GET', '/widgets-no-responses');
+
+        $endpoint = $this->endpointSummary('range-keys', 'GET /widgets-no-responses');
+        $this->assertSame(EndpointCoverageState::RequestOnly, $endpoint['state']);
+        $this->assertSame(0, $endpoint['totalResponseCount']);
+    }
+
+    #[Test]
+    public function endpoint_with_no_spec_responses_renders_uncovered_when_no_record(): void
+    {
+        $endpoint = $this->endpointSummary('range-keys', 'GET /widgets-no-responses');
+        $this->assertSame(EndpointCoverageState::Uncovered, $endpoint['state']);
+    }
+
+    #[Test]
+    public function endpoint_with_only_unexpected_observation_renders_request_only(): void
+    {
+        // Pin the hasAnyResponseObservation branch in deriveEndpointState():
+        // a recording that doesn't reconcile to any declared spec entry
+        // (lands in unexpectedObservations) but no recordRequest call —
+        // endpoint state must be `request-only`, not `uncovered`.
+        OpenApiCoverageTracker::recordResponse(
+            'range-keys',
+            'GET',
+            '/widgets',
+            '700',
+            'application/xml',
+            schemaValidated: true,
+        );
+
+        $endpoint = $this->endpointSummary('range-keys', 'GET /widgets');
+        $this->assertSame(EndpointCoverageState::RequestOnly, $endpoint['state']);
+        $this->assertCount(1, $endpoint['unexpectedObservations']);
+    }
+
+    #[Test]
+    public function cross_recording_hits_accumulate_into_validated_pair(): void
+    {
+        // Two distinct recordings (`503` and `599`) both reconcile to spec `5XX`
+        // via range matching. The validated row's `hits` should be the sum.
+        OpenApiCoverageTracker::recordResponse(
+            'range-keys',
+            'GET',
+            '/widgets',
+            '503',
+            'application/json',
+            schemaValidated: true,
+        );
+        OpenApiCoverageTracker::recordResponse(
+            'range-keys',
+            'GET',
+            '/widgets',
+            '599',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        $endpoint = $this->endpointSummary('range-keys', 'GET /widgets');
+        $row = $this->responseRow($endpoint['responses'], '5XX', 'application/json');
+        $this->assertSame(ResponseCoverageState::Validated, $row['state']);
+        $this->assertSame(2, $row['hits']);
+    }
+
+    #[Test]
+    public function validated_promotion_drops_skipped_hits_from_count(): void
+    {
+        // Two skipped recordings followed by a validated one should NOT roll
+        // the skipped hit count into the validated total — the displayed
+        // "validated (N hits)" must reflect validations only.
+        OpenApiCoverageTracker::recordResponse(
+            'range-keys',
+            'GET',
+            '/widgets',
+            '503',
+            null,
+            schemaValidated: false,
+            skipReason: 'first skip',
+        );
+        OpenApiCoverageTracker::recordResponse(
+            'range-keys',
+            'GET',
+            '/widgets',
+            '599',
+            null,
+            schemaValidated: false,
+            skipReason: 'second skip',
+        );
+        OpenApiCoverageTracker::recordResponse(
+            'range-keys',
+            'GET',
+            '/widgets',
+            '500',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        $endpoint = $this->endpointSummary('range-keys', 'GET /widgets');
+        $row = $this->responseRow($endpoint['responses'], '5XX', 'application/json');
+        $this->assertSame(ResponseCoverageState::Validated, $row['state']);
+        $this->assertSame(1, $row['hits'], 'hits should only count validated recordings');
+    }
+
+    #[Test]
+    public function latest_skip_reason_wins_for_same_pair_recordings(): void
+    {
+        OpenApiCoverageTracker::recordResponse(
+            'range-keys',
+            'GET',
+            '/widgets',
+            '503',
+            null,
+            schemaValidated: false,
+            skipReason: 'reason A',
+        );
+        OpenApiCoverageTracker::recordResponse(
+            'range-keys',
+            'GET',
+            '/widgets',
+            '503',
+            null,
+            schemaValidated: false,
+            skipReason: 'reason B',
+        );
+
+        $endpoint = $this->endpointSummary('range-keys', 'GET /widgets');
+        $row = $this->responseRow($endpoint['responses'], '5XX', 'application/json');
+        $this->assertSame('reason B', $row['skipReason']);
+    }
+
+    #[Test]
+    public function latest_skip_reason_wins_across_cross_recording_skips(): void
+    {
+        // Two distinct skip recordings (different literal statuses) both
+        // reconcile to the same spec `5XX:application/json` declaration.
+        // Latest skipReason should win in buildResponseRows too.
+        OpenApiCoverageTracker::recordResponse(
+            'range-keys',
+            'GET',
+            '/widgets',
+            '503',
+            null,
+            schemaValidated: false,
+            skipReason: 'reason A',
+        );
+        OpenApiCoverageTracker::recordResponse(
+            'range-keys',
+            'GET',
+            '/widgets',
+            '599',
+            null,
+            schemaValidated: false,
+            skipReason: 'reason B',
+        );
+
+        $endpoint = $this->endpointSummary('range-keys', 'GET /widgets');
+        $row = $this->responseRow($endpoint['responses'], '5XX', 'application/json');
+        $this->assertSame(ResponseCoverageState::Skipped, $row['state']);
+        $this->assertSame('reason B', $row['skipReason']);
+    }
+
+    #[Test]
+    public function default_and_5xx_overlap_double_counts_response_definitions(): void
+    {
+        // Documented overlap behaviour: when a spec declares BOTH `default`
+        // and `5XX` for the same content-type, a single `503` recording marks
+        // both rows validated and contributes to both counts. Spec authors are
+        // unlikely to write both, but this pin documents the arithmetic so a
+        // future refactor doesn't silently change the totals.
+        OpenApiCoverageTracker::recordResponse(
+            'range-keys-overlap',
+            'GET',
+            '/widgets',
+            '503',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        $endpoint = $this->endpointSummary('range-keys-overlap', 'GET /widgets');
+        // Spec declares both 5XX:application/json and default:application/json
+        $this->assertSame(2, $endpoint['totalResponseCount']);
+        $this->assertSame(2, $endpoint['coveredResponseCount']);
+        $this->assertSame(EndpointCoverageState::AllCovered, $endpoint['state']);
+    }
+
+    #[Test]
+    public function malformed_response_entry_emits_warning_and_omits(): void
+    {
+        // Pin the trigger_error path in collectDeclaredEndpoints — silently
+        // dropping a non-array response would understate totals; without
+        // a warning the user wouldn't notice.
+        $captured = [];
+        $previous = set_error_handler(static function (int $errno, string $message) use (&$captured): bool {
+            $captured[] = $message;
+
+            return true;
+        });
+
+        try {
+            OpenApiCoverageTracker::computeCoverage('malformed-response');
+        } finally {
+            restore_error_handler();
+        }
+
+        $joined = implode(' | ', $captured);
+        $this->assertStringContainsString("spec 'malformed-response'", $joined);
+        $this->assertStringContainsString('not an object', $joined);
+    }
+
+    #[Test]
     public function has_any_coverage_returns_true_for_request_only(): void
     {
         OpenApiCoverageTracker::recordRequest('petstore-3.0', 'GET', '/v1/pets');
@@ -380,9 +643,9 @@ class OpenApiCoverageTrackerTest extends TestCase
      *     method: string,
      *     path: string,
      *     operationId: ?string,
-     *     state: string,
+     *     state: EndpointCoverageState,
      *     requestReached: bool,
-     *     responses: list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}>,
+     *     responses: list<array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}>,
      *     coveredResponseCount: int,
      *     skippedResponseCount: int,
      *     totalResponseCount: int,
@@ -402,9 +665,9 @@ class OpenApiCoverageTrackerTest extends TestCase
     }
 
     /**
-     * @param list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}> $rows
+     * @param list<array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}> $rows
      *
-     * @return array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}
+     * @return array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}
      */
     private function responseRow(array $rows, string $statusKey, string $contentTypeKey): array
     {

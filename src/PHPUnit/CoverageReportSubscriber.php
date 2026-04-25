@@ -14,6 +14,7 @@ use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\SpecFileNotFoundException;
 
 use function file_put_contents;
+use function is_callable;
 
 /**
  * @phpstan-import-type CoverageResult from OpenApiCoverageTracker
@@ -22,12 +23,16 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
 {
     /**
      * @param string[] $specs
+     * @param null|callable(string): void $stderrWriter Optional sink for warnings (stale/invalid specs,
+     *                                                  failed file_put_contents). Falls back to {@see OpenApiCoverageExtension::writeStderr()} when
+     *                                                  null. Injected for testability — the extension stays the default backstop in production.
      */
     public function __construct(
         private array $specs,
         private ?string $outputFile,
         private ConsoleOutput $consoleOutput,
         private ?string $githubSummaryPath,
+        private mixed $stderrWriter = null,
     ) {}
 
     /** @phpcsSuppress SlevomatCodingStandard.Functions.UnusedParameter.UnusedParameter */
@@ -47,6 +52,18 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         if ($this->outputFile !== null || $this->githubSummaryPath !== null) {
             $this->writeMarkdownReport($results);
         }
+    }
+
+    private function writeStderr(string $message): void
+    {
+        $writer = $this->stderrWriter;
+        if (is_callable($writer)) {
+            $writer($message);
+
+            return;
+        }
+
+        OpenApiCoverageExtension::writeStderr($message);
     }
 
     /**
@@ -77,7 +94,7 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
                 // as bootstrap. Unlike bootstrap, the subscriber runs
                 // after tests finished, so continuing lets partial
                 // coverage reports still render.
-                OpenApiCoverageExtension::writeStderr("[OpenAPI Coverage] WARNING: Skipping spec '{$spec}': {$e->getMessage()}\n");
+                $this->writeStderr("[OpenAPI Coverage] WARNING: Skipping spec '{$spec}': {$e->getMessage()}\n");
 
                 continue;
             } catch (InvalidOpenApiSpecException $e) {
@@ -85,7 +102,7 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
                 // was called mid-run and the on-disk spec was edited
                 // between bootstrap and ExecutionFinished. Preserves
                 // the hard-fail contract in that edge case.
-                OpenApiCoverageExtension::writeStderr("[OpenAPI Coverage] FATAL: Invalid OpenAPI spec '{$spec}': {$e->getMessage()}\n");
+                $this->writeStderr("[OpenAPI Coverage] FATAL: Invalid OpenAPI spec '{$spec}': {$e->getMessage()}\n");
 
                 throw $e;
             }
@@ -105,7 +122,7 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
             $written = file_put_contents($this->outputFile, $markdown);
 
             if ($written === false) {
-                OpenApiCoverageExtension::writeStderr("[OpenAPI Coverage] WARNING: Failed to write Markdown report to {$this->outputFile}\n");
+                $this->writeStderr("[OpenAPI Coverage] WARNING: Failed to write Markdown report to {$this->outputFile}\n");
             }
         }
 
@@ -113,7 +130,7 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
             $written = file_put_contents($this->githubSummaryPath, $markdown . "\n", FILE_APPEND);
 
             if ($written === false) {
-                OpenApiCoverageExtension::writeStderr("[OpenAPI Coverage] WARNING: Failed to append Markdown report to GITHUB_STEP_SUMMARY ({$this->githubSummaryPath})\n");
+                $this->writeStderr("[OpenAPI Coverage] WARNING: Failed to append Markdown report to GITHUB_STEP_SUMMARY ({$this->githubSummaryPath})\n");
             }
         }
     }

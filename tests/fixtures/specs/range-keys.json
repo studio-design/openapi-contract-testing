@@ -60,6 +60,12 @@
           }
         }
       }
+    },
+    "/widgets-no-responses": {
+      "get": {
+        "operationId": "noResponses"
+      }
     }
   }
 }
+

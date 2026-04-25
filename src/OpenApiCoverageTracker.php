@@ -4,45 +4,47 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
+use const E_USER_WARNING;
+
 use function array_keys;
 use function count;
+use function get_debug_type;
 use function in_array;
 use function is_array;
 use function is_string;
 use function preg_match;
+use function sprintf;
 use function strcasecmp;
 use function strcmp;
 use function strpos;
 use function strtoupper;
 use function substr;
+use function trigger_error;
 use function usort;
 
 /**
- * @phpstan-type ResponseCoverageState 'validated'|'skipped'
- * @phpstan-type ResponseCoverage array{
+ * @phpstan-type RecordedResponseCoverage array{
  *     state: ResponseCoverageState,
  *     hits: int,
  *     skipReason?: ?string,
  * }
  * @phpstan-type EndpointCoverage array{
  *     requestReached: bool,
- *     responses: array<string, ResponseCoverage>,
+ *     responses: array<string, RecordedResponseCoverage>,
  * }
- * @phpstan-type ResponseRowState 'validated'|'uncovered'|'skipped'
  * @phpstan-type ResponseRow array{
  *     statusKey: string,
  *     contentTypeKey: string,
- *     state: ResponseRowState,
+ *     state: ResponseCoverageState,
  *     hits: int,
  *     skipReason: ?string,
  * }
- * @phpstan-type EndpointState 'all-covered'|'partial'|'uncovered'|'request-only'
  * @phpstan-type EndpointSummary array{
  *     endpoint: string,
  *     method: string,
  *     path: string,
  *     operationId: ?string,
- *     state: EndpointState,
+ *     state: EndpointCoverageState,
  *     requestReached: bool,
  *     responses: list<ResponseRow>,
  *     coveredResponseCount: int,
@@ -65,8 +67,11 @@ use function usort;
  */
 final class OpenApiCoverageTracker
 {
-    /** Wildcard sentinel for "any / no content-type" — used when a recording predates */
-    /** content-type lookup (skipped responses) and when a spec response has no `content` block. */
+    /**
+     * Wildcard sentinel for "any / no content-type" — used when a recording
+     * predates content-type lookup (skipped responses) and when a spec
+     * response has no `content` block.
+     */
     public const ANY_CONTENT_TYPE = '*';
 
     /**
@@ -134,7 +139,7 @@ final class OpenApiCoverageTracker
 
         if ($existing === null) {
             self::$covered[$specName][$endpointKey]['responses'][$responseKey] = [
-                'state' => $schemaValidated ? 'validated' : 'skipped',
+                'state' => $schemaValidated ? ResponseCoverageState::Validated : ResponseCoverageState::Skipped,
                 'hits' => 1,
                 'skipReason' => $schemaValidated ? null : $skipReason,
             ];
@@ -145,9 +150,9 @@ final class OpenApiCoverageTracker
         $existing['hits']++;
         if ($schemaValidated) {
             // Promote skipped → validated; once validated, stay validated.
-            $existing['state'] = 'validated';
+            $existing['state'] = ResponseCoverageState::Validated;
             $existing['skipReason'] = null;
-        } elseif ($existing['state'] === 'skipped' && $skipReason !== null) {
+        } elseif ($existing['state'] === ResponseCoverageState::Skipped && $skipReason !== null) {
             // Latest skipReason wins so the renderer surfaces the most recent
             // skip pattern (typically all-the-same in practice; but we don't
             // want to hide a per-test override).
@@ -214,7 +219,7 @@ final class OpenApiCoverageTracker
         $responseCovered = 0;
         $responseSkipped = 0;
 
-        $declaredEndpoints = self::collectDeclaredEndpoints($spec);
+        $declaredEndpoints = self::collectDeclaredEndpoints($specName, $spec);
 
         foreach ($declaredEndpoints as $declared) {
             $endpointKey = $declared['endpoint'];
@@ -225,9 +230,9 @@ final class OpenApiCoverageTracker
             $coveredCount = 0;
             $skippedCount = 0;
             foreach ($rows as $row) {
-                if ($row['state'] === 'validated') {
+                if ($row['state'] === ResponseCoverageState::Validated) {
                     $coveredCount++;
-                } elseif ($row['state'] === 'skipped') {
+                } elseif ($row['state'] === ResponseCoverageState::Skipped) {
                     $skippedCount++;
                 }
             }
@@ -244,10 +249,10 @@ final class OpenApiCoverageTracker
             );
 
             match ($state) {
-                'all-covered' => $endpointFullyCovered++,
-                'partial' => $endpointPartial++,
-                'uncovered' => $endpointUncovered++,
-                'request-only' => $endpointRequestOnly++,
+                EndpointCoverageState::AllCovered => $endpointFullyCovered++,
+                EndpointCoverageState::Partial => $endpointPartial++,
+                EndpointCoverageState::Uncovered => $endpointUncovered++,
+                EndpointCoverageState::RequestOnly => $endpointRequestOnly++,
             };
 
             $responseTotal += $totalCount;
@@ -289,11 +294,33 @@ final class OpenApiCoverageTracker
     }
 
     /**
+     * Emit a PHPUnit-visible warning when the spec has structurally invalid
+     * branches inside otherwise-valid `paths`. We don't throw — partial
+     * coverage data is still useful — but staying silent would understate
+     * totals without the user noticing.
+     */
+    private static function warnMalformed(string $specName, string $detail): void
+    {
+        trigger_error(
+            sprintf("[OpenAPI Coverage] spec '%s': %s", $specName, $detail),
+            E_USER_WARNING,
+        );
+    }
+
+    /**
      * Walk the spec's `paths` map and yield one entry per declared
      * (method, path) operation, listing all (statusKey, contentTypeKey)
      * pairs declared for it. A response with no `content` block contributes
      * a single `(statusKey, '*')` pair so 204-style responses appear in
      * coverage instead of being silently omitted.
+     *
+     * Malformed spec branches (a path mapped to a non-object, an operation
+     * mapped to a non-object, or a response entry mapped to a non-object)
+     * are skipped AND announced via E_USER_WARNING — silently dropping them
+     * would understate `endpointTotal` / `responseTotal` and let the user
+     * believe their spec was fully read. The eager `OpenApiSpecLoader::load()`
+     * catches structural errors at bootstrap, but it permits the permissive
+     * shapes (`responses: 200` as scalar) that this walker rejects.
      *
      * @param array<string, mixed> $spec
      *
@@ -305,7 +332,7 @@ final class OpenApiCoverageTracker
      *     responses: list<array{statusKey: string, contentTypeKey: string}>,
      * }>
      */
-    private static function collectDeclaredEndpoints(array $spec): array
+    private static function collectDeclaredEndpoints(string $specName, array $spec): array
     {
         /** @var array<string, mixed> $paths */
         $paths = is_array($spec['paths'] ?? null) ? $spec['paths'] : [];
@@ -313,6 +340,8 @@ final class OpenApiCoverageTracker
 
         foreach ($paths as $path => $methods) {
             if (!is_array($methods)) {
+                self::warnMalformed($specName, sprintf('path %s is not an object (got %s); omitted from coverage', (string) $path, get_debug_type($methods)));
+
                 continue;
             }
 
@@ -322,6 +351,8 @@ final class OpenApiCoverageTracker
                     continue;
                 }
                 if (!is_array($operation)) {
+                    self::warnMalformed($specName, sprintf('operation %s %s is not an object (got %s); omitted from coverage', $upper, (string) $path, get_debug_type($operation)));
+
                     continue;
                 }
 
@@ -332,6 +363,8 @@ final class OpenApiCoverageTracker
                 foreach ($responses as $statusKey => $responseSpec) {
                     $statusKeyStr = (string) $statusKey;
                     if (!is_array($responseSpec)) {
+                        self::warnMalformed($specName, sprintf('response %s %s %s is not an object (got %s); omitted from coverage', $upper, (string) $path, $statusKeyStr, get_debug_type($responseSpec)));
+
                         continue;
                     }
                     $content = is_array($responseSpec['content'] ?? null) ? $responseSpec['content'] : null;
@@ -375,7 +408,7 @@ final class OpenApiCoverageTracker
      * matching is case-insensitive on the spec key.
      *
      * @param list<array{statusKey: string, contentTypeKey: string}> $declaredResponses
-     * @param array<string, ResponseCoverage> $recordedResponses
+     * @param array<string, RecordedResponseCoverage> $recordedResponses
      *
      * @return list<ResponseRow>
      */
@@ -384,7 +417,7 @@ final class OpenApiCoverageTracker
         $rows = [];
 
         foreach ($declaredResponses as $declared) {
-            $bestState = 'uncovered';
+            $bestState = ResponseCoverageState::Uncovered;
             $hits = 0;
             $skipReason = null;
 
@@ -398,22 +431,29 @@ final class OpenApiCoverageTracker
                     continue;
                 }
 
-                if ($entry['state'] === 'validated') {
-                    $bestState = 'validated';
-                    $hits += $entry['hits'];
+                if ($entry['state'] === ResponseCoverageState::Validated) {
+                    if ($bestState !== ResponseCoverageState::Validated) {
+                        // Promotion from uncovered/skipped → drop any hits
+                        // accumulated from skipped recordings so the
+                        // displayed `hits` number reflects validations only.
+                        $hits = $entry['hits'];
+                    } else {
+                        $hits += $entry['hits'];
+                    }
+                    $bestState = ResponseCoverageState::Validated;
                     $skipReason = null;
 
                     continue;
                 }
 
-                if ($bestState === 'uncovered') {
-                    $bestState = 'skipped';
+                if ($bestState === ResponseCoverageState::Uncovered) {
+                    $bestState = ResponseCoverageState::Skipped;
                     $hits = $entry['hits'];
                     $skipReason = $entry['skipReason'] ?? null;
 
                     continue;
                 }
-                if ($bestState === 'skipped') {
+                if ($bestState === ResponseCoverageState::Skipped) {
                     $hits += $entry['hits'];
                     if (($entry['skipReason'] ?? null) !== null) {
                         $skipReason = $entry['skipReason'];
@@ -457,7 +497,7 @@ final class OpenApiCoverageTracker
      * without inflating "uncovered" counts.
      *
      * @param list<array{statusKey: string, contentTypeKey: string}> $declaredResponses
-     * @param array<string, ResponseCoverage> $recordedResponses
+     * @param array<string, RecordedResponseCoverage> $recordedResponses
      *
      * @return list<array{statusKey: string, contentTypeKey: string}>
      */
@@ -497,12 +537,12 @@ final class OpenApiCoverageTracker
 
     /**
      * Determine the endpoint-level state from declared / covered / skipped
-     * counts. `request-only` only when no responses are declared in spec
-     * (or none were observed) and the request side fired — a rare but
-     * legitimate "auto-validate-request without auto-assert" pattern.
-     */
-    /**
-     * @return EndpointState
+     * counts. `request-only` covers two situations: (a) no responses are
+     * declared in spec and the request hook fired ("auto-validate-request
+     * without auto-assert"), and (b) responses ARE declared but every
+     * observation reconciled only to `unexpectedObservations` so the
+     * declared coverage is empty — without this carve-out the endpoint
+     * would read `uncovered` despite test traffic.
      */
     private static function deriveEndpointState(
         int $totalDeclared,
@@ -510,37 +550,40 @@ final class OpenApiCoverageTracker
         int $skipped,
         bool $requestReached,
         bool $hasAnyResponseObservation,
-    ): string {
+    ): EndpointCoverageState {
         if ($totalDeclared === 0) {
             // No response definitions in spec — this happens for operations
             // declared without a `responses` block. Treat as request-only when
             // the endpoint was reached (request hook fired) so it's not lost.
-            return $requestReached || $hasAnyResponseObservation ? 'request-only' : 'uncovered';
+            return $requestReached || $hasAnyResponseObservation
+                ? EndpointCoverageState::RequestOnly
+                : EndpointCoverageState::Uncovered;
         }
 
         if ($covered === 0 && $skipped === 0) {
-            return $requestReached || $hasAnyResponseObservation ? 'request-only' : 'uncovered';
+            return $requestReached || $hasAnyResponseObservation
+                ? EndpointCoverageState::RequestOnly
+                : EndpointCoverageState::Uncovered;
         }
 
         if ($covered === $totalDeclared) {
-            return 'all-covered';
+            return EndpointCoverageState::AllCovered;
         }
 
-        return 'partial';
+        return EndpointCoverageState::Partial;
     }
 
     /**
      * Spec key matches recorded key when:
      * - exact case-insensitive match
-     * - `default` matches anything
+     * - `default` matches anything (asymmetric — only when `$specKey === 'default'`,
+     *   never when the recording is `'default'`)
      * - `1XX`/`2XX`/`3XX`/`4XX`/`5XX` (case-insensitive) matches a literal
-     *   3-digit status whose first digit equals the leading digit
-     *
-     * Matching is intentionally directional: `$specKey` is what the spec
-     * declares, `$recordedKey` is what the recording stored. So
-     * `statusKeyMatches('5XX', '503')` is true; the reverse is also true
-     * since exact spec key matches happen via the same code path when both
-     * sides are equal.
+     *   3-digit status whose first digit equals the leading digit. Range
+     *   matching is **symmetric**: spec=`5XX` vs recorded=`503` and the
+     *   reverse both succeed. The validator currently records literal statuses
+     *   so the reverse-direction branch supports tests and framework-agnostic
+     *   external callers that may pass range keys directly to `recordResponse()`.
      */
     private static function statusKeyMatches(string $specKey, string $recordedKey): bool
     {

@@ -16,7 +16,14 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
     `recordRequest(spec, method, path)` and
     `recordResponse(spec, method, path, statusKey, contentTypeKey, schemaValidated, skipReason?)`.
     Library-internal call sites (the Laravel trait) are updated automatically;
-    direct callers must migrate.
+    direct callers must migrate. `$contentTypeKey` is `?string`: pass `null`
+    when no content-type lookup applies (e.g. the response was skipped before
+    content negotiation, or it is a 204-style entry) — null is internally
+    stored under the `*` sentinel and reconciled against spec declarations
+    that have no `content` block.
+  - `OpenApiCoverageTracker::__construct` is now `private`. The class was
+    static-only in practice but you could previously call `new` on it; that
+    now raises `Error`. Use the static API directly.
   - `OpenApiCoverageTracker::computeCoverage()` returns a new shape with
     per-endpoint sub-rows (one per declared `(status, content-type)` pair),
     response-level totals, an `EndpointSummary['state']` field
@@ -30,6 +37,13 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
   - `MarkdownCoverageRenderer` and `ConsoleCoverageRenderer` produce
     visibly different output (per-endpoint sub-rows, partial/skipped
     markers). Consumers that scrape these outputs may need updates.
+  - `OpenApiResponseValidator::validate()` now returns
+    `OpenApiValidationResult::skipped()` (was: silent `success()`) when the
+    spec declares only non-JSON content types and the caller did not supply
+    a `responseContentType` — there is no schema engine to validate against,
+    so coverage records the response as `skipped` instead of crediting it
+    as validated. Callers that pass the actual response Content-Type
+    continue to be marked `validated` whenever the type is in the spec.
   - Coverage rates are now reported at **two granularities** — endpoint
     (`endpointFullyCovered / endpointTotal`) and response definition
     (`responseCovered / responseTotal`).
@@ -73,5 +87,15 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
   on the old loose counting.
 - Skip-by-status-code remains opt-in via `skip_response_codes`; matched
   literal statuses (e.g. `"503"`) reconcile against any spec range key
-  declared on the same endpoint via the
-  `OpenApiCoverageTracker::statusKeyMatches()` helper.
+  (`5XX` / `5xx` / `default`) declared on the same endpoint at compute
+  time, so a `5\d\d` skip on an endpoint declaring `5XX: application/json`
+  surfaces as `skipped` rather than `uncovered`.
+- A spec that declares both `default` and `5XX` for the same content-type
+  on the same endpoint is treated as **two distinct response definitions**
+  in the totals — a single `503` recording credits both. Spec authors
+  rarely write both; if they do, response-level totals reflect that.
+- `OpenApiCoverageTracker::computeCoverage()` emits `E_USER_WARNING`
+  (visible to PHPUnit) when the spec contains structurally invalid
+  branches inside `paths` (e.g. `responses: 200` as a scalar). Coverage
+  proceeds with the malformed entries omitted; without the warning the
+  user would silently see a smaller `responseTotal` than reality.

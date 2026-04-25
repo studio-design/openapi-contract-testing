@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\PHPUnit;
 
+use Studio\OpenApiContractTesting\EndpointCoverageState;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\ResponseCoverageState;
 
 use function implode;
 use function round;
@@ -158,22 +160,22 @@ final class MarkdownCoverageRenderer
         return $extras === [] ? $line : sprintf('%s (%s)', $line, implode(', ', $extras));
     }
 
-    private static function endpointMarker(string $state): string
+    private static function endpointMarker(EndpointCoverageState $state): string
     {
         return match ($state) {
-            'all-covered' => self::MARKER_ALL_COVERED,
-            'partial' => self::MARKER_PARTIAL,
-            'request-only' => self::MARKER_REQUEST_ONLY,
-            default => self::MARKER_UNCOVERED,
+            EndpointCoverageState::AllCovered => self::MARKER_ALL_COVERED,
+            EndpointCoverageState::Partial => self::MARKER_PARTIAL,
+            EndpointCoverageState::RequestOnly => self::MARKER_REQUEST_ONLY,
+            EndpointCoverageState::Uncovered => self::MARKER_UNCOVERED,
         };
     }
 
-    private static function responseMarker(string $state): string
+    private static function responseMarker(ResponseCoverageState $state): string
     {
         return match ($state) {
-            'validated' => self::MARKER_ALL_COVERED,
-            'skipped' => self::MARKER_SKIPPED,
-            default => self::MARKER_UNCOVERED,
+            ResponseCoverageState::Validated => self::MARKER_ALL_COVERED,
+            ResponseCoverageState::Skipped => self::MARKER_SKIPPED,
+            ResponseCoverageState::Uncovered => self::MARKER_UNCOVERED,
         };
     }
 
@@ -183,11 +185,11 @@ final class MarkdownCoverageRenderer
     private static function responseStateLabel(array $row): string
     {
         return match ($row['state']) {
-            'validated' => sprintf('validated (%d hits)', $row['hits']),
-            'skipped' => $row['skipReason'] !== null
+            ResponseCoverageState::Validated => sprintf('validated (%d hits)', $row['hits']),
+            ResponseCoverageState::Skipped => $row['skipReason'] !== null
                 ? sprintf('skipped (%s)', $row['skipReason'])
                 : 'skipped',
-            default => 'uncovered',
+            ResponseCoverageState::Uncovered => 'uncovered',
         };
     }
 

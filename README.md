@@ -345,7 +345,7 @@ Notes:
 - Skipped endpoints count as covered — the endpoint was exercised, just not schema-validated. Coverage semantics here match how non-JSON content types and schema-less `204` responses are handled, but `OpenApiValidationResult::isSkipped()` returns `true` **only** for status-code skips; the other no-body-validation branches still return a plain `success()`.
 - `OpenApiValidationResult::isSkipped()` is exposed for callers who want to distinguish a skip from a genuine success. `skipReason()` identifies the matched pattern. `outcome()` returns an `OpenApiValidationOutcome` enum (`Success` / `Failure` / `Skipped`) for callers who want exhaustive `match` handling instead of two bool predicates.
 - **Observability trade-off**: a real regression that causes an unrelated `500` will not fail this assertion. Keep your HTTP-level assertions (`$response->assertOk()`, status-code expectations in the test) alongside the contract check so a stray 5xx still surfaces — the contract assertion alone is not a substitute for status-code assertions on happy paths.
-- **Coverage signal**: endpoints that were only ever exercised via a skipped response are rendered with `⚠` in the console report (header gains `, N skipped-only`) and with `:warning:` in the Markdown report. `coveredCount` and the coverage percentage stay unchanged — the marker is a quality signal layered on top so a happy-path regression that silently returns `500` in every test is visible at a glance. `skipReason()` is available on each `OpenApiValidationResult` for callers who want to log the matched pattern from a custom renderer.
+- **Coverage signal**: skipped responses surface as their own row inside each endpoint's response table — `⚠` (`:warning:` in Markdown) on the per-`(status, content-type)` line, with the matched skip pattern shown inline. The endpoint marker becomes `◐` (partial) when other responses are still validated, or stays `✓` only when every declared response is covered. The response-level rate (`responseCovered / responseTotal`) excludes skipped definitions, so a happy-path regression that silently returns `500` in every test no longer hides behind a 100% endpoint count. `skipReason()` is available on each `OpenApiValidationResult` for callers who want to log the matched pattern from a custom renderer.
 
 #### Auto-assert every response
 
@@ -556,31 +556,33 @@ OpenAPI Contract Test Coverage
         responses: 38/120 covered (31.7%), 4 skipped, 78 uncovered
 --------------------------------------------------
 Legend: ✓=validated  ⚠=skipped  ✗=uncovered  ◐=partial  ·=request-only  *=any/no content-type
-  ✓ GET /v1/pets                    (3/3 responses)
-  ◐ POST /v1/pets                   (1/2 responses)
-  ⚠ DELETE /v1/pets/{petId}         (1/2 responses, 1 skipped)
-  ✗ PUT /v1/pets/{petId}            (0/2 responses)
+  ✓ GET /v1/pets  (3/3 responses)
+  ◐ POST /v1/pets  (1/2 responses)
+  ◐ DELETE /v1/pets/{petId}  (1/2 responses, 1 skipped)
+  ✗ PUT /v1/pets/{petId}  (0/2 responses)
 ```
+
+> Endpoint markers come from a fixed set: `✓` all-covered, `◐` partial (any combination of validated, skipped, uncovered short of full coverage), `·` request-only, `✗` uncovered. The `⚠` marker is reserved for per-response sub-rows (skipped responses), never for endpoint summary lines.
 
 ### `all` mode
 
-Shows endpoint summaries with per-response sub-rows:
+Shows endpoint summaries with per-response sub-rows. Sub-row whitespace is illustrative — the renderer pads `statusKey` to 5 chars and `contentTypeKey` to 32 chars:
 
 ```
 [front] endpoints: 12/45 fully covered (26.7%), 8 partial, 25 uncovered
         responses: 38/120 covered (31.7%), 4 skipped, 78 uncovered
 --------------------------------------------------
 Legend: ✓=validated  ⚠=skipped  ✗=uncovered  ◐=partial  ·=request-only  *=any/no content-type
-  ✓ GET /v1/pets                    (3/3 responses)
-      ✓ 200  application/json                 [12]
-      ✓ 400  application/problem+json         [1]
-      ✓ 422  Application/Problem+JSON         [1]
-  ◐ POST /v1/pets                   (1/2 responses)
-      ✓ 201  application/json                 [3]
-      ✗ 422  application/problem+json         uncovered
-  ⚠ DELETE /v1/pets/{petId}         (1/2 responses, 1 skipped)
-      ✓ 204  *                                [2]
-      ⚠ 5XX  *                                skipped: status 503 matched skip pattern 5\d\d
+  ✓ GET /v1/pets  (3/3 responses)
+      ✓ 200    application/json                  [12]
+      ✓ 400    application/problem+json          [1]
+      ✓ 422    Application/Problem+JSON          [1]
+  ◐ POST /v1/pets  (1/2 responses)
+      ✓ 201    application/json                  [3]
+      ✗ 422    application/problem+json          uncovered
+  ◐ DELETE /v1/pets/{petId}  (1/2 responses, 1 skipped)
+      ✓ 204    *                                 [2]
+      ⚠ 5XX    *                                 skipped: status 503 matched skip pattern 5\d\d
 ```
 
 ### `uncovered_only` mode
@@ -592,12 +594,12 @@ Shows sub-rows only for partial / uncovered endpoints, keeping fully-covered one
         responses: 38/120 covered (31.7%), 4 skipped, 78 uncovered
 --------------------------------------------------
 Legend: ✓=validated  ⚠=skipped  ✗=uncovered  ◐=partial  ·=request-only  *=any/no content-type
-  ✓ GET /v1/pets                    (3/3 responses)
-  ◐ POST /v1/pets                   (1/2 responses)
-      ✗ 422  application/problem+json         uncovered
-  ✗ PUT /v1/pets/{petId}            (0/2 responses)
-      ✗ 200  application/json                 uncovered
-      ✗ 404  application/problem+json         uncovered
+  ✓ GET /v1/pets  (3/3 responses)
+  ◐ POST /v1/pets  (1/2 responses)
+      ✗ 422    application/problem+json          uncovered
+  ✗ PUT /v1/pets/{petId}  (0/2 responses)
+      ✗ 200    application/json                  uncovered
+      ✗ 404    application/problem+json          uncovered
 ```
 
 You can set the mode via `phpunit.xml`:

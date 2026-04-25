@@ -6,9 +6,12 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\EndpointCoverageState;
 use Studio\OpenApiContractTesting\PHPUnit\MarkdownCoverageRenderer;
+use Studio\OpenApiContractTesting\ResponseCoverageState;
 
 use function explode;
+use function strpos;
 
 class MarkdownCoverageRendererTest extends TestCase
 {
@@ -164,6 +167,93 @@ class MarkdownCoverageRendererTest extends TestCase
     }
 
     #[Test]
+    public function render_endpoint_with_both_skipped_and_uncovered_lists_both_in_summary(): void
+    {
+        // 1 covered + 1 skipped + 1 uncovered → "1/3 (1 skipped, 1 uncovered)"
+        // — the comma-join branch in endpointResponsesSummary needs both segments.
+        $results = [
+            'front' => self::coverage(
+                endpoints: [
+                    self::endpoint('GET /v1/mixed', 'partial', responses: [
+                        self::row('200', 'application/json', 'validated', hits: 1),
+                        self::row('5XX', '*', 'skipped', hits: 1, skipReason: 'production 5xx'),
+                        self::row('404', 'application/problem+json', 'uncovered'),
+                    ], coveredResponseCount: 1, skippedResponseCount: 1, totalResponseCount: 3),
+                ],
+                endpointTotal: 1,
+                endpointPartial: 1,
+                responseTotal: 3,
+                responseCovered: 1,
+                responseSkipped: 1,
+                responseUncovered: 1,
+            ),
+        ];
+
+        $output = MarkdownCoverageRenderer::render($results);
+
+        $this->assertStringContainsString('| `GET /v1/mixed` | 1/3 (1 skipped, 1 uncovered) |', $output);
+    }
+
+    #[Test]
+    public function render_unexpected_observations_appear_after_response_table_inside_details(): void
+    {
+        // Pin both presence AND ordering: unexpected observations must come
+        // after the per-endpoint response table and stay inside the
+        // <details> section (so they don't blow up small reports).
+        $results = [
+            'front' => self::coverage(
+                endpoints: [
+                    self::endpoint('GET /v1/pets', 'partial', responses: [
+                        self::row('200', 'application/json', 'validated', hits: 1),
+                    ], coveredResponseCount: 1, totalResponseCount: 1, unexpectedObservations: [
+                        ['statusKey' => '418', 'contentTypeKey' => 'application/json'],
+                    ]),
+                ],
+                endpointTotal: 1,
+                endpointPartial: 1,
+                responseTotal: 1,
+                responseCovered: 1,
+            ),
+        ];
+
+        $output = MarkdownCoverageRenderer::render($results);
+
+        $detailsOpen = strpos($output, '<details>');
+        $unexpectedPos = strpos($output, 'Unexpected observations');
+        $detailsClose = strpos($output, '</details>');
+
+        $this->assertNotFalse($detailsOpen);
+        $this->assertNotFalse($unexpectedPos);
+        $this->assertNotFalse($detailsClose);
+        $this->assertGreaterThan($detailsOpen, $unexpectedPos);
+        $this->assertGreaterThan($unexpectedPos, $detailsClose);
+    }
+
+    #[Test]
+    public function render_endpoint_with_null_operation_id_omits_parenthesised_name(): void
+    {
+        // The detail heading branches on operationId !== null.
+        $results = [
+            'front' => self::coverage(
+                endpoints: [
+                    self::endpoint('GET /v1/pets', 'all-covered', responses: [
+                        self::row('200', 'application/json', 'validated', hits: 1),
+                    ], coveredResponseCount: 1, totalResponseCount: 1),
+                ],
+                endpointTotal: 1,
+                endpointFullyCovered: 1,
+                responseTotal: 1,
+                responseCovered: 1,
+            ),
+        ];
+
+        $output = MarkdownCoverageRenderer::render($results);
+
+        $this->assertStringContainsString('#### `GET /v1/pets`', $output);
+        $this->assertStringNotContainsString('#### `GET /v1/pets` (', $output);
+    }
+
+    #[Test]
     public function render_includes_operation_id_when_present(): void
     {
         $results = [
@@ -191,9 +281,9 @@ class MarkdownCoverageRendererTest extends TestCase
     }
 
     /**
-     * @param list<array{endpoint: string, method: string, path: string, operationId: ?string, state: string, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}> $endpoints
+     * @param list<array{endpoint: string, method: string, path: string, operationId: ?string, state: EndpointCoverageState, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}> $endpoints
      *
-     * @return array{endpoints: list<array{endpoint: string, method: string, path: string, operationId: ?string, state: string, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}>, endpointTotal: int, endpointFullyCovered: int, endpointPartial: int, endpointUncovered: int, endpointRequestOnly: int, responseTotal: int, responseCovered: int, responseSkipped: int, responseUncovered: int}
+     * @return array{endpoints: list<array{endpoint: string, method: string, path: string, operationId: ?string, state: EndpointCoverageState, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}>, endpointTotal: int, endpointFullyCovered: int, endpointPartial: int, endpointUncovered: int, endpointRequestOnly: int, responseTotal: int, responseCovered: int, responseSkipped: int, responseUncovered: int}
      */
     private static function coverage(
         array $endpoints,
@@ -222,10 +312,10 @@ class MarkdownCoverageRendererTest extends TestCase
     }
 
     /**
-     * @param list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}> $responses
+     * @param list<array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}> $responses
      * @param list<array{statusKey: string, contentTypeKey: string}> $unexpectedObservations
      *
-     * @return array{endpoint: string, method: string, path: string, operationId: ?string, state: string, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}
+     * @return array{endpoint: string, method: string, path: string, operationId: ?string, state: EndpointCoverageState, requestReached: bool, responses: list<array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}>, coveredResponseCount: int, skippedResponseCount: int, totalResponseCount: int, unexpectedObservations: list<array{statusKey: string, contentTypeKey: string}>}
      */
     private static function endpoint(
         string $endpoint,
@@ -245,7 +335,7 @@ class MarkdownCoverageRendererTest extends TestCase
             'method' => $method,
             'path' => $path,
             'operationId' => $operationId,
-            'state' => $state,
+            'state' => EndpointCoverageState::from($state),
             'requestReached' => $requestReached,
             'responses' => $responses,
             'coveredResponseCount' => $coveredResponseCount,
@@ -256,7 +346,7 @@ class MarkdownCoverageRendererTest extends TestCase
     }
 
     /**
-     * @return array{statusKey: string, contentTypeKey: string, state: string, hits: int, skipReason: ?string}
+     * @return array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}
      */
     private static function row(
         string $statusKey,
@@ -268,7 +358,7 @@ class MarkdownCoverageRendererTest extends TestCase
         return [
             'statusKey' => $statusKey,
             'contentTypeKey' => $contentTypeKey,
-            'state' => $state,
+            'state' => ResponseCoverageState::from($state),
             'hits' => $hits,
             'skipReason' => $skipReason,
         ];
