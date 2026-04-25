@@ -9,6 +9,7 @@ use const JSON_THROW_ON_ERROR;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\EndpointCoverageState;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
@@ -92,10 +93,23 @@ class ValidatesOpenApiSchemaAutoValidateRequestTest extends TestCase
 
         $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::POST, '/v1/pets');
 
+        // Request-side recording uses recordRequest() so the endpoint is
+        // marked request-only — request validation has no response context to
+        // mark response-level coverage. This is by design (#111): only the
+        // response hook records (status, content-type) granularity.
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
-        $this->assertContains('POST /v1/pets', $coverage['covered']);
-        $this->assertSame([], $coverage['skippedOnly']);
-        $this->assertSame(0, $coverage['skippedOnlyCount']);
+        $endpoint = null;
+        foreach ($coverage['endpoints'] as $summary) {
+            if ($summary['endpoint'] === 'POST /v1/pets') {
+                $endpoint = $summary;
+
+                break;
+            }
+        }
+        $this->assertNotNull($endpoint);
+        $this->assertTrue($endpoint['requestReached']);
+        $this->assertSame(EndpointCoverageState::RequestOnly, $endpoint['state']);
+        $this->assertSame(0, $endpoint['skippedResponseCount']);
     }
 
     #[Test]

@@ -1111,8 +1111,8 @@ class OpenApiResponseValidatorTest extends TestCase
         // Response-side symmetry for the request-side regression guard. The
         // fixture's 200 response schema carries the same malformed `pattern`
         // ("[unterminated") that opis rejects with InvalidKeywordException.
-        // Without ValidatorErrorBoundary::safely() this would escape as an
-        // uncaught throw; post-fix it is a structured [response-body] failure.
+        // Without the inlined try/catch this would escape as an uncaught
+        // throw; post-fix it is a structured [response-body] failure.
         $result = $this->validator->validate(
             'body-validator-throws',
             'POST',
@@ -1127,6 +1127,11 @@ class OpenApiResponseValidatorTest extends TestCase
         $joined = implode(' | ', $result->errors());
         $this->assertStringContainsString('[response-body]', $joined);
         $this->assertStringContainsString('InvalidKeywordException', $joined);
+        // Pin the absence of "(caused by ...)" when the thrown exception
+        // has no previous — without this assertion the suffix-formatting
+        // branch could regress to always emitting it (or omitting it
+        // unconditionally) and tests would still pass.
+        $this->assertStringNotContainsString('(caused by', $joined);
     }
 
     // ========================================
@@ -1403,6 +1408,119 @@ class OpenApiResponseValidatorTest extends TestCase
         $joined = implode(' | ', $result->errors());
         $this->assertStringContainsString('[response-header.X-Misdefined]', $joined);
         $this->assertStringContainsString('must be an object', $joined);
+    }
+
+    // ========================================
+    // matchedStatusCode / matchedContentType propagation (#111)
+    // ========================================
+
+    #[Test]
+    public function success_propagates_matched_status_and_content(): void
+    {
+        // Coverage tracking depends on the validator threading the spec
+        // status key + media-type key through the result so it can record
+        // per-(status, content-type) granularity.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            200,
+            ['data' => [['id' => 1, 'name' => 'Fido']]],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('200', $result->matchedStatusCode());
+        $this->assertSame('application/json', $result->matchedContentType());
+    }
+
+    #[Test]
+    public function failure_still_propagates_matched_status_and_content(): void
+    {
+        // Schema mismatches still pick a (status, content-type) — they got far
+        // enough to know which response definition was being validated. Coverage
+        // must record the partial hit even when validation failed.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            200,
+            ['data' => [['id' => 'not-an-int', 'name' => 'Fido']]],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertSame('200', $result->matchedStatusCode());
+        $this->assertSame('application/json', $result->matchedContentType());
+    }
+
+    #[Test]
+    public function no_content_response_propagates_status_but_not_content_type(): void
+    {
+        // 204 responses have no `content` block, so matchedContentType is
+        // null even though matchedStatusCode pins the status.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'DELETE',
+            '/v1/pets/123',
+            204,
+            null,
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('204', $result->matchedStatusCode());
+        $this->assertNull($result->matchedContentType());
+    }
+
+    #[Test]
+    public function skipped_response_propagates_literal_status_not_spec_key(): void
+    {
+        // Skip happens before the spec response map is consulted — coverage
+        // tracking reconciles literal status against any 5XX/default key
+        // declared in the spec at compute time (see OpenApiCoverageTracker).
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            503,
+            null,
+        );
+
+        $this->assertTrue($result->isSkipped());
+        $this->assertSame('503', $result->matchedStatusCode());
+        $this->assertNull($result->matchedContentType());
+    }
+
+    #[Test]
+    public function content_type_not_in_spec_failure_clears_matched_content(): void
+    {
+        // text/plain isn't in the 409 content map — validator returns failure
+        // and matchedContentType is null because no spec key matched.
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            409,
+            null,
+            'text/plain',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertSame('409', $result->matchedStatusCode());
+        $this->assertNull($result->matchedContentType());
+    }
+
+    #[Test]
+    public function path_or_method_failure_does_not_set_matched_status(): void
+    {
+        // Failures earlier than status lookup can't pick a status key.
+        $unknownPath = $this->validator->validate('petstore-3.0', 'GET', '/v1/unknown', 200, []);
+        $undefinedMethod = $this->validator->validate('petstore-3.0', 'PATCH', '/v1/pets', 200, []);
+
+        $this->assertNull($unknownPath->matchedStatusCode());
+        $this->assertNull($unknownPath->matchedContentType());
+        $this->assertNull($undefinedMethod->matchedStatusCode());
+        $this->assertNull($undefinedMethod->matchedContentType());
     }
 
     #[Test]

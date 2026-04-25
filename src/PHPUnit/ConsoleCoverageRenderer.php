@@ -4,19 +4,29 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\PHPUnit;
 
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
+use const STR_PAD_RIGHT;
 
-use function array_flip;
-use function count;
+use Studio\OpenApiContractTesting\EndpointCoverageState;
+use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\ResponseCoverageState;
+
 use function round;
+use function sprintf;
+use function str_pad;
 use function str_repeat;
 
 /**
  * @phpstan-import-type CoverageResult from OpenApiCoverageTracker
+ * @phpstan-import-type EndpointSummary from OpenApiCoverageTracker
+ * @phpstan-import-type ResponseRow from OpenApiCoverageTracker
  */
 final class ConsoleCoverageRenderer
 {
-    private const SKIPPED_ONLY_LEGEND = '  ⚠ = response body validation skipped (e.g. 5xx default skip)';
+    private const MARKER_ALL_COVERED = '✓';
+    private const MARKER_PARTIAL = '◐';
+    private const MARKER_SKIPPED = '⚠';
+    private const MARKER_UNCOVERED = '✗';
+    private const MARKER_REQUEST_ONLY = '·';
 
     /**
      * @param array<string, CoverageResult> $results
@@ -32,16 +42,30 @@ final class ConsoleCoverageRenderer
         $output .= str_repeat('=', 50) . "\n";
 
         foreach ($results as $spec => $result) {
-            $percentage = self::percentage($result['coveredCount'], $result['total']);
-            $skippedTag = $result['skippedOnlyCount'] > 0
-                ? ", {$result['skippedOnlyCount']} skipped-only"
-                : '';
+            $endpointPct = self::percentage($result['endpointFullyCovered'], $result['endpointTotal']);
+            $responsePct = self::percentage($result['responseCovered'], $result['responseTotal']);
 
-            $output .= "\n[{$spec}] {$result['coveredCount']}/{$result['total']} endpoints ({$percentage}%){$skippedTag}\n";
+            $output .= sprintf(
+                "\n[%s] endpoints: %d/%d fully covered (%s%%), %d partial, %d uncovered\n",
+                $spec,
+                $result['endpointFullyCovered'],
+                $result['endpointTotal'],
+                $endpointPct,
+                $result['endpointPartial'],
+                $result['endpointUncovered'],
+            );
+            $output .= sprintf(
+                "        responses: %d/%d covered (%s%%), %d skipped, %d uncovered\n",
+                $result['responseCovered'],
+                $result['responseTotal'],
+                $responsePct,
+                $result['responseSkipped'],
+                $result['responseUncovered'],
+            );
             $output .= str_repeat('-', 50) . "\n";
+            $output .= "Legend: ✓=validated  ⚠=skipped  ✗=uncovered  ◐=partial  ·=request-only  *=any/no content-type\n";
 
-            $output .= self::renderCovered($result, $consoleOutput);
-            $output .= self::renderUncovered($result, $consoleOutput);
+            $output .= self::renderEndpoints($result['endpoints'], $consoleOutput);
         }
 
         $output .= "\n";
@@ -50,56 +74,110 @@ final class ConsoleCoverageRenderer
     }
 
     /**
-     * @param CoverageResult $result
+     * @param list<EndpointSummary> $endpoints
      */
-    private static function renderCovered(array $result, ConsoleOutput $consoleOutput): string
+    private static function renderEndpoints(array $endpoints, ConsoleOutput $mode): string
     {
-        if ($result['covered'] === []) {
+        if ($endpoints === []) {
             return '';
         }
 
-        if ($consoleOutput === ConsoleOutput::UNCOVERED_ONLY) {
-            return "Covered: {$result['coveredCount']} endpoints\n";
-        }
+        $output = '';
+        foreach ($endpoints as $endpoint) {
+            // DEFAULT mode renders one line per endpoint with no sub-rows.
+            // ALL renders sub-rows for every endpoint. UNCOVERED_ONLY only
+            // shows sub-rows when the endpoint isn't all-covered, so a
+            // green run stays compact.
+            $showSubRows = match ($mode) {
+                ConsoleOutput::DEFAULT => false,
+                ConsoleOutput::ALL => true,
+                ConsoleOutput::UNCOVERED_ONLY => $endpoint['state'] !== EndpointCoverageState::AllCovered,
+            };
 
-        $output = "Covered:\n";
+            $output .= sprintf(
+                "  %s %s%s\n",
+                self::endpointMarker($endpoint['state']),
+                $endpoint['endpoint'],
+                self::endpointSummaryTail($endpoint),
+            );
 
-        if ($result['skippedOnlyCount'] > 0) {
-            $output .= self::SKIPPED_ONLY_LEGEND . "\n";
-        }
+            if (!$showSubRows) {
+                continue;
+            }
 
-        $skipSet = array_flip($result['skippedOnly']);
+            foreach ($endpoint['responses'] as $row) {
+                if ($mode === ConsoleOutput::UNCOVERED_ONLY && $row['state'] === ResponseCoverageState::Validated) {
+                    continue;
+                }
+                $output .= sprintf(
+                    "      %s %s  %s%s\n",
+                    self::responseMarker($row['state']),
+                    str_pad($row['statusKey'], 5, ' ', STR_PAD_RIGHT),
+                    str_pad($row['contentTypeKey'], 32, ' ', STR_PAD_RIGHT),
+                    self::responseTail($row),
+                );
+            }
 
-        foreach ($result['covered'] as $endpoint) {
-            $marker = isset($skipSet[$endpoint]) ? '⚠' : '✓';
-            $output .= "  {$marker} {$endpoint}\n";
+            foreach ($endpoint['unexpectedObservations'] as $obs) {
+                $output .= sprintf(
+                    "      ! %s  %s  unexpected (not in spec)\n",
+                    str_pad($obs['statusKey'], 5, ' ', STR_PAD_RIGHT),
+                    str_pad($obs['contentTypeKey'], 32, ' ', STR_PAD_RIGHT),
+                );
+            }
         }
 
         return $output;
     }
 
     /**
-     * @param CoverageResult $result
+     * @param EndpointSummary $endpoint
      */
-    private static function renderUncovered(array $result, ConsoleOutput $consoleOutput): string
+    private static function endpointSummaryTail(array $endpoint): string
     {
-        if ($result['uncovered'] === []) {
-            return '';
+        if ($endpoint['totalResponseCount'] === 0) {
+            return $endpoint['requestReached'] ? '  (request only)' : '';
         }
 
-        $uncoveredCount = count($result['uncovered']);
-
-        if ($consoleOutput === ConsoleOutput::DEFAULT) {
-            return "Uncovered: {$uncoveredCount} endpoints\n";
+        $tail = sprintf('  (%d/%d responses', $endpoint['coveredResponseCount'], $endpoint['totalResponseCount']);
+        if ($endpoint['skippedResponseCount'] > 0) {
+            $tail .= sprintf(', %d skipped', $endpoint['skippedResponseCount']);
         }
 
-        $output = "Uncovered:\n";
+        return $tail . ')';
+    }
 
-        foreach ($result['uncovered'] as $endpoint) {
-            $output .= "  ✗ {$endpoint}\n";
-        }
+    /**
+     * @param ResponseRow $row
+     */
+    private static function responseTail(array $row): string
+    {
+        return match ($row['state']) {
+            ResponseCoverageState::Validated => sprintf('[%d]', $row['hits']),
+            ResponseCoverageState::Skipped => $row['skipReason'] !== null
+                ? sprintf('skipped: %s', $row['skipReason'])
+                : 'skipped',
+            ResponseCoverageState::Uncovered => 'uncovered',
+        };
+    }
 
-        return $output;
+    private static function endpointMarker(EndpointCoverageState $state): string
+    {
+        return match ($state) {
+            EndpointCoverageState::AllCovered => self::MARKER_ALL_COVERED,
+            EndpointCoverageState::Partial => self::MARKER_PARTIAL,
+            EndpointCoverageState::RequestOnly => self::MARKER_REQUEST_ONLY,
+            EndpointCoverageState::Uncovered => self::MARKER_UNCOVERED,
+        };
+    }
+
+    private static function responseMarker(ResponseCoverageState $state): string
+    {
+        return match ($state) {
+            ResponseCoverageState::Validated => self::MARKER_ALL_COVERED,
+            ResponseCoverageState::Skipped => self::MARKER_SKIPPED,
+            ResponseCoverageState::Uncovered => self::MARKER_UNCOVERED,
+        };
     }
 
     private static function percentage(int $covered, int $total): float|int

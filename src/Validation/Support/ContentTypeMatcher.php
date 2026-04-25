@@ -56,13 +56,27 @@ final class ContentTypeMatcher
      */
     public static function isContentTypeInSpec(string $normalizedContentType, array $content): bool
     {
+        return self::findContentTypeKey($normalizedContentType, $content) !== null;
+    }
+
+    /**
+     * Return the spec key (with the spec author's original casing) whose
+     * lower-cased form matches the given normalised content type, or null
+     * when no spec key matches. Used by coverage tracking to surface the
+     * spec's literal media-type keys (which may mix casings, e.g. petstore
+     * declares both `Application/Problem+JSON` and `application/problem+json`).
+     *
+     * @param array<string, mixed> $content
+     */
+    public static function findContentTypeKey(string $normalizedContentType, array $content): ?string
+    {
         foreach ($content as $specContentType => $_mediaType) {
             if (strtolower($specContentType) === $normalizedContentType) {
-                return true;
+                return $specContentType;
             }
         }
 
-        return false;
+        return null;
     }
 
     /**

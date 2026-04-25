@@ -334,7 +334,7 @@ trait ValidatesOpenApiSchema
         // tracking semantics as the response-side hook. The tracker is a set,
         // so this does not double-count when response auto-assert also fires.
         if ($result->matchedPath() !== null) {
-            OpenApiCoverageTracker::record(
+            OpenApiCoverageTracker::recordRequest(
                 $specName,
                 $resolvedMethod,
                 $result->matchedPath(),
@@ -477,14 +477,23 @@ trait ValidatesOpenApiSchema
         // Note: under auto_assert, this records coverage for every Laravel HTTP
         // call — including responses with no explicit contract-test intent.
         //
+        // matchedStatusCode falls back to the literal status string when the
+        // validator could not pick a spec key (e.g. "Status code N not defined"
+        // failures) so the recording still pins the actually-exercised status.
+        // Such recordings surface in `unexpectedObservations` rather than
+        // counting toward coverage of declared spec entries.
+        //
         // 204 and non-JSON still count as validated; only skip_response_codes
         // matches (isSkipped() === true) suppress body validation.
         if ($result->matchedPath() !== null) {
-            OpenApiCoverageTracker::record(
+            OpenApiCoverageTracker::recordResponse(
                 $specName,
                 $resolvedMethod,
                 $result->matchedPath(),
+                $result->matchedStatusCode() ?? (string) $response->getStatusCode(),
+                $result->matchedContentType(),
                 schemaValidated: !$result->isSkipped(),
+                skipReason: $result->skipReason(),
             );
         }
 

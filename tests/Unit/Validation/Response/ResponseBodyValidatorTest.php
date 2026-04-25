@@ -33,7 +33,7 @@ class ResponseBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'GET',
             '/pets/{id}',
@@ -44,7 +44,8 @@ class ResponseBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertSame([], $errors);
+        $this->assertSame([], $result->errors);
+        $this->assertSame('application/json', $result->matchedContentType);
     }
 
     #[Test]
@@ -54,7 +55,7 @@ class ResponseBodyValidatorTest extends TestCase
             'application/json' => ['schema' => ['type' => 'object']],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'GET',
             '/pets',
@@ -65,8 +66,9 @@ class ResponseBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertCount(1, $errors);
-        $this->assertStringContainsString('Response body is empty', $errors[0]);
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString('Response body is empty', $result->errors[0]);
+        $this->assertSame('application/json', $result->matchedContentType);
     }
 
     #[Test]
@@ -76,7 +78,7 @@ class ResponseBodyValidatorTest extends TestCase
             'text/plain' => ['schema' => ['type' => 'string']],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'GET',
             '/robots.txt',
@@ -87,7 +89,34 @@ class ResponseBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertSame([], $errors);
+        $this->assertSame([], $result->errors);
+        $this->assertSame('text/plain', $result->matchedContentType);
+    }
+
+    #[Test]
+    public function validate_preserves_spec_content_type_casing(): void
+    {
+        // The spec author wrote a mixed-case media type — the matched key
+        // should keep that casing so coverage reports show it verbatim.
+        $content = [
+            'Application/Problem+JSON' => [
+                'schema' => ['type' => 'object'],
+            ],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/pets',
+            422,
+            $content,
+            ['detail' => 'oops'],
+            'application/problem+json',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $result->errors);
+        $this->assertSame('Application/Problem+JSON', $result->matchedContentType);
     }
 
     #[Test]
@@ -97,7 +126,7 @@ class ResponseBodyValidatorTest extends TestCase
             'application/json' => ['schema' => ['type' => 'object']],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'GET',
             '/pets',
@@ -108,8 +137,9 @@ class ResponseBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertCount(1, $errors);
-        $this->assertStringContainsString("Content-Type 'application/xml' is not defined", $errors[0]);
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString("Content-Type 'application/xml' is not defined", $result->errors[0]);
+        $this->assertNull($result->matchedContentType);
     }
 
     #[Test]
@@ -118,7 +148,7 @@ class ResponseBodyValidatorTest extends TestCase
         // Non-JSON spec entries with no Content-Type header → out-of-scope, pass.
         $content = ['application/xml' => ['schema' => ['type' => 'string']]];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'GET',
             '/pets',
@@ -129,7 +159,8 @@ class ResponseBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertSame([], $errors);
+        $this->assertSame([], $result->errors);
+        $this->assertNull($result->matchedContentType);
     }
 
     #[Test]
@@ -145,7 +176,7 @@ class ResponseBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'GET',
             '/pets/{id}',
@@ -156,7 +187,8 @@ class ResponseBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertNotEmpty($errors);
-        $this->assertStringContainsString('/id', $errors[0]);
+        $this->assertNotEmpty($result->errors);
+        $this->assertStringContainsString('/id', $result->errors[0]);
+        $this->assertSame('application/json', $result->matchedContentType);
     }
 }

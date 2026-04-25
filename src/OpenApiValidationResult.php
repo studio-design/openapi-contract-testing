@@ -8,7 +8,7 @@ use InvalidArgumentException;
 
 use function implode;
 
-final class OpenApiValidationResult
+final readonly class OpenApiValidationResult
 {
     /**
      * Private so the three factories (success / failure / skipped) are the
@@ -16,18 +16,42 @@ final class OpenApiValidationResult
      * state space to exactly those three cases — errors are only attached
      * to Failure, and skipReason is only attached to Skipped.
      *
+     * `matchedStatusCode` is the spec response key (e.g. `"200"`, `"5XX"`,
+     * `"default"`) that the validator selected, or null when no spec response
+     * was matched (path/method-not-found failures, or skipped responses where
+     * the lookup happens by literal status before any spec key is consulted —
+     * in that case the literal status string is reported instead so coverage
+     * can still pin the actually-exercised status).
+     *
+     * `matchedContentType` is the spec media-type key (with the spec author's
+     * original casing) the body was checked against, or null when no body
+     * lookup occurred (204, non-JSON-only specs, content-type-not-in-spec
+     * failures, skipped responses).
+     *
      * @param string[] $errors
      */
     private function __construct(
-        private readonly OpenApiValidationOutcome $outcome,
-        private readonly array $errors = [],
-        private readonly ?string $matchedPath = null,
-        private readonly ?string $skipReason = null,
+        private OpenApiValidationOutcome $outcome,
+        private array $errors = [],
+        private ?string $matchedPath = null,
+        private ?string $skipReason = null,
+        private ?string $matchedStatusCode = null,
+        private ?string $matchedContentType = null,
     ) {}
 
-    public static function success(?string $matchedPath = null): self
-    {
-        return new self(OpenApiValidationOutcome::Success, [], $matchedPath);
+    public static function success(
+        ?string $matchedPath = null,
+        ?string $matchedStatusCode = null,
+        ?string $matchedContentType = null,
+    ): self {
+        return new self(
+            OpenApiValidationOutcome::Success,
+            [],
+            $matchedPath,
+            null,
+            $matchedStatusCode,
+            $matchedContentType,
+        );
     }
 
     /**
@@ -51,8 +75,12 @@ final class OpenApiValidationResult
      *
      * @throws InvalidArgumentException when $errors is empty
      */
-    public static function failure(array $errors, ?string $matchedPath = null): self
-    {
+    public static function failure(
+        array $errors,
+        ?string $matchedPath = null,
+        ?string $matchedStatusCode = null,
+        ?string $matchedContentType = null,
+    ): self {
         // @phpstan-ignore-next-line identical.alwaysFalse — PHPDoc bound is not enforced at runtime; keep guard for consumers without static analysis
         if ($errors === []) {
             throw new InvalidArgumentException(
@@ -60,7 +88,14 @@ final class OpenApiValidationResult
             );
         }
 
-        return new self(OpenApiValidationOutcome::Failure, $errors, $matchedPath);
+        return new self(
+            OpenApiValidationOutcome::Failure,
+            $errors,
+            $matchedPath,
+            null,
+            $matchedStatusCode,
+            $matchedContentType,
+        );
     }
 
     /**
@@ -69,10 +104,26 @@ final class OpenApiValidationResult
      * true so callers that gate on it (e.g. PHPUnit assertions) treat the
      * result as non-failing; isSkipped() / outcome() distinguish it from a
      * genuine successful schema match.
+     *
+     * `matchedStatusCode` for a skipped result is the literal HTTP status
+     * string (e.g. `"503"`), not a spec range key — skipping happens before
+     * the spec response map is consulted. Coverage tracking reconciles the
+     * literal status against any spec range keys (`5XX`/`5xx`/`default`) at
+     * compute time, marking the spec-declared response as `skipped`.
      */
-    public static function skipped(?string $matchedPath = null, ?string $reason = null): self
-    {
-        return new self(OpenApiValidationOutcome::Skipped, [], $matchedPath, $reason);
+    public static function skipped(
+        ?string $matchedPath = null,
+        ?string $reason = null,
+        ?string $matchedStatusCode = null,
+    ): self {
+        return new self(
+            OpenApiValidationOutcome::Skipped,
+            [],
+            $matchedPath,
+            $reason,
+            $matchedStatusCode,
+            null,
+        );
     }
 
     public function outcome(): OpenApiValidationOutcome
@@ -112,5 +163,15 @@ final class OpenApiValidationResult
     public function skipReason(): ?string
     {
         return $this->skipReason;
+    }
+
+    public function matchedStatusCode(): ?string
+    {
+        return $this->matchedStatusCode;
+    }
+
+    public function matchedContentType(): ?string
+    {
+        return $this->matchedContentType;
     }
 }

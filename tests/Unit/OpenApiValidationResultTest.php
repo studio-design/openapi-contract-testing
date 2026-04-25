@@ -108,6 +108,53 @@ class OpenApiValidationResultTest extends TestCase
     }
 
     #[Test]
+    public function matched_status_and_content_default_to_null(): void
+    {
+        // Coverage tracking depends on the absence of these being explicit
+        // null rather than missing — pin the defaults across all three factories.
+        $success = OpenApiValidationResult::success();
+        $failure = OpenApiValidationResult::failure(['err']);
+        $skipped = OpenApiValidationResult::skipped();
+
+        foreach ([$success, $failure, $skipped] as $result) {
+            $this->assertNull($result->matchedStatusCode());
+            $this->assertNull($result->matchedContentType());
+        }
+    }
+
+    #[Test]
+    public function success_propagates_matched_status_and_content(): void
+    {
+        $result = OpenApiValidationResult::success('/v1/pets', '200', 'application/json');
+
+        $this->assertSame('200', $result->matchedStatusCode());
+        $this->assertSame('application/json', $result->matchedContentType());
+    }
+
+    #[Test]
+    public function failure_propagates_matched_status_and_content(): void
+    {
+        // Failures still carry matched-status/content when the validator got far
+        // enough to pick them — coverage records the (status, contentType) pair
+        // even on schema mismatches so partial coverage shows up correctly.
+        $result = OpenApiValidationResult::failure(['err'], '/v1/pets', '422', 'application/problem+json');
+
+        $this->assertSame('422', $result->matchedStatusCode());
+        $this->assertSame('application/problem+json', $result->matchedContentType());
+    }
+
+    #[Test]
+    public function skipped_carries_literal_status_and_no_content_type(): void
+    {
+        // Skip happens before content-type lookup — matchedContentType is always null
+        // and matchedStatusCode is the literal HTTP status, not a spec range key.
+        $result = OpenApiValidationResult::skipped('/v1/pets', 'status 503 matched 5\d\d', '503');
+
+        $this->assertSame('503', $result->matchedStatusCode());
+        $this->assertNull($result->matchedContentType());
+    }
+
+    #[Test]
     public function outcome_match_covers_all_three_cases_exhaustively(): void
     {
         $results = [
