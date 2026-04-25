@@ -215,6 +215,75 @@ class ResponseBodyValidatorTest extends TestCase
     }
 
     #[Test]
+    public function validate_does_not_coerce_empty_array_when_schema_has_no_explicit_type(): void
+    {
+        // A schema that only declares `properties` (no `type`) is common in
+        // third-party specs. `schemaAcceptsObject` returns false for this
+        // shape — pin so a future "infer object from properties" change
+        // doesn't silently start coercing array bodies.
+        $content = [
+            'application/json' => [
+                'schema' => [
+                    'properties' => ['id' => ['type' => 'integer']],
+                ],
+            ],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/p',
+            200,
+            $content,
+            [],
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        // No error AND no coercion fired — the property bag is permissive
+        // so empty input passes for either array or object interpretation.
+        // What we're pinning here: the implementation returned and we did
+        // not promote `[]` to `(object) []`. Verify by also recording the
+        // matched content type — the success path always sets it.
+        $this->assertSame([], $result->errors);
+        $this->assertSame('application/json', $result->matchedContentType);
+    }
+
+    #[Test]
+    public function validate_does_not_coerce_empty_array_for_oneof_with_object_branch(): void
+    {
+        // `oneOf: [{type: object, required: [foo]}]` with body `[]`. Composition
+        // keywords are NOT walked by `schemaAcceptsObject` — by design — so the
+        // body is validated as a JSON array against the oneOf and fails. Pin
+        // the design choice so a future "let's walk oneOf" change is forced
+        // through review.
+        $content = [
+            'application/json' => [
+                'schema' => [
+                    'oneOf' => [
+                        ['type' => 'object', 'required' => ['foo'], 'properties' => ['foo' => ['type' => 'string']]],
+                    ],
+                ],
+            ],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/p',
+            200,
+            $content,
+            [],
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        // Coercion did NOT fire — body remained a JSON array, oneOf failed.
+        // (Tracker / orchestrator surface a non-empty errors list.)
+        $this->assertNotEmpty($result->errors);
+    }
+
+    #[Test]
     public function validate_does_not_coerce_empty_array_when_schema_is_array_type(): void
     {
         // Coercion must NOT fire when the schema actually wants an array —

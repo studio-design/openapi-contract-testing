@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
@@ -15,6 +16,8 @@ use function array_map;
 use function count;
 use function implode;
 use function range;
+use function restore_error_handler;
+use function set_error_handler;
 
 class OpenApiResponseValidatorTest extends TestCase
 {
@@ -46,6 +49,17 @@ class OpenApiResponseValidatorTest extends TestCase
         yield '500 is skipped' => [500, true];
         yield '599 is skipped' => [599, true];
         yield '600 is not skipped' => [600, false];
+    }
+
+    /**
+     * @return iterable<string, array{int, string}>
+     */
+    public static function provideRange_keys_match_for_each_leading_digitCases(): iterable
+    {
+        yield '1XX matches 199' => [199, '1XX'];
+        yield '2XX matches 299' => [299, '2XX'];
+        yield '3XX matches 399' => [399, '3XX'];
+        yield '4XX matches 499' => [499, '4XX'];
     }
 
     // ========================================
@@ -1554,6 +1568,152 @@ class OpenApiResponseValidatorTest extends TestCase
 
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString('Status code 418 not defined', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function exact_200_takes_precedence_over_default(): void
+    {
+        // /with-default-only declares both 200 and default. The exact
+        // match must win — verified via a unique required field that
+        // exists ONLY on the 200 schema.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $result = $validator->validate(
+            'spec-fallback',
+            'GET',
+            '/with-default-only',
+            200,
+            ['fromExact200' => true],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('200', $result->matchedStatusCode());
+    }
+
+    #[Test]
+    public function range_key_takes_precedence_over_default_for_5xx(): void
+    {
+        // /with-range-and-default declares both 5XX and default. A 503
+        // response must hit 5XX (range > default), verified via the
+        // `from5xx` required field that only the 5XX schema requires.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $result = $validator->validate(
+            'spec-fallback',
+            'GET',
+            '/with-range-and-default',
+            503,
+            ['from5xx' => true],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('5XX', $result->matchedStatusCode());
+    }
+
+    #[Test]
+    public function default_takes_over_for_non_5xx_when_range_only_covers_5xx(): void
+    {
+        // Same fixture, but a 418 (non-5xx). 5XX doesn't match → falls
+        // through to default. Verified via `fromDefault` required field.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $result = $validator->validate(
+            'spec-fallback',
+            'GET',
+            '/with-range-and-default',
+            418,
+            ['fromDefault' => true],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('default', $result->matchedStatusCode());
+    }
+
+    #[Test]
+    public function skip_pattern_preempts_default_fallback_for_5xx(): void
+    {
+        // Pin the order of operations: skip-by-status-code must run BEFORE
+        // resolveResponseKey. A spec declaring only `default` + a 503
+        // response with the default 5\d\d skip pattern enabled must yield
+        // isSkipped() — NOT validated against `default`.
+        $validator = new OpenApiResponseValidator(); // default skip = ['5\d\d']
+
+        $result = $validator->validate(
+            'spec-fallback',
+            'GET',
+            '/with-default',
+            503,
+            ['error' => 'down'],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isSkipped());
+        // Skip records the literal status, not the resolved spec key,
+        // because skip happens before key resolution.
+        $this->assertSame('503', $result->matchedStatusCode());
+    }
+
+    #[Test]
+    #[DataProvider('provideRange_keys_match_for_each_leading_digitCases')]
+    public function range_keys_match_for_each_leading_digit(int $status, string $expectedKey): void
+    {
+        // Pin every range-key class so a typo narrowing the regex to e.g.
+        // ^5(?:XX|xx)$ would surface immediately. Status 5XX is exercised
+        // by other tests; this provider covers 1XX-4XX. Skip patterns are
+        // off so the lookup actually runs (default 5\d\d skip wouldn't fire
+        // on these classes anyway).
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $result = $validator->validate(
+            'spec-fallback',
+            'GET',
+            '/with-each-range',
+            $status,
+            new stdClass(),
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame($expectedKey, $result->matchedStatusCode());
+    }
+
+    #[Test]
+    public function malformed_response_keys_emit_warning_when_default_fallback_fires(): void
+    {
+        // /with-typo-and-default has a `40` typo (looks like an attempted
+        // truncated 404). When the literal status doesn't match exact or
+        // range, and we're about to fall back to `default`, emit a warning
+        // so the spec author notices the typo.
+        $validator = new OpenApiResponseValidator(skipResponseCodes: []);
+
+        $captured = [];
+        $previous = set_error_handler(static function (int $errno, string $message) use (&$captured): bool {
+            $captured[] = $message;
+
+            return true;
+        });
+
+        try {
+            $result = $validator->validate(
+                'spec-fallback',
+                'GET',
+                '/with-typo-and-default',
+                404,
+                new stdClass(),
+                'application/json',
+            );
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame('default', $result->matchedStatusCode());
+        $joined = implode(' | ', $captured);
+        $this->assertStringContainsString("response key '40'", $joined);
+        $this->assertStringContainsString('typo', $joined);
     }
 
     // ========================================

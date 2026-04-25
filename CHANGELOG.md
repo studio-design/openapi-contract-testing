@@ -35,12 +35,24 @@ session against a real Laravel 12 project.
   per spec; both `5XX` and `5xx` accepted). The validator now matches
   range keys when no exact status key is declared. The matched spec
   key (preserving the spec author's casing) flows through to coverage.
-- Lookup priority follows OpenAPI 3.0/3.1: **exact > range > default**.
-  Specs that declare both `503` and `5XX` resolve `503` to the explicit
-  entry; `599` falls through to `5XX`; `418` falls through to `default`
-  if declared.
+- Lookup priority is **exact > range > default** (the conventional
+  resolution shared by major OpenAPI tooling — the spec describes the
+  three forms but does not normatively rank them). Specs that declare
+  both `503` and `5XX` resolve `503` to the explicit entry; `599` falls
+  through to `5XX`; `418` falls through to `default` if declared.
 - `tests/fixtures/specs/spec-fallback.json` exercises every priority
   branch in the new lookup.
+
+### Changed
+
+- **`OpenApiValidationResult::matchedStatusCode()` semantics shift**:
+  pre-v0.13, this always returned the literal HTTP status string (e.g.
+  `"503"`). With the new fallback, it returns the **spec key** the
+  validator actually matched — so a spec declaring only `5XX` now
+  reports `matchedStatusCode() === "5XX"` for a 503 response. Callers
+  building `503 → row` maps from the result will see the key change
+  for any status that resolves via fallback. Skipped responses still
+  report the literal status (skip happens before key resolution).
 
 ### Documentation
 
