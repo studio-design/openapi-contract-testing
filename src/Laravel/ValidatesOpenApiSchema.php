@@ -466,6 +466,9 @@ trait ValidatesOpenApiSchema
             $response->getStatusCode(),
             $this->extractJsonBody($response, $content, $contentType),
             $contentType !== '' ? $contentType : null,
+            // HeaderNormalizer is idempotent; HeaderBag's already-lower-cased
+            // keys pass through unchanged.
+            $response->headers->all(),
         );
 
         // Record coverage for any matched endpoint, including those where body

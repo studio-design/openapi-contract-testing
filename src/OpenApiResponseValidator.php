@@ -6,10 +6,14 @@ namespace Studio\OpenApiContractTesting;
 
 use InvalidArgumentException;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
+use Studio\OpenApiContractTesting\Validation\Response\ResponseHeaderValidator;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
 
 use function array_keys;
+use function array_merge;
+use function get_debug_type;
+use function is_array;
 use function preg_last_error_msg;
 use function preg_match;
 use function sprintf;
@@ -27,6 +31,7 @@ final class OpenApiResponseValidator
     /** @var array<string, OpenApiPathMatcher> */
     private array $pathMatchers = [];
     private readonly ResponseBodyValidator $bodyValidator;
+    private readonly ResponseHeaderValidator $headerValidator;
 
     /** @var array<string, string> Raw pattern (as supplied) => anchored pattern ready for preg_match. */
     private readonly array $skipPatterns;
@@ -43,9 +48,18 @@ final class OpenApiResponseValidator
         array $skipResponseCodes = self::DEFAULT_SKIP_RESPONSE_CODES,
     ) {
         $this->skipPatterns = self::compileSkipPatterns($skipResponseCodes);
-        $this->bodyValidator = new ResponseBodyValidator(new SchemaValidatorRunner($maxErrors));
+        $runner = new SchemaValidatorRunner($maxErrors);
+        $this->bodyValidator = new ResponseBodyValidator($runner);
+        $this->headerValidator = new ResponseHeaderValidator($runner);
     }
 
+    /**
+     * @param null|array<array-key, mixed> $responseHeaders the response's actual headers
+     *                                                      (as returned by HeaderBag::all() — a map of name to list-of-values
+     *                                                      or to a single string). When null, header validation is skipped
+     *                                                      entirely; pass `[]` to validate against a spec that requires
+     *                                                      headers but the response sent none.
+     */
     public function validate(
         string $specName,
         string $method,
@@ -53,6 +67,7 @@ final class OpenApiResponseValidator
         int $statusCode,
         mixed $responseBody,
         ?string $responseContentType = null,
+        ?array $responseHeaders = null,
     ): OpenApiValidationResult {
         $spec = OpenApiSpecLoader::load($specName);
 
@@ -102,36 +117,30 @@ final class OpenApiResponseValidator
 
         $responseSpec = $responses[$statusCodeStr];
 
-        // If no content is defined for this response, skip body validation (e.g. 204 No Content)
-        if (!isset($responseSpec['content'])) {
-            return OpenApiValidationResult::success($matchedPath);
-        }
-
-        /** @var array<string, array<string, mixed>> $content */
-        $content = $responseSpec['content'];
-
-        // ValidatorErrorBoundary::safely() converts a RuntimeException thrown from
-        // body validation (e.g. opis/json-schema SchemaException — InvalidKeywordException,
-        // UnresolvedReferenceException, ...) into an error-string entry rather than
-        // letting it abort the orchestrator. Preserves observability symmetry with
-        // OpenApiRequestValidator. \LogicException and \Error still bubble so
-        // programmer bugs are not masked.
-        $errors = ValidatorErrorBoundary::safely(
-            'response-body',
+        $bodyErrors = $this->validateBody(
             $specName,
             $method,
             $matchedPath,
-            fn(): array => $this->bodyValidator->validate(
-                $specName,
-                $method,
-                $matchedPath,
-                $statusCode,
-                $content,
-                $responseBody,
-                $responseContentType,
-                $version,
-            ),
+            $statusCode,
+            $responseSpec,
+            $responseBody,
+            $responseContentType,
+            $version,
         );
+
+        $headerErrors = $this->validateHeaders(
+            $specName,
+            $method,
+            $matchedPath,
+            $responseSpec,
+            $responseHeaders,
+            $version,
+        );
+
+        // Order is body errors first, headers second. Tests that pin
+        // specific positions rely on this; reordering would silently
+        // change diagnostic flow without breaking behaviour.
+        $errors = array_merge($bodyErrors, $headerErrors);
 
         if ($errors === []) {
             return OpenApiValidationResult::success($matchedPath);
@@ -178,6 +187,110 @@ final class OpenApiResponseValidator
         }
 
         return $compiled;
+    }
+
+    /**
+     * @param array<string, mixed> $responseSpec
+     *
+     * @return string[]
+     */
+    private function validateBody(
+        string $specName,
+        string $method,
+        string $matchedPath,
+        int $statusCode,
+        array $responseSpec,
+        mixed $responseBody,
+        ?string $responseContentType,
+        OpenApiVersion $version,
+    ): array {
+        // 204 No Content (and similar) declare no `content` block. Nothing
+        // to validate — return empty so the result aggregates cleanly.
+        if (!isset($responseSpec['content'])) {
+            return [];
+        }
+
+        /** @var array<string, array<string, mixed>> $content */
+        $content = $responseSpec['content'];
+
+        // ValidatorErrorBoundary::safely() converts a RuntimeException thrown from
+        // body validation (e.g. opis/json-schema SchemaException — InvalidKeywordException,
+        // UnresolvedReferenceException, ...) into an error-string entry rather than
+        // letting it abort the orchestrator. Preserves observability symmetry with
+        // OpenApiRequestValidator. \LogicException and \Error still bubble so
+        // programmer bugs are not masked.
+        return ValidatorErrorBoundary::safely(
+            'response-body',
+            $specName,
+            $method,
+            $matchedPath,
+            fn(): array => $this->bodyValidator->validate(
+                $specName,
+                $method,
+                $matchedPath,
+                $statusCode,
+                $content,
+                $responseBody,
+                $responseContentType,
+                $version,
+            ),
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $responseSpec
+     * @param null|array<array-key, mixed> $responseHeaders
+     *
+     * @return string[]
+     */
+    private function validateHeaders(
+        string $specName,
+        string $method,
+        string $matchedPath,
+        array $responseSpec,
+        ?array $responseHeaders,
+        OpenApiVersion $version,
+    ): array {
+        // Header validation is opt-in: callers that pre-date the parameter
+        // (or framework-agnostic adapters that never see headers) pass null
+        // and get the historical body-only behaviour. An explicit empty
+        // array means "the response has no headers" and still triggers
+        // required-header checks against the spec.
+        if ($responseHeaders === null) {
+            return [];
+        }
+
+        if (!isset($responseSpec['headers'])) {
+            return [];
+        }
+
+        $headersSpec = $responseSpec['headers'];
+
+        // A `headers` block that decoded to a non-mapping is a malformed
+        // spec (e.g. YAML scalar where an object was expected). Surface
+        // it as an error so the spec author notices instead of getting
+        // a silent pass that hides every header from validation.
+        if (!is_array($headersSpec)) {
+            return [sprintf(
+                "[response-header] spec 'headers' must be an object for %s %s; got %s.",
+                $method,
+                $matchedPath,
+                get_debug_type($headersSpec),
+            )];
+        }
+
+        if ($headersSpec === []) {
+            return [];
+        }
+
+        /** @var array<string, mixed> $headersSpec */
+        return ValidatorErrorBoundary::safely(
+            'response-header',
+            $specName,
+            $method,
+            $matchedPath,
+            fn(): array => $this->headerValidator->validate($headersSpec, $responseHeaders, $version),
+        );
     }
 
     /**

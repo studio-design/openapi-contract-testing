@@ -1,0 +1,128 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Response headers edge cases (3.1)",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/items": {
+            "delete": {
+                "operationId": "deleteItem",
+                "responses": {
+                    "204": {
+                        "description": "Deleted",
+                        "headers": {
+                            "X-Audit-Id": {
+                                "required": true,
+                                "schema": { "type": "string" }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/items/ref-headers": {
+            "get": {
+                "operationId": "getItemViaRef",
+                "responses": {
+                    "200": {
+                        "description": "Item",
+                        "headers": {
+                            "X-Trace-Id": { "$ref": "#/components/headers/TraceId" }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/items/never-thrown": {
+            "get": {
+                "operationId": "getItemServerError",
+                "responses": {
+                    "500": {
+                        "description": "Server error",
+                        "headers": {
+                            "X-Error-Id": {
+                                "required": true,
+                                "schema": { "type": "string" }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/items/v31": {
+            "get": {
+                "operationId": "getItemV31",
+                "responses": {
+                    "200": {
+                        "description": "Item",
+                        "headers": {
+                            "X-Tags-Count": {
+                                "schema": { "type": ["integer", "null"] }
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/items/throws": {
+            "get": {
+                "operationId": "getItemHeaderThrows",
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "headers": {
+                            "X-Bad-Pattern": {
+                                "schema": {
+                                    "type": "string",
+                                    "pattern": "[unterminated"
+                                }
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/items/optional-no-schema": {
+            "get": {
+                "operationId": "getItemOptionalNoSchema",
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "headers": {
+                            "X-Loose": {}
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "headers": {
+            "TraceId": {
+                "required": true,
+                "schema": { "type": "string", "format": "uuid" }
+            }
+        }
+    }
+}
