@@ -6,9 +6,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project is **pre-1.0**, so breaking changes may land in any minor release
 until 1.0.0 ships. Each entry below tags whether it is breaking.
 
-## Unreleased
+## v0.12.0 — 2026-04-25
 
-### Breaking
+This release closes Sprint A — every issue scheduled before v1.0 except the
+monorepo split (#114). Big-ticket items: response header validation, external
+`$ref` resolution (local files + opt-in HTTP(S)), and a fully overhauled
+coverage tracker that records at `(status, content-type)` granularity. See
+each section below for migration notes.
+
+### Sprint A highlights
+
+- **#110 — Response header validation**: `OpenApiResponseValidator::validate()`
+  now accepts an optional `?array $responseHeaders` and validates them against
+  the spec's `headers:` block on the matched response. Errors use the
+  `[response-header.<Name>]` prefix. The Laravel trait wires this in
+  automatically by passing `$response->headers->all()`.
+- **#108 — External `$ref` resolution**: relative file refs
+  (`./schemas/pet.yaml#/Pet`) now resolve transparently at spec load time;
+  cycles, broken paths, and missing files surface as structured errors rather
+  than crashes. Opt-in HTTP(S) ref resolution is available by passing a
+  PSR-18 `ClientInterface` + PSR-17 `RequestFactoryInterface` to
+  `OpenApiSpecLoader::configure()` with `allowRemoteRefs: true` —
+  Guzzle / Symfony HttpClient both work. See `composer.json` `suggest`.
+- **#112 — README competitor comparison**: full feature matrix vs Spectator,
+  league/openapi-psr7-validator, hkulekci/...
+
+### Breaking — coverage granularity (#111)
 
 - **Coverage granularity expanded** to `(method, path, statusCode, contentType)`
   ([#111](https://github.com/studio-design/openapi-contract-testing/issues/111)).
@@ -99,3 +122,36 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
   branches inside `paths` (e.g. `responses: 200` as a scalar). Coverage
   proceeds with the malformed entries omitted; without the warning the
   user would silently see a smaller `responseTotal` than reality.
+
+### Other changes since v0.11.0
+
+40 PRs landed in this window. Highlights not already covered above:
+
+- Auto-validate-request hook (#69 — Laravel trait validates the request
+  body, query, headers, cookies, and security against the spec on every
+  HTTP test call when `auto_validate_request: true`)
+- Auto-inject-dummy-bearer for `actingAs()` tests (#75)
+- `withoutValidation()` / `withoutResponseValidation()` /
+  `withoutRequestValidation()` per-test scoped opt-outs
+- `skipResponseCode()` per-test fluent API on top of the config-level
+  `skip_response_codes` (#76)
+- `#[SkipOpenApi]` attribute for class- and method-level opt-outs (#55)
+- `#[OpenApiSpec]` attribute for class- and method-level spec selection
+- `OpenApiValidationOutcome` enum — exhaustive `match` over
+  `Success` / `Failure` / `Skipped` instead of the two prior bool predicates
+- Per-sub-validator error boundary (#92) — opis `RuntimeException`
+  thrown from a body or header validator no longer aborts the whole
+  orchestrator; surfaces as a structured `[response-body]` /
+  `[response-header]` error string with the original `getPrevious()`
+  chain preserved
+- YAML spec loading via `symfony/yaml` (#80)
+- Internal `$ref` resolution (#77)
+- readOnly / writeOnly enforcement on response / request bodies (#52)
+- Vendor-suffix JSON content types (`application/problem+json`,
+  `application/vnd.api+json`, ...) treated as JSON-compatible
+- Strip-prefixes (`/api`) for path matching
+- `console_output` modes: `default` / `all` / `uncovered_only`
+  (overridable via `OPENAPI_CONSOLE_OUTPUT` env var)
+
+For the complete commit list:
+`git log v0.11.0..v0.12.0 --oneline`.
