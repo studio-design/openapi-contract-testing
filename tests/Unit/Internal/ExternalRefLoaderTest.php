@@ -51,8 +51,8 @@ class ExternalRefLoaderTest extends TestCase
         $cache = [];
         $result = ExternalRefLoader::loadDocument('./pet.json', $sourceFile, $cache);
 
-        $this->assertSame(['type' => 'object', 'required' => ['id']], $result['decoded']);
-        $this->assertStringEndsWith('/pet.json', $result['absolutePath']);
+        $this->assertSame(['type' => 'object', 'required' => ['id']], $result->decoded);
+        $this->assertStringEndsWith('/pet.json', $result->canonicalIdentifier);
     }
 
     #[Test]
@@ -65,7 +65,7 @@ class ExternalRefLoaderTest extends TestCase
         $cache = [];
         $result = ExternalRefLoader::loadDocument('./pet.yaml', $sourceFile, $cache);
 
-        $this->assertSame(['type' => 'object', 'required' => ['id']], $result['decoded']);
+        $this->assertSame(['type' => 'object', 'required' => ['id']], $result->decoded);
     }
 
     #[Test]
@@ -79,7 +79,7 @@ class ExternalRefLoaderTest extends TestCase
         $cache = [];
         $result = ExternalRefLoader::loadDocument('../shared.json', $sourceFile, $cache);
 
-        $this->assertSame(['name' => 'shared'], $result['decoded']);
+        $this->assertSame(['name' => 'shared'], $result->decoded);
     }
 
     #[Test]
@@ -91,7 +91,7 @@ class ExternalRefLoaderTest extends TestCase
         $cache = [];
         $result = ExternalRefLoader::loadDocument($absolute, $this->workDir . '/unused.yaml', $cache);
 
-        $this->assertSame(['absolute' => true], $result['decoded']);
+        $this->assertSame(['absolute' => true], $result->decoded);
     }
 
     #[Test]
@@ -109,7 +109,7 @@ class ExternalRefLoaderTest extends TestCase
         file_put_contents($target, '{"type":"string"}');
         $second = ExternalRefLoader::loadDocument('./pet.json', $sourceFile, $cache);
 
-        $this->assertSame(['type' => 'object'], $second['decoded']);
+        $this->assertSame(['type' => 'object'], $second->decoded);
     }
 
     #[Test]

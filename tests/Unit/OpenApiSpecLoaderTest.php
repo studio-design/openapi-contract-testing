@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit;
 
+use GuzzleHttp\Client;
+use GuzzleHttp\Psr7\HttpFactory;
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Internal\YamlAvailability;
@@ -298,6 +301,102 @@ class OpenApiSpecLoaderTest extends TestCase
             @unlink($tempDir . '/bad.json');
             @unlink($tempDir . '/root.json');
             @rmdir($tempDir);
+        }
+    }
+
+    #[Test]
+    public function configure_throws_invalid_argument_when_allow_remote_refs_without_client(): void
+    {
+        try {
+            OpenApiSpecLoader::configure(
+                '/path/to/specs',
+                allowRemoteRefs: true,
+            );
+            $this->fail('expected InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('allowRemoteRefs', $e->getMessage());
+            $this->assertStringContainsString('PSR-18', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function configure_throws_when_client_is_set_without_allow_flag(): void
+    {
+        $client = new Client();
+        $factory = new HttpFactory();
+
+        try {
+            OpenApiSpecLoader::configure(
+                '/path/to/specs',
+                httpClient: $client,
+                requestFactory: $factory,
+                allowRemoteRefs: false,
+            );
+            $this->fail('expected InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('allowRemoteRefs is false', $e->getMessage());
+            $this->assertStringContainsString('HTTP client was provided', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function configure_accepts_full_remote_setup(): void
+    {
+        $client = new Client();
+        $factory = new HttpFactory();
+
+        OpenApiSpecLoader::configure(
+            '/path/to/specs',
+            httpClient: $client,
+            requestFactory: $factory,
+            allowRemoteRefs: true,
+        );
+
+        $this->assertSame('/path/to/specs', OpenApiSpecLoader::getBasePath());
+    }
+
+    #[Test]
+    public function configure_evicts_cached_specs(): void
+    {
+        // A previously-cached spec resolved under one remote-refs policy
+        // must not be served after configure() flips the policy. Pin the
+        // eviction so the next load() reads from disk again.
+        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        OpenApiSpecLoader::configure($fixturesPath);
+        $first = OpenApiSpecLoader::load('petstore-3.0');
+        $this->assertSame('3.0.3', $first['openapi']);
+
+        OpenApiSpecLoader::configure(
+            $fixturesPath,
+            httpClient: new Client(),
+            requestFactory: new HttpFactory(),
+            allowRemoteRefs: true,
+        );
+
+        // Reload — by-value-equal but not the cached array from before.
+        $reloaded = OpenApiSpecLoader::load('petstore-3.0');
+        $this->assertSame($first, $reloaded);
+    }
+
+    #[Test]
+    public function reset_clears_http_client_and_remote_flag_state(): void
+    {
+        OpenApiSpecLoader::configure(
+            '/path/to/specs',
+            httpClient: new Client(),
+            requestFactory: new HttpFactory(),
+            allowRemoteRefs: true,
+        );
+
+        OpenApiSpecLoader::reset();
+
+        // Reconfiguring with allowRemoteRefs:true but no client must
+        // throw — proving the prior client/factory weren't sticky.
+        try {
+            OpenApiSpecLoader::configure('/path/to/specs', allowRemoteRefs: true);
+            $this->fail('expected InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('allowRemoteRefs requires', $e->getMessage());
         }
     }
 

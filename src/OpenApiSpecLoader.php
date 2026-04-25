@@ -6,7 +6,10 @@ namespace Studio\OpenApiContractTesting;
 
 use const JSON_THROW_ON_ERROR;
 
+use InvalidArgumentException;
 use JsonException;
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestFactoryInterface;
 use Studio\OpenApiContractTesting\Internal\YamlAvailability;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
@@ -37,16 +40,69 @@ final class OpenApiSpecLoader
 
     /** @var array<string, array<string, mixed>> */
     private static array $cache = [];
+    private static ?ClientInterface $httpClient = null;
+    private static ?RequestFactoryInterface $requestFactory = null;
+    private static bool $allowRemoteRefs = false;
 
     /**
-     * Configure the spec loader with a base path and optional strip prefixes.
+     * Configure the spec loader.
+     *
+     * Existing cached specs are evicted on every call so a config change
+     * (especially flipping `$allowRemoteRefs`) takes effect on the next
+     * `load()`. Without this, a previously cached spec resolved under
+     * the old policy would silently keep serving.
      *
      * @param string[] $stripPrefixes
+     * @param null|ClientInterface $httpClient PSR-18 client used to fetch HTTP(S) `$ref`
+     *                                         targets. Required when `$allowRemoteRefs` is true.
+     * @param null|RequestFactoryInterface $requestFactory PSR-17 request factory paired
+     *                                                     with `$httpClient`. Required when `$allowRemoteRefs` is true.
+     * @param bool $allowRemoteRefs Opt-in for HTTP(S) `$ref` resolution. Defaults to false:
+     *                              every external HTTP(S) ref throws `RemoteRefDisallowed` so a
+     *                              spec can never silently reach the network during tests.
+     *
+     * @throws InvalidArgumentException for any misconfigured pair: `$allowRemoteRefs` true
+     *                                  without client/factory, OR client provided without
+     *                                  `$allowRemoteRefs` true. Both are surfaced at
+     *                                  configure-time so the error never sits silent.
      */
-    public static function configure(string $basePath, array $stripPrefixes = []): void
-    {
+    public static function configure(
+        string $basePath,
+        array $stripPrefixes = [],
+        ?ClientInterface $httpClient = null,
+        ?RequestFactoryInterface $requestFactory = null,
+        bool $allowRemoteRefs = false,
+    ): void {
+        if ($allowRemoteRefs && ($httpClient === null || $requestFactory === null)) {
+            throw new InvalidArgumentException(
+                'OpenApiSpecLoader::configure(): allowRemoteRefs requires both $httpClient '
+                . '(PSR-18 ClientInterface) and $requestFactory (PSR-17 RequestFactoryInterface).',
+            );
+        }
+
+        if (!$allowRemoteRefs && $httpClient !== null) {
+            // The user wired a client but forgot to flip the switch.
+            // Warning-level signals (E_USER_WARNING) are too easy to
+            // suppress (custom error handlers, error_reporting masks);
+            // surface as a hard exception so the misconfiguration cannot
+            // sit silent. Symmetric with the allowRemoteRefs-without-client
+            // check above — both halves of the pairing are enforced.
+            throw new InvalidArgumentException(
+                'OpenApiSpecLoader::configure(): an HTTP client was provided but '
+                . 'allowRemoteRefs is false. HTTP $refs would be rejected silently. '
+                . 'Either pass allowRemoteRefs: true, or omit the client entirely.',
+            );
+        }
+
         self::$basePath = rtrim($basePath, '/');
         self::$stripPrefixes = $stripPrefixes;
+        self::$httpClient = $httpClient;
+        self::$requestFactory = $requestFactory;
+        self::$allowRemoteRefs = $allowRemoteRefs;
+        // A previous configure() call may have cached specs under a
+        // different remote-refs policy. Evict so the next load() runs
+        // with the new client/flag combination.
+        self::$cache = [];
     }
 
     public static function getBasePath(): string
@@ -102,7 +158,13 @@ final class OpenApiSpecLoader
         }
 
         try {
-            $resolved = OpenApiRefResolver::resolve($decoded, $canonicalPath);
+            $resolved = OpenApiRefResolver::resolve(
+                $decoded,
+                $canonicalPath,
+                self::$httpClient,
+                self::$requestFactory,
+                self::$allowRemoteRefs,
+            );
         } catch (InvalidOpenApiSpecException $e) {
             // The resolver is stateless and therefore cannot know which spec
             // produced the throw. Re-wrap once so consumers (e.g. the coverage
@@ -136,6 +198,9 @@ final class OpenApiSpecLoader
         self::$basePath = null;
         self::$stripPrefixes = [];
         self::$cache = [];
+        self::$httpClient = null;
+        self::$requestFactory = null;
+        self::$allowRemoteRefs = false;
         YamlAvailability::reset();
     }
 

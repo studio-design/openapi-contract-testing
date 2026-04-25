@@ -4,20 +4,26 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
+use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\RequestFactoryInterface;
 use Studio\OpenApiContractTesting\Internal\ExternalRefLoader;
+use Studio\OpenApiContractTesting\Internal\HttpRefLoader;
 
 use function array_key_exists;
+use function array_pop;
 use function explode;
 use function get_debug_type;
 use function implode;
 use function in_array;
 use function is_array;
 use function is_string;
+use function parse_url;
 use function rawurldecode;
 use function sprintf;
 use function str_replace;
 use function str_starts_with;
 use function strpos;
+use function strrpos;
 use function substr;
 
 final class OpenApiRefResolver
@@ -38,12 +44,15 @@ final class OpenApiRefResolver
      * Pass `$sourceFile` (the absolute path of the spec file being loaded)
      * to enable resolution of external `$ref` targets located on the local
      * filesystem (e.g. `./schemas/pet.yaml`). When `$sourceFile` is `null`,
-     * any non-internal `$ref` triggers `LocalRefRequiresSourceFile` so the
-     * caller knows it must thread the path through. HTTP(S) and `file://`
-     * refs are always rejected: `RemoteRefNotImplemented` (HTTP fetching
-     * is not currently part of the resolver) and `FileSchemeNotSupported`
-     * (`file://` URLs bypass source-file-relative resolution and are
-     * blocked to keep the path-resolution rules predictable).
+     * any **filesystem-relative** `$ref` triggers `LocalRefRequiresSourceFile`.
+     * HTTP(S) refs are dispatched via `$httpClient` regardless of `$sourceFile`.
+     *
+     * Pass `$httpClient` + `$requestFactory` (PSR-18 / PSR-17) AND
+     * `$allowRemoteRefs: true` to permit HTTP(S) `$ref` resolution.
+     * Without both, HTTP refs throw `RemoteRefDisallowed` (flag off) or
+     * `HttpClientNotConfigured` (flag on but client/factory missing).
+     * `file://` URLs are always rejected to keep path-resolution rules
+     * predictable.
      *
      * @param array<string, mixed> $spec
      *
@@ -51,15 +60,39 @@ final class OpenApiRefResolver
      *
      * @throws InvalidOpenApiSpecException when a `$ref` cannot be resolved
      */
-    public static function resolve(array $spec, ?string $sourceFile = null): array
-    {
+    public static function resolve(
+        array $spec,
+        ?string $sourceFile = null,
+        ?ClientInterface $httpClient = null,
+        ?RequestFactoryInterface $requestFactory = null,
+        bool $allowRemoteRefs = false,
+    ): array {
+        // OpenApiSpecLoader::configure() catches this earlier with an
+        // InvalidArgumentException; this guard is for callers that
+        // construct the resolver directly. Surface as the same reason
+        // the per-ref path would fire so consumers can branch on a
+        // single enum case.
+        if ($allowRemoteRefs && ($httpClient === null || $requestFactory === null)) {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::HttpClientNotConfigured,
+                'OpenApiRefResolver::resolve(): allowRemoteRefs requires both '
+                . 'a PSR-18 ClientInterface and a PSR-17 RequestFactoryInterface.',
+            );
+        }
+
+        // After the guard above, allowRemoteRefs:true implies non-null
+        // client + factory.
+        $context = $allowRemoteRefs
+            ? RefResolutionContext::withRemoteRefs($httpClient, $requestFactory, $sourceFile)
+            : RefResolutionContext::filesystemOnly($sourceFile);
+
         // $root is a frozen snapshot used for pointer lookups. PHP array
         // copy-on-write keeps it untouched as we mutate $spec via $node refs.
         $root = $spec;
-        // Per-resolution external file cache, keyed by canonical absolute
-        // path. Sibling refs into the same file decode it once.
+        // Per-resolution external file/URL cache, keyed by canonical absolute
+        // path or canonical URL. Sibling refs into the same target decode it once.
         $documentCache = [];
-        self::walk($spec, $root, [], false, $sourceFile, $documentCache);
+        self::walk($spec, $root, [], false, $context, $documentCache);
 
         return $spec;
     }
@@ -72,7 +105,6 @@ final class OpenApiRefResolver
      *                                  a `properties` / `patternProperties` map, where keys are property names
      *                                  rather than schema keywords. The flag resets one level deeper, because
      *                                  each named entry is itself a schema.
-     * @param ?string $currentSourceFile absolute path of the file owning `$root`, or null in legacy calls
      * @param array<string, array<string, mixed>> $documentCache external document cache for this resolution
      */
     private static function walk(
@@ -80,7 +112,7 @@ final class OpenApiRefResolver
         array $root,
         array $chain,
         bool $insidePropertiesMap,
-        ?string $currentSourceFile,
+        RefResolutionContext $context,
         array &$documentCache,
     ): void {
         if (!$insidePropertiesMap && array_key_exists('$ref', $node)) {
@@ -93,7 +125,7 @@ final class OpenApiRefResolver
                 );
             }
 
-            self::resolveRef($node, $ref, $root, $chain, $currentSourceFile, $documentCache);
+            self::resolveRef($node, $ref, $root, $chain, $context, $documentCache);
 
             return;
         }
@@ -104,7 +136,7 @@ final class OpenApiRefResolver
                 // schema (not a dict of schemas), so a direct $ref under it is a
                 // legitimate Reference Object that must resolve.
                 $childInsidePropertiesMap = $key === 'properties' || $key === 'patternProperties';
-                self::walk($child, $root, $chain, $childInsidePropertiesMap, $currentSourceFile, $documentCache);
+                self::walk($child, $root, $chain, $childInsidePropertiesMap, $context, $documentCache);
             }
         }
         unset($child);
@@ -121,7 +153,7 @@ final class OpenApiRefResolver
         string $ref,
         array $root,
         array $chain,
-        ?string $currentSourceFile,
+        RefResolutionContext $context,
         array &$documentCache,
     ): void {
         if ($ref === '') {
@@ -161,19 +193,13 @@ final class OpenApiRefResolver
         }
 
         if (str_starts_with($ref, 'http://') || str_starts_with($ref, 'https://')) {
-            throw new InvalidOpenApiSpecException(
-                InvalidOpenApiSpecReason::RemoteRefNotImplemented,
-                sprintf(
-                    'HTTP(S) $ref is not currently supported: %s. '
-                    . 'Pre-bundle the spec or open an issue if remote resolution would help your workflow.',
-                    $ref,
-                ),
-                ref: $ref,
-            );
+            self::resolveHttpRef($node, $ref, $chain, $context, $documentCache);
+
+            return;
         }
 
         if (str_starts_with($ref, '#/')) {
-            self::resolveInternalRef($node, $ref, $root, $chain, $currentSourceFile, $documentCache);
+            self::resolveInternalRef($node, $ref, $root, $chain, $context, $documentCache);
 
             return;
         }
@@ -186,7 +212,7 @@ final class OpenApiRefResolver
             );
         }
 
-        if ($currentSourceFile === null) {
+        if ($context->sourceFile === null) {
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::LocalRefRequiresSourceFile,
                 sprintf(
@@ -199,7 +225,96 @@ final class OpenApiRefResolver
             );
         }
 
-        self::resolveExternalRef($node, $ref, $chain, $currentSourceFile, $documentCache);
+        // RFC 3986 base resolution: when the current document was loaded
+        // over HTTP(S), a relative ref resolves against that URL — not
+        // against any local filesystem path. Without this branch, dirname()
+        // on the URL would produce nonsense like `dirname('https:')` and
+        // the user would see a confusing LocalRefNotFound.
+        if (str_starts_with($context->sourceFile, 'http://') || str_starts_with($context->sourceFile, 'https://')) {
+            $resolvedUrl = self::resolveRelativeUrl($context->sourceFile, $ref);
+            self::resolveHttpRef($node, $resolvedUrl, $chain, $context, $documentCache);
+
+            return;
+        }
+
+        self::resolveExternalRef($node, $ref, $chain, $context, $documentCache);
+    }
+
+    /**
+     * Minimal RFC 3986 reference resolution: combine a relative `$ref`
+     * with an HTTP(S) base URL. Handles absolute paths (`/foo`),
+     * dot-segment normalisation (`./`, `../`), and falls back to the
+     * raw ref when it's already an absolute URL.
+     *
+     * Not a full RFC 3986 implementation — query strings and fragments
+     * on the base URL are dropped before joining (matches what spec
+     * authors expect when their base is a JSON document URL). For
+     * pathological inputs the result is whatever `parse_url` produces;
+     * tests pin the common cases.
+     */
+    private static function resolveRelativeUrl(string $baseUrl, string $relativeRef): string
+    {
+        if (str_starts_with($relativeRef, 'http://') || str_starts_with($relativeRef, 'https://')) {
+            return $relativeRef;
+        }
+
+        $baseParts = parse_url($baseUrl);
+        if ($baseParts === false || !isset($baseParts['scheme'], $baseParts['host'])) {
+            return $relativeRef;
+        }
+
+        $scheme = $baseParts['scheme'];
+        $host = $baseParts['host'];
+        $port = isset($baseParts['port']) ? ':' . $baseParts['port'] : '';
+        $userInfo = isset($baseParts['user'])
+            ? $baseParts['user'] . (isset($baseParts['pass']) ? ':' . $baseParts['pass'] : '') . '@'
+            : '';
+
+        $authority = $userInfo . $host . $port;
+
+        if (str_starts_with($relativeRef, '/')) {
+            return sprintf('%s://%s%s', $scheme, $authority, $relativeRef);
+        }
+
+        $basePath = $baseParts['path'] ?? '/';
+        $baseDir = self::dirnameUrl($basePath);
+
+        $combined = $baseDir . '/' . $relativeRef;
+        $normalised = self::normaliseDotSegments($combined);
+
+        return sprintf('%s://%s%s', $scheme, $authority, $normalised);
+    }
+
+    private static function dirnameUrl(string $path): string
+    {
+        $lastSlash = strrpos($path, '/');
+        if ($lastSlash === false || $lastSlash === 0) {
+            return '';
+        }
+
+        return substr($path, 0, $lastSlash);
+    }
+
+    /**
+     * Apply RFC 3986 §5.2.4 dot-segment removal. Implemented inline
+     * (rather than reaching for a library) because the rules are short
+     * and the surface area we hit is narrow: relative `./pet.yaml`,
+     * `../shared/error.json`, and combinations. Edge cases like a leading
+     * `..` past the root collapse to root, matching browser behaviour.
+     */
+    private static function normaliseDotSegments(string $path): string
+    {
+        $segments = explode('/', $path);
+        $resolved = [];
+        foreach ($segments as $segment) {
+            if ($segment === '..') {
+                array_pop($resolved);
+            } elseif ($segment !== '.' && $segment !== '') {
+                $resolved[] = $segment;
+            }
+        }
+
+        return '/' . implode('/', $resolved);
     }
 
     /**
@@ -213,13 +328,13 @@ final class OpenApiRefResolver
         string $ref,
         array $root,
         array $chain,
-        ?string $currentSourceFile,
+        RefResolutionContext $context,
         array &$documentCache,
     ): void {
         // Canonicalize internal refs against the current document so cycles
         // that span files are detected against per-file pointers, not the
         // raw `#/...` string (which is ambiguous across documents).
-        $chainKey = self::canonicalChainKey($currentSourceFile, $ref);
+        $chainKey = self::canonicalChainKey($context->sourceFile, $ref);
 
         if (in_array($chainKey, $chain, true)) {
             throw new InvalidOpenApiSpecException(
@@ -251,7 +366,7 @@ final class OpenApiRefResolver
         // entirely. Sibling keys alongside $ref are dropped per OAS 3.0
         // ("any sibling elements of a $ref are ignored"), which is a safe
         // subset of 3.1.
-        self::walk($target, $root, [...$chain, $chainKey], false, $currentSourceFile, $documentCache);
+        self::walk($target, $root, [...$chain, $chainKey], false, $context, $documentCache);
         $node = $target;
     }
 
@@ -264,7 +379,7 @@ final class OpenApiRefResolver
         array &$node,
         string $ref,
         array $chain,
-        string $currentSourceFile,
+        RefResolutionContext $context,
         array &$documentCache,
     ): void {
         [$pathPart, $fragment, $hadHash] = self::splitRef($ref);
@@ -289,13 +404,135 @@ final class OpenApiRefResolver
             );
         }
 
-        $document = ExternalRefLoader::loadDocument($pathPart, $currentSourceFile, $documentCache);
-        $absolutePath = $document['absolutePath'];
-        $newRoot = $document['decoded'];
+        // sourceFile non-null asserted by the caller (resolveRef).
+        /** @var string $sourceFile */
+        $sourceFile = $context->sourceFile;
+        $document = ExternalRefLoader::loadDocument($pathPart, $sourceFile, $documentCache);
 
+        self::descendIntoLoadedDocument(
+            $node,
+            $ref,
+            $fragment,
+            $chain,
+            $document->canonicalIdentifier,
+            $document->decoded,
+            $context->withSourceFile($document->canonicalIdentifier),
+            $documentCache,
+        );
+    }
+
+    /**
+     * @param array<int|string, mixed> $node
+     * @param list<string> $chain
+     * @param array<string, array<string, mixed>> $documentCache
+     */
+    private static function resolveHttpRef(
+        array &$node,
+        string $ref,
+        array $chain,
+        RefResolutionContext $context,
+        array &$documentCache,
+    ): void {
+        if (!$context->allowRemoteRefs) {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::RemoteRefDisallowed,
+                sprintf(
+                    'HTTP(S) $ref is disallowed: %s. '
+                    . 'Pass allowRemoteRefs: true to OpenApiSpecLoader::configure() to enable it.',
+                    $ref,
+                ),
+                ref: $ref,
+            );
+        }
+
+        if ($context->httpClient === null || $context->requestFactory === null) {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::HttpClientNotConfigured,
+                sprintf(
+                    'HTTP $ref %s requires a PSR-18 ClientInterface and PSR-17 '
+                    . 'RequestFactoryInterface. Pass them to OpenApiSpecLoader::configure().',
+                    $ref,
+                ),
+                ref: $ref,
+            );
+        }
+
+        [$urlPart, $fragment, $hadHash] = self::splitRef($ref);
+
+        if ($urlPart === '') {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::EmptyRef,
+                sprintf('Invalid $ref: %s has an empty URL part', $ref),
+                ref: $ref,
+            );
+        }
+
+        if ($hadHash && $fragment === '') {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::BareFragmentRef,
+                sprintf('Invalid $ref: %s has an empty fragment after `#`', $ref),
+                ref: $ref,
+            );
+        }
+
+        try {
+            $document = HttpRefLoader::loadDocument(
+                $urlPart,
+                $context->httpClient,
+                $context->requestFactory,
+                $documentCache,
+            );
+        } catch (InvalidOpenApiSpecException $e) {
+            // Re-wrap remote-fetch failures with the resolution chain so
+            // a failure 4 hops deep into a $ref tree shows the path that
+            // got us there, not just the leaf URL.
+            if ($e->reason === InvalidOpenApiSpecReason::RemoteRefFetchFailed && $chain !== []) {
+                throw new InvalidOpenApiSpecException(
+                    $e->reason,
+                    sprintf('%s (via $ref chain: %s)', $e->getMessage(), implode(' -> ', $chain)),
+                    ref: $e->ref,
+                    previous: $e,
+                );
+            }
+
+            throw $e;
+        }
+
+        self::descendIntoLoadedDocument(
+            $node,
+            $ref,
+            $fragment,
+            $chain,
+            $document->canonicalIdentifier,
+            $document->decoded,
+            $context->withSourceFile($document->canonicalIdentifier),
+            $documentCache,
+        );
+    }
+
+    /**
+     * Shared post-load step for both filesystem and HTTP external refs.
+     * Performs cycle detection, fragment lookup, type guard, and recursion
+     * with the source-file context shifted to the loaded document.
+     *
+     * @param array<int|string, mixed> $node
+     * @param list<string> $chain
+     * @param array<string, mixed> $newRoot
+     * @param array<string, array<string, mixed>> $documentCache
+     */
+    private static function descendIntoLoadedDocument(
+        array &$node,
+        string $ref,
+        string $fragment,
+        array $chain,
+        string $absoluteUri,
+        array $newRoot,
+        RefResolutionContext $context,
+        array &$documentCache,
+    ): void {
         if ($fragment !== '') {
             $internalRef = '#' . $fragment;
-            $chainKey = self::canonicalChainKey($absolutePath, $internalRef);
+            $chainKey = self::canonicalChainKey($absoluteUri, $internalRef);
 
             if (in_array($chainKey, $chain, true)) {
                 throw new InvalidOpenApiSpecException(
@@ -309,7 +546,7 @@ final class OpenApiRefResolver
             if (!$found) {
                 throw new InvalidOpenApiSpecException(
                     InvalidOpenApiSpecReason::UnresolvableRef,
-                    sprintf('Unresolvable $ref: fragment %s not found in %s', $fragment, $absolutePath),
+                    sprintf('Unresolvable $ref: fragment %s not found in %s', $fragment, $absoluteUri),
                     ref: $ref,
                 );
             }
@@ -322,15 +559,16 @@ final class OpenApiRefResolver
                 );
             }
 
-            self::walk($target, $newRoot, [...$chain, $chainKey], false, $absolutePath, $documentCache);
+            self::walk($target, $newRoot, [...$chain, $chainKey], false, $context, $documentCache);
             $node = $target;
 
             return;
         }
 
-        // Whole-file ref: chain key is the absolute path; the document
-        // root replaces the node, and walking continues against that root.
-        $chainKey = $absolutePath;
+        // Whole-file/URL ref: chain key is the canonical absolute identifier;
+        // the document root replaces the node, and walking continues against
+        // that root.
+        $chainKey = $absoluteUri;
         if (in_array($chainKey, $chain, true)) {
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::CircularRef,
@@ -340,7 +578,7 @@ final class OpenApiRefResolver
         }
 
         $target = $newRoot;
-        self::walk($target, $newRoot, [...$chain, $chainKey], false, $absolutePath, $documentCache);
+        self::walk($target, $newRoot, [...$chain, $chainKey], false, $context, $documentCache);
         $node = $target;
     }
 

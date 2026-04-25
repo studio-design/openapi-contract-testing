@@ -1,0 +1,351 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Studio\OpenApiContractTesting\Tests\Unit\Internal;
+
+use GuzzleHttp\Psr7\HttpFactory;
+use GuzzleHttp\Psr7\Response;
+use PHPUnit\Framework\Attributes\Test;
+use PHPUnit\Framework\TestCase;
+use Psr\Http\Message\RequestInterface;
+use Studio\OpenApiContractTesting\Internal\HttpRefLoader;
+use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
+use Studio\OpenApiContractTesting\Tests\Helpers\FakeHttpClient;
+use Studio\OpenApiContractTesting\Tests\Helpers\FakeHttpClientUnexpectedRequest;
+
+class HttpRefLoaderTest extends TestCase
+{
+    private HttpFactory $factory;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->factory = new HttpFactory();
+    }
+
+    #[Test]
+    public function fetches_and_decodes_json_via_url_extension(): void
+    {
+        $url = 'https://example.com/schemas/pet.json';
+        $client = new FakeHttpClient([
+            $url => FakeHttpClient::jsonResponse('{"type":"object","required":["id"]}'),
+        ]);
+
+        $cache = [];
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+
+        $this->assertSame($url, $result->canonicalIdentifier);
+        $this->assertSame(['type' => 'object', 'required' => ['id']], $result->decoded);
+    }
+
+    #[Test]
+    public function fetches_and_decodes_yaml_via_url_extension(): void
+    {
+        $url = 'https://example.com/schemas/pet.yaml';
+        $client = new FakeHttpClient([
+            $url => FakeHttpClient::yamlResponse("type: object\nrequired:\n  - id\n"),
+        ]);
+
+        $cache = [];
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+
+        $this->assertSame(['type' => 'object', 'required' => ['id']], $result->decoded);
+    }
+
+    #[Test]
+    public function falls_back_to_content_type_when_url_has_no_extension(): void
+    {
+        // Some servers expose JSON via opaque URLs (e.g. `/registry/Pet`)
+        // without a file extension. The Content-Type header is the only
+        // format cue.
+        $url = 'https://registry.example.com/Pet';
+        $client = new FakeHttpClient([
+            $url => new Response(200, ['Content-Type' => 'application/json'], '{"type":"string"}'),
+        ]);
+
+        $cache = [];
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+
+        $this->assertSame(['type' => 'string'], $result->decoded);
+    }
+
+    #[Test]
+    public function falls_back_to_application_problem_json_content_type(): void
+    {
+        $url = 'https://example.com/schemas/error';
+        $client = new FakeHttpClient([
+            $url => new Response(200, ['Content-Type' => 'application/problem+json'], '{"type":"object"}'),
+        ]);
+
+        $cache = [];
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+
+        $this->assertSame(['type' => 'object'], $result->decoded);
+    }
+
+    #[Test]
+    public function honours_text_yaml_content_type(): void
+    {
+        $url = 'https://example.com/registry/Schema';
+        $client = new FakeHttpClient([
+            $url => new Response(200, ['Content-Type' => 'text/yaml; charset=utf-8'], "type: integer\n"),
+        ]);
+
+        $cache = [];
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+
+        $this->assertSame(['type' => 'integer'], $result->decoded);
+    }
+
+    #[Test]
+    public function caches_response_and_does_not_re_fetch_on_second_call(): void
+    {
+        $url = 'https://example.com/pet.json';
+        $callCount = 0;
+        $client = new FakeHttpClient([
+            $url => static function (RequestInterface $req) use (&$callCount): Response {
+                $callCount++;
+
+                return new Response(200, ['Content-Type' => 'application/json'], '{"v":1}');
+            },
+        ]);
+
+        $cache = [];
+        HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+        HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+
+        $this->assertSame(1, $callCount);
+    }
+
+    #[Test]
+    public function throws_remote_ref_fetch_failed_on_404(): void
+    {
+        $url = 'https://example.com/missing.json';
+        $client = new FakeHttpClient([
+            $url => new Response(404),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
+            $this->assertStringContainsString('404', $e->getMessage());
+            $this->assertStringContainsString($url, $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function throws_remote_ref_fetch_failed_on_5xx(): void
+    {
+        $url = 'https://example.com/server-error.json';
+        $client = new FakeHttpClient([
+            $url => new Response(500),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
+            $this->assertStringContainsString('500', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function throws_remote_ref_fetch_failed_on_network_exception(): void
+    {
+        $url = 'https://example.com/unreachable.json';
+        $client = new FakeHttpClient([
+            $url => static function (): Response {
+                throw new FakeHttpClientUnexpectedRequest('connection refused');
+            },
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
+            $this->assertStringContainsString('connection refused', $e->getMessage());
+            $this->assertNotNull($e->getPrevious());
+        }
+    }
+
+    #[Test]
+    public function throws_unsupported_extension_when_neither_url_nor_content_type_indicates_format(): void
+    {
+        $url = 'https://example.com/opaque-resource';
+        $client = new FakeHttpClient([
+            $url => new Response(200, ['Content-Type' => 'text/plain'], 'whatever'),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::UnsupportedExtension, $e->reason);
+            $this->assertStringContainsString($url, $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function throws_malformed_json_on_invalid_body(): void
+    {
+        $url = 'https://example.com/bad.json';
+        $client = new FakeHttpClient([
+            $url => FakeHttpClient::jsonResponse('{ not valid json'),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::MalformedJson, $e->reason);
+            $this->assertNotNull($e->getPrevious());
+        }
+    }
+
+    #[Test]
+    public function throws_malformed_yaml_on_invalid_body(): void
+    {
+        $url = 'https://example.com/bad.yaml';
+        $client = new FakeHttpClient([
+            $url => FakeHttpClient::yamlResponse("key: value\n  bad: indent\n"),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::MalformedYaml, $e->reason);
+        }
+    }
+
+    #[Test]
+    public function rejects_3xx_redirect_with_hint_pointing_at_location(): void
+    {
+        // Surface the redirect explicitly: PSR-18 clients vary on whether
+        // they auto-follow (Guzzle does, Symfony does not). A bare 302
+        // landing here is almost always "user's client has redirect-following
+        // disabled", and the error message must point at the next step.
+        $url = 'https://example.com/redirect.json';
+        $client = new FakeHttpClient([
+            $url => new Response(302, ['Location' => 'https://example.com/canonical.json']),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
+            $this->assertStringContainsString('302', $e->getMessage());
+            $this->assertStringContainsString('https://example.com/canonical.json', $e->getMessage());
+            $this->assertStringContainsString('redirect', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function url_extension_takes_precedence_over_conflicting_content_type(): void
+    {
+        // Pin the documented priority: extension wins, even if the
+        // server's Content-Type disagrees. A YAML URL whose server
+        // mistakenly returns `application/json` should still parse as YAML.
+        $url = 'https://example.com/pet.yaml';
+        $client = new FakeHttpClient([
+            $url => new Response(200, ['Content-Type' => 'application/json'], "type: object\n"),
+        ]);
+
+        $cache = [];
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+
+        $this->assertSame(['type' => 'object'], $result->decoded);
+    }
+
+    #[Test]
+    public function throws_unsupported_extension_when_content_type_header_is_empty(): void
+    {
+        $url = 'https://example.com/opaque-resource';
+        $client = new FakeHttpClient([
+            $url => new Response(200, [], 'whatever'),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::UnsupportedExtension, $e->reason);
+        }
+    }
+
+    #[Test]
+    public function tolerates_duplicate_content_type_headers_concatenated_with_comma(): void
+    {
+        // RFC 7230 §3.2.2 forbids it, but real servers occasionally send
+        // duplicate Content-Type headers. PSR-7 getHeaderLine() concatenates
+        // them with `, `; the detector must split on `,` as well as `;`
+        // so the first usable type wins.
+        $url = 'https://example.com/registry/Schema';
+        $client = new FakeHttpClient([
+            $url => new Response(
+                200,
+                ['Content-Type' => ['application/json', 'application/json']],
+                '{"type":"object"}',
+            ),
+        ]);
+
+        $cache = [];
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+
+        $this->assertSame(['type' => 'object'], $result->decoded);
+    }
+
+    #[Test]
+    public function redacts_userinfo_credentials_from_error_messages(): void
+    {
+        // Spec authors occasionally embed credentials in $ref URLs for
+        // testing; those must not leak into stderr / CI logs via error
+        // messages.
+        $url = 'https://alice:secret@example.com/private/pet.json';
+        $client = new FakeHttpClient([
+            $url => new Response(404),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertStringNotContainsString('secret', $e->getMessage());
+            $this->assertStringNotContainsString('alice', $e->getMessage());
+            $this->assertStringContainsString('example.com', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function throws_non_mapping_root_when_response_decodes_to_scalar(): void
+    {
+        $url = 'https://example.com/scalar.json';
+        $client = new FakeHttpClient([
+            $url => FakeHttpClient::jsonResponse('"just a string"'),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::NonMappingRoot, $e->reason);
+        }
+    }
+}

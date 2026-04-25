@@ -4,24 +4,17 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Internal;
 
-use const JSON_THROW_ON_ERROR;
 use const PATHINFO_EXTENSION;
 
-use JsonException;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
-use Symfony\Component\Yaml\Exception\ParseException;
-use Symfony\Component\Yaml\Yaml;
 
 use function dirname;
 use function error_clear_last;
 use function error_get_last;
 use function file_exists;
 use function file_get_contents;
-use function get_debug_type;
-use function is_array;
 use function is_readable;
-use function json_decode;
 use function pathinfo;
 use function realpath;
 use function sprintf;
@@ -63,11 +56,9 @@ final class ExternalRefLoader
      *
      * @param array<string, array<string, mixed>> $documentCache by-ref cache keyed by absolute path
      *
-     * @return array{absolutePath: string, decoded: array<string, mixed>}
-     *
      * @throws InvalidOpenApiSpecException when the file cannot be located, decoded, or has an unsupported extension
      */
-    public static function loadDocument(string $refPath, string $sourceFile, array &$documentCache): array
+    public static function loadDocument(string $refPath, string $sourceFile, array &$documentCache): LoadedDocument
     {
         $candidate = str_starts_with($refPath, '/')
             ? $refPath
@@ -104,7 +95,7 @@ final class ExternalRefLoader
         }
 
         if (isset($documentCache[$absolutePath])) {
-            return ['absolutePath' => $absolutePath, 'decoded' => $documentCache[$absolutePath]];
+            return new LoadedDocument($absolutePath, $documentCache[$absolutePath]);
         }
 
         $extension = strtolower((string) pathinfo($absolutePath, PATHINFO_EXTENSION));
@@ -117,8 +108,8 @@ final class ExternalRefLoader
         }
 
         $decoded = match ($extension) {
-            'json' => self::decodeJson($absolutePath, $refPath),
-            'yaml', 'yml' => self::decodeYaml($absolutePath, $refPath),
+            'json' => self::readAndDecodeJson($absolutePath, $refPath),
+            'yaml', 'yml' => self::readAndDecodeYaml($absolutePath, $refPath),
             default => throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::UnsupportedExtension,
                 sprintf('Unsupported $ref target extension: .%s for %s', $extension, $refPath),
@@ -128,11 +119,11 @@ final class ExternalRefLoader
 
         $documentCache[$absolutePath] = $decoded;
 
-        return ['absolutePath' => $absolutePath, 'decoded' => $decoded];
+        return new LoadedDocument($absolutePath, $decoded);
     }
 
     /** @return array<string, mixed> */
-    private static function decodeJson(string $absolutePath, string $refPath): array
+    private static function readAndDecodeJson(string $absolutePath, string $refPath): array
     {
         // realpath() proved the file exists and is reachable; a read
         // failure here is a runtime I/O issue (permissions revoked
@@ -153,37 +144,16 @@ final class ExternalRefLoader
             );
         }
 
-        try {
-            $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
-        } catch (JsonException $e) {
-            throw new InvalidOpenApiSpecException(
-                InvalidOpenApiSpecReason::MalformedJson,
-                sprintf('Failed to parse JSON $ref target %s: %s', $refPath, $e->getMessage()),
-                ref: $refPath,
-                previous: $e,
-            );
-        }
-
-        return self::ensureMappingRoot($decoded, $refPath, $absolutePath);
+        return SpecDocumentDecoder::decodeJson($content, $refPath);
     }
 
     /** @return array<string, mixed> */
-    private static function decodeYaml(string $absolutePath, string $refPath): array
+    private static function readAndDecodeYaml(string $absolutePath, string $refPath): array
     {
-        if (!YamlAvailability::isAvailable()) {
-            throw new InvalidOpenApiSpecException(
-                InvalidOpenApiSpecReason::YamlLibraryMissing,
-                'Loading YAML $ref targets requires symfony/yaml. '
-                . 'Install it via: composer require --dev symfony/yaml',
-                ref: $refPath,
-            );
-        }
-
         // is_readable() catches the most common pre-parse I/O failure
-        // (permissions revoked between realpath() and Yaml::parseFile).
-        // Symfony's Yaml::parseFile rolls every other error class into
-        // ParseException, which makes a real I/O failure indistinguishable
-        // from a syntax error without this guard.
+        // (permissions revoked between realpath() and the actual read).
+        // Symfony's YAML parser would otherwise mask I/O errors as
+        // ParseException, hiding the root cause.
         if (!is_readable($absolutePath)) {
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::LocalRefUnreadable,
@@ -192,37 +162,8 @@ final class ExternalRefLoader
             );
         }
 
-        try {
-            $decoded = Yaml::parseFile($absolutePath);
-        } catch (ParseException $e) {
-            throw new InvalidOpenApiSpecException(
-                InvalidOpenApiSpecReason::MalformedYaml,
-                sprintf('Failed to parse YAML $ref target %s: %s', $refPath, $e->getMessage()),
-                ref: $refPath,
-                previous: $e,
-            );
-        }
+        $content = (string) file_get_contents($absolutePath);
 
-        return self::ensureMappingRoot($decoded, $refPath, $absolutePath);
-    }
-
-    /** @return array<string, mixed> */
-    private static function ensureMappingRoot(mixed $decoded, string $refPath, string $absolutePath): array
-    {
-        if (!is_array($decoded)) {
-            throw new InvalidOpenApiSpecException(
-                InvalidOpenApiSpecReason::NonMappingRoot,
-                sprintf(
-                    '$ref target must decode to a mapping (got %s): %s (resolved to %s)',
-                    get_debug_type($decoded),
-                    $refPath,
-                    $absolutePath,
-                ),
-                ref: $refPath,
-            );
-        }
-
-        /** @var array<string, mixed> $decoded */
-        return $decoded;
+        return SpecDocumentDecoder::decodeYaml($content, $refPath);
     }
 }

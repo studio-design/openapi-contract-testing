@@ -347,10 +347,12 @@ class OpenApiRefResolverTest extends TestCase
     }
 
     #[Test]
-    public function throws_remote_ref_not_implemented_for_url_ref(): void
+    public function throws_remote_ref_disallowed_when_allow_remote_refs_is_off(): void
     {
-        // HTTP(S) refs are reserved for a follow-up PR with explicit
-        // opt-in semantics around remote network access.
+        // HTTP(S) ref resolution is opt-in. The default `allowRemoteRefs:
+        // false` rejects every remote ref before any HTTP client check
+        // runs, so a misconfigured wiring cannot accidentally hit the
+        // network.
         $spec = [
             'components' => [
                 'schemas' => [
@@ -363,7 +365,7 @@ class OpenApiRefResolverTest extends TestCase
             OpenApiRefResolver::resolve($spec);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
-            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefNotImplemented, $e->reason);
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefDisallowed, $e->reason);
         }
     }
 

@@ -220,7 +220,7 @@ class OpenApiRefResolverExternalRefsTest extends TestCase
     }
 
     #[Test]
-    public function throws_remote_ref_not_implemented_for_https_ref(): void
+    public function throws_remote_ref_disallowed_for_https_ref_when_flag_is_off(): void
     {
         $rootPath = $this->workDir . '/openapi.json';
         file_put_contents($rootPath, '{}');
@@ -231,13 +231,13 @@ class OpenApiRefResolverExternalRefsTest extends TestCase
             OpenApiRefResolver::resolve($spec, $rootPath);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
-            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefNotImplemented, $e->reason);
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefDisallowed, $e->reason);
             $this->assertStringContainsString('https://example.com/pet.json', $e->getMessage());
         }
     }
 
     #[Test]
-    public function throws_remote_ref_not_implemented_for_http_ref(): void
+    public function throws_remote_ref_disallowed_for_http_ref_when_flag_is_off(): void
     {
         $rootPath = $this->workDir . '/openapi.json';
         file_put_contents($rootPath, '{}');
@@ -248,7 +248,7 @@ class OpenApiRefResolverExternalRefsTest extends TestCase
             OpenApiRefResolver::resolve($spec, $rootPath);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
-            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefNotImplemented, $e->reason);
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefDisallowed, $e->reason);
         }
     }
 
