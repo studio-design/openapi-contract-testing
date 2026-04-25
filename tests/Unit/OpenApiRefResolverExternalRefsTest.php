@@ -269,6 +269,133 @@ class OpenApiRefResolverExternalRefsTest extends TestCase
     }
 
     #[Test]
+    public function detects_whole_file_cycle_between_two_files(): void
+    {
+        // a.json -> b.json -> a.json with no fragment on either side.
+        // This exercises the chainKey = absolutePath branch in
+        // resolveExternalRef, which is distinct from the fragment branch
+        // covered by detects_cycle_across_two_files.
+        $rootPath = $this->workDir . '/openapi.json';
+        file_put_contents($rootPath, '{}');
+        file_put_contents($this->workDir . '/a.json', '{"$ref":"./b.json"}');
+        file_put_contents($this->workDir . '/b.json', '{"$ref":"./a.json"}');
+
+        $spec = ['components' => ['schemas' => ['Start' => ['$ref' => './a.json']]]];
+
+        try {
+            OpenApiRefResolver::resolve($spec, $rootPath);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::CircularRef, $e->reason);
+        }
+    }
+
+    #[Test]
+    public function document_cache_is_per_resolution_call_not_global(): void
+    {
+        // The cache lives only for the duration of one resolve() call.
+        // A second call against the same root spec must re-decode the
+        // external file, picking up any change that happened between
+        // calls. Without per-call scoping, hot-reloading specs in test
+        // watchers would silently see stale data.
+        $rootPath = $this->workDir . '/openapi.json';
+        file_put_contents($rootPath, '{}');
+        $petPath = $this->workDir . '/pet.json';
+        file_put_contents($petPath, '{"type":"object"}');
+
+        $spec1 = ['components' => ['schemas' => ['Pet' => ['$ref' => './pet.json']]]];
+        $first = OpenApiRefResolver::resolve($spec1, $rootPath);
+        $this->assertSame(['type' => 'object'], $first['components']['schemas']['Pet']);
+
+        // Mutate the external file and resolve a fresh spec; the second
+        // call must reflect the new content.
+        file_put_contents($petPath, '{"type":"string"}');
+        $spec2 = ['components' => ['schemas' => ['Pet' => ['$ref' => './pet.json']]]];
+        $second = OpenApiRefResolver::resolve($spec2, $rootPath);
+        $this->assertSame(['type' => 'string'], $second['components']['schemas']['Pet']);
+    }
+
+    #[Test]
+    public function decodes_json_pointer_escapes_in_external_fragment(): void
+    {
+        // The external file has keys with literal `/` and `~` characters,
+        // which JSON Pointer escapes as `~1` and `~0`. The fragment
+        // splitter must hand the raw escapes to lookup() rather than
+        // pre-decoding around the `#`.
+        $rootPath = $this->workDir . '/openapi.json';
+        file_put_contents($rootPath, '{}');
+        file_put_contents(
+            $this->workDir . '/schemas.json',
+            '{"a/b":{"type":"object","required":["id"]},"c~d":{"type":"string"}}',
+        );
+
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Slash' => ['$ref' => './schemas.json#/a~1b'],
+                    'Tilde' => ['$ref' => './schemas.json#/c~0d'],
+                ],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec, $rootPath);
+
+        $this->assertSame(['type' => 'object', 'required' => ['id']], $resolved['components']['schemas']['Slash']);
+        $this->assertSame(['type' => 'string'], $resolved['components']['schemas']['Tilde']);
+    }
+
+    #[Test]
+    public function throws_non_object_target_for_external_scalar_fragment(): void
+    {
+        // Fragment lookup that lands on a scalar should throw the same
+        // NonObjectRefTarget as the internal-ref path. Without an
+        // external-ref-specific test for this branch, a regression
+        // would silently substitute a string into a schema slot.
+        $rootPath = $this->workDir . '/openapi.json';
+        file_put_contents($rootPath, '{}');
+        file_put_contents($this->workDir . '/schemas.json', '{"Greeting":"hello"}');
+
+        $spec = ['components' => ['schemas' => ['Bad' => ['$ref' => './schemas.json#/Greeting']]]];
+
+        try {
+            OpenApiRefResolver::resolve($spec, $rootPath);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::NonObjectRefTarget, $e->reason);
+        }
+    }
+
+    #[Test]
+    public function throws_bare_fragment_for_trailing_hash_without_pointer(): void
+    {
+        $rootPath = $this->workDir . '/openapi.json';
+        file_put_contents($rootPath, '{}');
+        file_put_contents($this->workDir . '/pet.json', '{"type":"object"}');
+
+        $spec = ['components' => ['schemas' => ['Pet' => ['$ref' => './pet.json#']]]];
+
+        try {
+            OpenApiRefResolver::resolve($spec, $rootPath);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::BareFragmentRef, $e->reason);
+        }
+    }
+
+    #[Test]
+    public function throws_empty_ref_on_empty_string(): void
+    {
+        $spec = ['components' => ['schemas' => ['Bad' => ['$ref' => '']]]];
+
+        try {
+            OpenApiRefResolver::resolve($spec);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::EmptyRef, $e->reason);
+        }
+    }
+
+    #[Test]
     public function legacy_call_without_source_file_still_resolves_internal_refs(): void
     {
         $spec = [

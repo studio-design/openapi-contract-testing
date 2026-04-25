@@ -40,8 +40,10 @@ final class OpenApiRefResolver
      * filesystem (e.g. `./schemas/pet.yaml`). When `$sourceFile` is `null`,
      * any non-internal `$ref` triggers `LocalRefRequiresSourceFile` so the
      * caller knows it must thread the path through. HTTP(S) and `file://`
-     * refs are always rejected — the former is reserved for a future PR
-     * with explicit opt-in semantics, the latter for security.
+     * refs are always rejected: `RemoteRefNotImplemented` (HTTP fetching
+     * is not currently part of the resolver) and `FileSchemeNotSupported`
+     * (`file://` URLs bypass source-file-relative resolution and are
+     * blocked to keep the path-resolution rules predictable).
      *
      * @param array<string, mixed> $spec
      *
@@ -109,12 +111,6 @@ final class OpenApiRefResolver
     }
 
     /**
-     * Dispatch a `$ref` to the right resolution path: internal pointer
-     * lookup against the current document, or external file load. URL
-     * schemes that this PR cannot honour (`http://`, `https://`,
-     * `file://`) throw with dedicated reasons so consumers can branch
-     * on `$reason` instead of substring-matching the message.
-     *
      * @param array<int|string, mixed> $node
      * @param array<string, mixed> $root
      * @param list<string> $chain
@@ -128,6 +124,14 @@ final class OpenApiRefResolver
         ?string $currentSourceFile,
         array &$documentCache,
     ): void {
+        if ($ref === '') {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::EmptyRef,
+                'Invalid $ref: empty string is not a reference',
+                ref: $ref,
+            );
+        }
+
         if ($ref === '#/' || $ref === '#') {
             // A bare root pointer substitutes the entire spec in place,
             // which triggers unbounded recursion before cycle detection
@@ -141,10 +145,14 @@ final class OpenApiRefResolver
         }
 
         if (str_starts_with($ref, 'file://')) {
+            // Reject `file://` separately from ordinary path refs so a
+            // visual scan of the spec doesn't gloss over it. Path-traversal
+            // sandboxing for ordinary paths is intentionally absent — see
+            // ExternalRefLoader's class-level docblock for the trust model.
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::FileSchemeNotSupported,
                 sprintf(
-                    '`file://` $ref is not supported for security reasons: %s. '
+                    '`file://` $ref is not supported: %s. '
                     . 'Use a relative or absolute filesystem path instead.',
                     $ref,
                 ),
@@ -156,8 +164,8 @@ final class OpenApiRefResolver
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::RemoteRefNotImplemented,
                 sprintf(
-                    'HTTP(S) $ref is not yet supported: %s. '
-                    . 'This will be added in a future release with an opt-in PSR-18 client.',
+                    'HTTP(S) $ref is not currently supported: %s. '
+                    . 'Pre-bundle the spec or open an issue if remote resolution would help your workflow.',
                     $ref,
                 ),
                 ref: $ref,
@@ -178,7 +186,6 @@ final class OpenApiRefResolver
             );
         }
 
-        // Anything else is an external filesystem ref.
         if ($currentSourceFile === null) {
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::LocalRefRequiresSourceFile,
@@ -260,7 +267,28 @@ final class OpenApiRefResolver
         string $currentSourceFile,
         array &$documentCache,
     ): void {
-        [$pathPart, $fragment] = self::splitRef($ref);
+        [$pathPart, $fragment, $hadHash] = self::splitRef($ref);
+
+        if ($pathPart === '') {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::EmptyRef,
+                sprintf('Invalid $ref: %s has an empty path part', $ref),
+                ref: $ref,
+            );
+        }
+
+        // A trailing `#` with nothing after it (`./pet.yaml#`) is
+        // ambiguous. Reject it explicitly so the author makes the
+        // intent clear: drop the `#` for whole-file, or write `#/...`
+        // for a JSON Pointer.
+        if ($hadHash && $fragment === '') {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::BareFragmentRef,
+                sprintf('Invalid $ref: %s has an empty fragment after `#`', $ref),
+                ref: $ref,
+            );
+        }
+
         $document = ExternalRefLoader::loadDocument($pathPart, $currentSourceFile, $documentCache);
         $absolutePath = $document['absolutePath'];
         $newRoot = $document['decoded'];
@@ -317,21 +345,22 @@ final class OpenApiRefResolver
     }
 
     /**
-     * Split a `$ref` like `./schemas/pet.yaml#/components/schemas/Pet` into
-     * its path part and fragment. The fragment is returned without the
-     * leading `#` so callers can decide how to combine it with the loaded
-     * document's root.
+     * Split a `$ref` like `./schemas/pet.yaml#/components/schemas/Pet`
+     * into path part, fragment (without the leading `#`), and a flag
+     * marking whether `#` was present at all. Callers need the flag to
+     * distinguish `./pet.yaml` (no `#`, whole-file) from `./pet.yaml#`
+     * (empty fragment, ambiguous and rejected).
      *
-     * @return array{0: string, 1: string}
+     * @return array{0: string, 1: string, 2: bool}
      */
     private static function splitRef(string $ref): array
     {
         $hashPos = strpos($ref, '#');
         if ($hashPos === false) {
-            return [$ref, ''];
+            return [$ref, '', false];
         }
 
-        return [substr($ref, 0, $hashPos), substr($ref, $hashPos + 1)];
+        return [substr($ref, 0, $hashPos), substr($ref, $hashPos + 1), true];
     }
 
     private static function canonicalChainKey(?string $sourceFile, string $ref): string

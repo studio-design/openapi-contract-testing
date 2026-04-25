@@ -11,9 +11,12 @@ use Studio\OpenApiContractTesting\Internal\YamlAvailability;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
 
+use function chmod;
 use function file_put_contents;
+use function function_exists;
 use function is_dir;
 use function mkdir;
+use function posix_geteuid;
 use function rmdir;
 use function scandir;
 use function sys_get_temp_dir;
@@ -137,13 +140,16 @@ class ExternalRefLoaderTest extends TestCase
             ExternalRefLoader::loadDocument('./bad.json', $sourceFile, $cache);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
-            $this->assertSame(InvalidOpenApiSpecReason::LocalRefDecodeFailed, $e->reason);
+            $this->assertSame(InvalidOpenApiSpecReason::MalformedJson, $e->reason);
             $this->assertStringContainsString('./bad.json', $e->getMessage());
+            // The underlying JsonException is preserved so callers can
+            // surface decoder diagnostics (line/column) without re-parsing.
+            $this->assertNotNull($e->getPrevious());
         }
     }
 
     #[Test]
-    public function throws_local_ref_decode_failed_on_malformed_yaml(): void
+    public function throws_malformed_yaml_on_invalid_indent(): void
     {
         $sourceFile = $this->workDir . '/root.json';
         file_put_contents($sourceFile, '{}');
@@ -154,7 +160,8 @@ class ExternalRefLoaderTest extends TestCase
             ExternalRefLoader::loadDocument('./bad.yaml', $sourceFile, $cache);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
-            $this->assertSame(InvalidOpenApiSpecReason::LocalRefDecodeFailed, $e->reason);
+            $this->assertSame(InvalidOpenApiSpecReason::MalformedYaml, $e->reason);
+            $this->assertNotNull($e->getPrevious());
         }
     }
 
@@ -190,6 +197,49 @@ class ExternalRefLoaderTest extends TestCase
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::YamlLibraryMissing, $e->reason);
+        }
+    }
+
+    #[Test]
+    public function throws_unsupported_extension_for_extensionless_target(): void
+    {
+        $sourceFile = $this->workDir . '/root.json';
+        file_put_contents($sourceFile, '{}');
+        file_put_contents($this->workDir . '/no-ext', '{}');
+
+        try {
+            $cache = [];
+            ExternalRefLoader::loadDocument('./no-ext', $sourceFile, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::UnsupportedExtension, $e->reason);
+            $this->assertStringContainsString('no file extension', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function throws_local_ref_unreadable_when_yaml_target_is_not_readable(): void
+    {
+        // Skip on systems where root can read everything (e.g., CI as root in docker).
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            $this->markTestSkipped('chmod 0000 has no effect for the root user');
+        }
+
+        $sourceFile = $this->workDir . '/root.json';
+        file_put_contents($sourceFile, '{}');
+        $target = $this->workDir . '/locked.yaml';
+        file_put_contents($target, "type: object\n");
+        chmod($target, 0o000);
+
+        try {
+            $cache = [];
+            ExternalRefLoader::loadDocument('./locked.yaml', $sourceFile, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::LocalRefUnreadable, $e->reason);
+        } finally {
+            // Restore mode so tearDown() can unlink the file.
+            chmod($target, 0o644);
         }
     }
 

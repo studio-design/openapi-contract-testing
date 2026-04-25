@@ -15,6 +15,7 @@ use Symfony\Component\Yaml\Yaml;
 
 use function class_exists;
 use function file_put_contents;
+use function json_encode;
 use function mkdir;
 use function rmdir;
 use function sys_get_temp_dir;
@@ -256,6 +257,47 @@ class OpenApiSpecLoaderTest extends TestCase
             $this->assertSame(InvalidOpenApiSpecReason::LocalRefNotFound, $e->reason);
             $this->assertSame('refs-external', $e->specName);
             $this->assertStringContainsString('other-spec.json', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function load_preserves_previous_chain_when_attaching_spec_name(): void
+    {
+        // The loader re-wraps resolver-originated throws via
+        // InvalidOpenApiSpecException::withSpecName(). The wrap must
+        // not drop the original exception (or its own $previous), or
+        // operators lose the underlying decoder diagnostic when an
+        // external $ref target has malformed JSON.
+        $tempDir = sys_get_temp_dir() . '/oct-spec-loader-prev-' . uniqid();
+        mkdir($tempDir);
+
+        try {
+            file_put_contents($tempDir . '/root.json', json_encode([
+                'openapi' => '3.0.3',
+                'info' => ['title' => 'Prev', 'version' => '1.0.0'],
+                'components' => ['schemas' => ['Bad' => ['$ref' => './bad.json']]],
+            ]));
+            file_put_contents($tempDir . '/bad.json', '{ not valid json');
+
+            OpenApiSpecLoader::configure($tempDir);
+
+            try {
+                OpenApiSpecLoader::load('root');
+                $this->fail('expected InvalidOpenApiSpecException');
+            } catch (InvalidOpenApiSpecException $e) {
+                $this->assertSame('root', $e->specName);
+                // First link is the original (pre-wrap) exception.
+                $original = $e->getPrevious();
+                $this->assertInstanceOf(InvalidOpenApiSpecException::class, $original);
+                // Second link is the underlying JsonException carried
+                // by the resolver throw — proves the chain isn't
+                // truncated at the wrap boundary.
+                $this->assertNotNull($original->getPrevious());
+            }
+        } finally {
+            @unlink($tempDir . '/bad.json');
+            @unlink($tempDir . '/root.json');
+            @rmdir($tempDir);
         }
     }
 
