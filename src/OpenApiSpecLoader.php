@@ -17,6 +17,7 @@ use function get_debug_type;
 use function implode;
 use function is_array;
 use function json_decode;
+use function realpath;
 use function rtrim;
 use function sprintf;
 
@@ -86,8 +87,22 @@ final class OpenApiSpecLoader
             ),
         };
 
+        // Canonicalize the source path so the resolver's cycle detection
+        // sees the same key for this file whether it's reached as the
+        // entry spec or as the target of a relative ref from another
+        // file. Without this, `basePath` containing `./` or symlinks
+        // would yield two distinct chain keys for the same document.
+        $canonicalPath = realpath($path);
+        if ($canonicalPath === false) {
+            // resolveSpecFile() proved the file existed; if realpath
+            // fails now it's a races/permissions edge case. Fall back
+            // to the raw path so the message still locates it for the
+            // operator.
+            $canonicalPath = $path;
+        }
+
         try {
-            $resolved = OpenApiRefResolver::resolve($decoded);
+            $resolved = OpenApiRefResolver::resolve($decoded, $canonicalPath);
         } catch (InvalidOpenApiSpecException $e) {
             // The resolver is stateless and therefore cannot know which spec
             // produced the throw. Re-wrap once so consumers (e.g. the coverage
