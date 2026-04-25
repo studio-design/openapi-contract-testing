@@ -12,6 +12,7 @@ use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
 
 use function array_keys;
 use function array_merge;
+use function get_debug_type;
 use function is_array;
 use function preg_last_error_msg;
 use function preg_match;
@@ -136,6 +137,9 @@ final class OpenApiResponseValidator
             $version,
         );
 
+        // Order is body errors first, headers second. Tests that pin
+        // specific positions rely on this; reordering would silently
+        // change diagnostic flow without breaking behaviour.
         $errors = array_merge($bodyErrors, $headerErrors);
 
         if ($errors === []) {
@@ -256,8 +260,26 @@ final class OpenApiResponseValidator
             return [];
         }
 
-        $headersSpec = $responseSpec['headers'] ?? [];
-        if (!is_array($headersSpec) || $headersSpec === []) {
+        if (!isset($responseSpec['headers'])) {
+            return [];
+        }
+
+        $headersSpec = $responseSpec['headers'];
+
+        // A `headers` block that decoded to a non-mapping is a malformed
+        // spec (e.g. YAML scalar where an object was expected). Surface
+        // it as an error so the spec author notices instead of getting
+        // a silent pass that hides every header from validation.
+        if (!is_array($headersSpec)) {
+            return [sprintf(
+                "[response-header] spec 'headers' must be an object for %s %s; got %s.",
+                $method,
+                $matchedPath,
+                get_debug_type($headersSpec),
+            )];
+        }
+
+        if ($headersSpec === []) {
             return [];
         }
 

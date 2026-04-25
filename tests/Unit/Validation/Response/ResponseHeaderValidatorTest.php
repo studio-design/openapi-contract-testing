@@ -71,7 +71,6 @@ class ResponseHeaderValidatorTest extends TestCase
     #[Test]
     public function matches_header_names_case_insensitively(): void
     {
-        // Spec uses canonical casing; actual response uses lower-case (Symfony's HeaderBag does this).
         $headersSpec = [
             'Location' => [
                 'required' => true,
@@ -186,7 +185,6 @@ class ResponseHeaderValidatorTest extends TestCase
     #[Test]
     public function unwraps_single_element_array_value_from_header_bag(): void
     {
-        // Symfony HeaderBag::all() returns array<string, list<string>>.
         $headersSpec = [
             'X-Count' => [
                 'schema' => ['type' => 'integer'],
@@ -264,11 +262,137 @@ class ResponseHeaderValidatorTest extends TestCase
     }
 
     #[Test]
+    public function reports_non_array_header_definition_as_spec_error(): void
+    {
+        // YAML/JSON authoring slips that produce e.g. `Location: "string"`
+        // would silently disable validation otherwise. Surfacing it ensures
+        // the spec author notices.
+        $headersSpec = ['X-Misdefined' => 'string'];
+
+        $errors = $this->validator()->validate(
+            $headersSpec,
+            ['X-Misdefined' => 'whatever'],
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertNotSame([], $errors);
+        $this->assertStringStartsWith('[response-header.X-Misdefined]', $errors[0]);
+        $this->assertStringContainsString('must be an object', $errors[0]);
+    }
+
+    #[Test]
+    public function skips_content_type_with_trailing_whitespace_in_spec_key(): void
+    {
+        // Defensive: a YAML/JSON authoring slip that produces a trailing
+        // space on the Content-Type key must still trigger the OAS-mandated
+        // skip rather than running schema validation.
+        $headersSpec = [
+            'Content-Type ' => [
+                'required' => true,
+                'schema' => ['type' => 'integer'],
+            ],
+        ];
+
+        $errors = $this->validator()->validate($headersSpec, [], OpenApiVersion::V3_0);
+
+        $this->assertSame([], $errors);
+    }
+
+    #[Test]
+    public function passes_when_zero_string_satisfies_minimum_zero_integer_schema(): void
+    {
+        // The missing-check is `=== null || === []`, not `empty()`. Pin
+        // that a literal '0' does NOT collapse to "missing" so a future
+        // refactor can't silently turn `X-RateLimit-Remaining: 0` into
+        // a "header is missing" error.
+        $headersSpec = [
+            'X-Count' => [
+                'required' => true,
+                'schema' => ['type' => 'integer', 'minimum' => 0],
+            ],
+        ];
+
+        $errors = $this->validator()->validate(
+            $headersSpec,
+            ['X-Count' => '0'],
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $errors);
+    }
+
+    #[Test]
+    public function passes_when_empty_string_value_is_present_for_string_schema(): void
+    {
+        // An empty string is a real (though unusual) header value. It must
+        // not collapse to "missing" — the schema decides whether empty
+        // strings are valid via `minLength`.
+        $headersSpec = [
+            'X-Comment' => [
+                'schema' => ['type' => 'string'],
+            ],
+        ];
+
+        $errors = $this->validator()->validate(
+            $headersSpec,
+            ['X-Comment' => ''],
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $errors);
+    }
+
+    #[Test]
+    public function v31_type_array_with_null_validates_against_nullable_integer(): void
+    {
+        // Pin that the OpenApiVersion argument actually flows through and
+        // a 3.1 multi-type declaration `["integer", "null"]` correctly
+        // accepts a clean integer-shaped string. This branch is invisible
+        // to V3_0-only tests because the schema converter handles 3.0's
+        // `nullable: true` differently.
+        $headersSpec = [
+            'X-Tags-Count' => [
+                'schema' => ['type' => ['integer', 'null']],
+            ],
+        ];
+
+        $errors = $this->validator()->validate(
+            $headersSpec,
+            ['X-Tags-Count' => '7'],
+            OpenApiVersion::V3_1,
+        );
+
+        $this->assertSame([], $errors);
+    }
+
+    #[Test]
+    public function array_typed_header_schema_documents_known_limitation(): void
+    {
+        // The validator coerces header values as scalars (matching the
+        // request-side `style: simple` policy), so a `type: array` header
+        // schema cannot succeed: a single-element value gets unwrapped
+        // and fed to opis as a string, which fails the array type check.
+        // This pin documents the known limitation; if array support is
+        // ever added the test will start failing and force a review.
+        $headersSpec = [
+            'X-Tags' => [
+                'schema' => ['type' => 'array', 'items' => ['type' => 'string']],
+            ],
+        ];
+
+        $errors = $this->validator()->validate(
+            $headersSpec,
+            ['X-Tags' => ['a']],
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertNotSame([], $errors);
+        $this->assertStringStartsWith('[response-header.X-Tags', $errors[0]);
+    }
+
+    #[Test]
     public function preserves_original_spec_casing_in_error_messages(): void
     {
-        // Even when the actual header arrives lower-cased, the error
-        // message must echo the spec's casing so authors can grep their
-        // OpenAPI document directly.
         $headersSpec = [
             'X-RateLimit-Remaining' => [
                 'required' => true,

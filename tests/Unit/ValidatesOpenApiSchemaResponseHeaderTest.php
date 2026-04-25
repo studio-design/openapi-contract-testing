@@ -87,4 +87,29 @@ class ValidatesOpenApiSchemaResponseHeaderTest extends TestCase
             $this->assertStringContainsString('[response-header.X-RateLimit-Remaining]', $e->getMessage());
         }
     }
+
+    #[Test]
+    public function fails_with_only_header_errors_when_body_is_valid(): void
+    {
+        // Pin that header validation runs INDEPENDENTLY of body validation.
+        // Without this guarantee a regression that only triggers headers
+        // when body fails would slip through — both prior tests have body
+        // and header errors covarying.
+        $body = (string) json_encode(['id' => 1], JSON_THROW_ON_ERROR);
+        $response = $this->makeTestResponse($body, 201, [
+            'Content-Type' => 'application/json',
+            // Location intentionally omitted; body is otherwise valid.
+        ]);
+
+        try {
+            $this->assertResponseMatchesOpenApiSchema($response, HttpMethod::POST, '/pets');
+            $this->fail('expected AssertionFailedError');
+        } catch (AssertionFailedError $e) {
+            $message = $e->getMessage();
+            $this->assertStringContainsString('[response-header.Location]', $message);
+            // No body-shaped errors should appear in the same failure.
+            $this->assertStringNotContainsString('[/]', $message);
+            $this->assertStringNotContainsString('[response-body]', $message);
+        }
+    }
 }

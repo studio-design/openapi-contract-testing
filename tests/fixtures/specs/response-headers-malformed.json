@@ -1,0 +1,59 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Response headers malformed",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/items/non-object": {
+            "get": {
+                "operationId": "getItemNonObjectHeaders",
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "headers": "this should be an object",
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/items/empty": {
+            "get": {
+                "operationId": "getItemEmptyHeaders",
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "headers": {},
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/items/scalar-entry": {
+            "get": {
+                "operationId": "getItemScalarHeader",
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "headers": {
+                            "X-Misdefined": "string"
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": { "type": "object" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -20,6 +20,7 @@ use function is_array;
 use function is_scalar;
 use function sprintf;
 use function strtolower;
+use function trim;
 
 /**
  * Validate the response-side `headers` block against the OpenAPI spec.
@@ -29,7 +30,8 @@ use function strtolower;
  * Error messages preserve the spec's original casing so authors can
  * grep their OpenAPI document directly. The `[response-header.<Name>]`
  * prefix distinguishes these errors from request-side `[header.<Name>]`
- * and body `[body]` errors when they share an `OpenApiValidationResult`.
+ * and body `[/<json-pointer>]` errors when they share an
+ * `OpenApiValidationResult`.
  *
  * Per OAS 3.0/3.1, a `Content-Type` entry under `responses.<code>.headers`
  * SHALL be ignored — the response's actual content type is governed by
@@ -42,7 +44,12 @@ use function strtolower;
  * scalar schemas produce a hard error — frameworks disagree on which of
  * the repeated values "wins" (Laravel: first, Symfony: last), so silently
  * picking one would mask a drift the contract test exists to expose.
- * Empty arrays are treated as missing.
+ * Empty arrays are treated as missing. `style: simple` with
+ * `type: array | object` is out of scope; such schemas will fail with a
+ * type mismatch because header values are coerced as scalars.
+ *
+ * @phpstan-type HeaderObject array{required?: bool, schema?: array<string, mixed>}
+ * @phpstan-type HeadersSpec array<string, HeaderObject|mixed>
  */
 final class ResponseHeaderValidator
 {
@@ -57,7 +64,7 @@ final class ResponseHeaderValidator
     ) {}
 
     /**
-     * @param array<string, mixed> $headersSpec the `responses.<code>.headers` map
+     * @param HeadersSpec $headersSpec the `responses.<code>.headers` map
      * @param array<array-key, mixed> $actualHeaders the response's actual headers, as returned by HeaderBag::all()
      *
      * @return string[]
@@ -72,14 +79,24 @@ final class ResponseHeaderValidator
         $normalizedHeaders = HeaderNormalizer::normalize($actualHeaders);
 
         foreach ($headersSpec as $name => $headerObject) {
-            // Spec keys are always strings per OAS, but the parameter type
-            // is array<string, mixed> so the static analyser sees them as
-            // already-typed strings; skip non-arrays only.
+            // Malformed entry (e.g. `Location: "string"` from a YAML
+            // authoring slip) must surface — silent skip would hide
+            // every header from validation.
             if (!is_array($headerObject)) {
+                $errors[] = sprintf(
+                    '[response-header.%s] header definition must be an object; got %s.',
+                    $name,
+                    get_debug_type($headerObject),
+                );
+
                 continue;
             }
 
-            $lowerName = strtolower($name);
+            // Trim defensively before matching the IGNORED list so a spec
+            // key like `"Content-Type "` (trailing whitespace from a
+            // YAML/JSON authoring slip) still gets the OAS-mandated skip
+            // instead of unexpectedly running schema validation.
+            $lowerName = strtolower(trim($name));
 
             if (in_array($lowerName, self::IGNORED_HEADER_NAMES, true)) {
                 continue;
@@ -89,7 +106,9 @@ final class ResponseHeaderValidator
 
             // Required headers without a schema would silently pass every
             // response, so surface as a hard spec error. Optional entries
-            // without a schema have nothing to validate — let them through.
+            // without a schema have nothing to validate against — there is
+            // no contract to check, so the header is effectively
+            // unconstrained even if a value is present.
             if (!isset($headerObject['schema']) || !is_array($headerObject['schema'])) {
                 if ($required) {
                     $errors[] = sprintf(

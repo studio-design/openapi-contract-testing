@@ -1136,10 +1136,8 @@ class OpenApiResponseValidatorTest extends TestCase
     #[Test]
     public function null_response_headers_argument_preserves_legacy_body_only_behaviour(): void
     {
-        // Existing callers that pre-date the headers parameter pass null (or
-        // omit it entirely). The spec defines a required Location header, but
-        // because `null` opts out of header validation, the body-only path
-        // continues to pass.
+        // The spec defines a required Location header, but `null` opts
+        // out of header validation entirely so the body-only path passes.
         $result = $this->validator->validate(
             'response-headers',
             'POST',
@@ -1235,5 +1233,194 @@ class OpenApiResponseValidatorTest extends TestCase
         // appear so the developer sees the full picture in one assertion.
         $this->assertStringContainsString('id', $joined);
         $this->assertStringContainsString('[response-header.Location]', $joined);
+    }
+
+    #[Test]
+    public function no_content_response_with_required_header_runs_header_validation(): void
+    {
+        // The body validator returns no errors for the empty `content`
+        // block; this pins that the orchestrator nevertheless runs header
+        // validation so 204 + required `Location` (a real-world POST/DELETE
+        // pattern) doesn't silently bypass the contract.
+        $result = $this->validator->validate(
+            'response-headers-edge',
+            'DELETE',
+            '/items',
+            204,
+            null,
+            null,
+            [],
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertContains(
+            '[response-header.X-Audit-Id] required header is missing.',
+            $result->errors(),
+        );
+    }
+
+    #[Test]
+    public function skip_by_status_code_short_circuits_header_validation(): void
+    {
+        // The default 5xx skip suppresses both body and header checks —
+        // covered endpoints that only ever return 5xx in tests should
+        // not accumulate `[response-header]` errors against required-header
+        // declarations.
+        $result = $this->validator->validate(
+            'response-headers-edge',
+            'GET',
+            '/items/never-thrown',
+            500,
+            null,
+            null,
+            [],
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
+    }
+
+    #[Test]
+    public function header_validator_exception_is_caught_by_error_boundary(): void
+    {
+        // A spec with an unterminated regex pattern in a header schema
+        // makes opis throw a SchemaException at validation time. The
+        // ValidatorErrorBoundary wrap converts it to a `[response-header]`
+        // error string instead of letting the exception abort the test.
+        $result = $this->validator->validate(
+            'response-headers-edge',
+            'GET',
+            '/items/throws',
+            200,
+            (object) [],
+            'application/json',
+            ['X-Bad-Pattern' => 'value'],
+        );
+
+        $this->assertFalse($result->isValid());
+        $joined = implode(' | ', $result->errors());
+        $this->assertStringContainsString('[response-header]', $joined);
+    }
+
+    #[Test]
+    public function ref_resolved_header_definition_is_validated_against_inlined_schema(): void
+    {
+        // `$ref` headers are inlined by OpenApiRefResolver before validation.
+        // Pin that the inlined schema (here, `format: uuid`) actually flows
+        // through and fails on a non-UUID value.
+        $result = $this->validator->validate(
+            'response-headers-edge',
+            'GET',
+            '/items/ref-headers',
+            200,
+            (object) [],
+            'application/json',
+            ['X-Trace-Id' => 'not-a-uuid'],
+        );
+
+        $this->assertFalse($result->isValid());
+        $joined = implode(' | ', $result->errors());
+        $this->assertStringContainsString('[response-header.X-Trace-Id', $joined);
+    }
+
+    #[Test]
+    public function v31_nullable_integer_header_accepts_clean_value(): void
+    {
+        // Pin the OAS 3.1 `type: ["integer", "null"]` path. The 3.0 fixture
+        // suite doesn't exercise multi-type declarations, so without this
+        // a regression in the version arg's flow-through would go silent.
+        $result = $this->validator->validate(
+            'response-headers-edge',
+            'GET',
+            '/items/v31',
+            200,
+            (object) [],
+            'application/json',
+            ['X-Tags-Count' => '5'],
+        );
+
+        $this->assertTrue($result->isValid());
+    }
+
+    #[Test]
+    public function malformed_headers_block_surfaces_as_spec_error(): void
+    {
+        // `headers: "string"` (a YAML/JSON authoring slip) used to
+        // silently disable validation for the entire response. Now it
+        // produces a `[response-header]` spec error so the spec author
+        // notices.
+        $result = $this->validator->validate(
+            'response-headers-malformed',
+            'GET',
+            '/items/non-object',
+            200,
+            (object) [],
+            'application/json',
+            [],
+        );
+
+        $this->assertFalse($result->isValid());
+        $joined = implode(' | ', $result->errors());
+        $this->assertStringContainsString('[response-header]', $joined);
+        $this->assertStringContainsString('must be an object', $joined);
+    }
+
+    #[Test]
+    public function empty_headers_block_passes_validation(): void
+    {
+        // `headers: {}` is a legitimate "this response has no documented
+        // headers" declaration. No errors should surface.
+        $result = $this->validator->validate(
+            'response-headers-malformed',
+            'GET',
+            '/items/empty',
+            200,
+            (object) [],
+            'application/json',
+            [],
+        );
+
+        $this->assertTrue($result->isValid());
+    }
+
+    #[Test]
+    public function scalar_header_entry_is_reported_per_header(): void
+    {
+        // A non-array header object inside an otherwise-valid headers map
+        // surfaces a per-name error so the spec author can pinpoint which
+        // entry needs fixing.
+        $result = $this->validator->validate(
+            'response-headers-malformed',
+            'GET',
+            '/items/scalar-entry',
+            200,
+            (object) [],
+            'application/json',
+            ['X-Misdefined' => 'whatever'],
+        );
+
+        $this->assertFalse($result->isValid());
+        $joined = implode(' | ', $result->errors());
+        $this->assertStringContainsString('[response-header.X-Misdefined]', $joined);
+        $this->assertStringContainsString('must be an object', $joined);
+    }
+
+    #[Test]
+    public function optional_header_with_no_schema_passes_silently_when_value_present(): void
+    {
+        // Documented behaviour: optional headers with no schema have
+        // nothing to validate against. A garbage value flows through
+        // without error because there is no contract to violate.
+        $result = $this->validator->validate(
+            'response-headers-edge',
+            'GET',
+            '/items/optional-no-schema',
+            200,
+            (object) [],
+            'application/json',
+            ['X-Loose' => 'literally-anything'],
+        );
+
+        $this->assertTrue($result->isValid());
     }
 }
