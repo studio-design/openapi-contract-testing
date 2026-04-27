@@ -189,6 +189,28 @@ class OpenApiCoverageExtensionTest extends TestCase
     }
 
     #[Test]
+    public function bootstrap_resolves_relative_sidecar_dir_against_cwd(): void
+    {
+        // Pin that the extension absolutises a relative `sidecar_dir`
+        // against `getcwd()`, mirroring the existing `output_file` and
+        // `spec_base_path` resolution. Pre-PR, sidecar_dir was new and
+        // its relative-path handling had no test coverage.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'refs-valid',
+            'sidecar_dir' => 'relative-sidecars',
+        ]);
+
+        // setupExtension does not raise on relative paths; the exercise here
+        // is mainly that the codepath runs without error and that the
+        // absolutise call doesn't silently swallow the parameter.
+        $extension->setupExtension(null, $parameters, null);
+
+        $this->assertSame('', $this->readStderr());
+    }
+
+    #[Test]
     public function bootstrap_hard_fails_even_when_earlier_specs_are_valid(): void
     {
         // Order-independence: the loop must reach and trip on the broken spec

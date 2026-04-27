@@ -8,13 +8,16 @@ use const FILE_APPEND;
 
 use PHPUnit\Event\TestRunner\ExecutionFinished;
 use PHPUnit\Event\TestRunner\ExecutionFinishedSubscriber;
+use RuntimeException;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\SpecFileNotFoundException;
 
 use function file_put_contents;
+use function getenv;
 use function is_callable;
+use function trim;
 
 /**
  * @phpstan-import-type CoverageResult from OpenApiCoverageTracker
@@ -26,6 +29,10 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
      * @param null|callable(string): void $stderrWriter Optional sink for warnings (stale/invalid specs,
      *                                                  failed file_put_contents). Falls back to {@see OpenApiCoverageExtension::writeStderr()} when
      *                                                  null. Injected for testability — the extension stays the default backstop in production.
+     * @param null|string $sidecarDir Directory the worker-mode branch will drop its JSON sidecar into. When the
+     *                                subscriber detects `TEST_TOKEN` (set by paratest in every child process) it
+     *                                short-circuits rendering and writes the tracker state here for the merge CLI
+     *                                to pick up. `null` falls back to a default under `sys_get_temp_dir()`.
      */
     public function __construct(
         private array $specs,
@@ -33,11 +40,22 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         private ConsoleOutput $consoleOutput,
         private ?string $githubSummaryPath,
         private mixed $stderrWriter = null,
+        private ?string $sidecarDir = null,
     ) {}
 
     /** @phpcsSuppress SlevomatCodingStandard.Functions.UnusedParameter.UnusedParameter */
     public function notify(ExecutionFinished $event): void
     {
+        $workerToken = self::resolveWorkerToken();
+        if ($workerToken !== null) {
+            $this->writeWorkerSidecar($workerToken);
+
+            // Free cached spec data; the merge CLI re-loads on its own.
+            OpenApiSpecLoader::clearCache();
+
+            return;
+        }
+
         $results = $this->computeAllResults();
 
         // Free cached spec data now that coverage has been computed
@@ -51,6 +69,44 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
 
         if ($this->outputFile !== null || $this->githubSummaryPath !== null) {
             $this->writeMarkdownReport($results);
+        }
+    }
+
+    /**
+     * Resolve the paratest worker token from the environment. Paratest sets
+     * `TEST_TOKEN` for every worker process (currently a 1..N slot index)
+     * and unsets it for sequential PHPUnit runs. We treat the presence of
+     * this var as the single signal that puts the subscriber into
+     * sidecar-only mode.
+     *
+     * Parallel runners that wrap paratest (e.g. Pest `--parallel`) inherit
+     * the same env var, so no per-runner detection is needed.
+     */
+    private static function resolveWorkerToken(): ?string
+    {
+        $token = getenv('TEST_TOKEN');
+        if ($token === false || trim($token) === '') {
+            return null;
+        }
+
+        return $token;
+    }
+
+    private function writeWorkerSidecar(string $token): void
+    {
+        $dir = $this->sidecarDir ?? OpenApiCoverageExtension::defaultSidecarDir();
+
+        try {
+            CoverageSidecarWriter::write($dir, $token, OpenApiCoverageTracker::exportState());
+        } catch (RuntimeException $e) {
+            // The contract assertion that triggered notify() has already
+            // passed; we don't fail the test run on sidecar I/O. But we
+            // MUST drop a failure marker so the downstream merge CLI can
+            // detect this worker is missing and exit non-zero. Without the
+            // marker the merge would silently under-count coverage by one
+            // worker's worth of data.
+            $this->writeStderr("[OpenAPI Coverage] WARNING: failed to write sidecar (token={$token}): {$e->getMessage()}\n");
+            CoverageSidecarWriter::writeFailureMarker($dir, $token, $e->getMessage());
         }
     }
 
