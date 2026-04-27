@@ -28,21 +28,24 @@ use function unlink;
  * merge CLI will later combine into a single report.
  *
  * Filename format: `part-<token>-<pid>.json`. `<token>` identifies the
- * paratest slot (1..N) and is enough to disambiguate within one run; `<pid>`
- * is appended so a leftover sidecar from a crashed previous run cannot be
- * mistaken for the current one. The pair plus a defensive sanitiser keeps
- * the path filesystem-safe across runners that inject unexpected characters
- * into `TEST_TOKEN`.
+ * paratest slot (paratest currently uses 1..N integers, but anything is
+ * accepted and sanitised); `<pid>` is appended so a leftover sidecar from
+ * a crashed previous run cannot be mistaken for the current one.
  *
  * Atomicity: written to a sibling `*.tmp` first, then `rename()`d into place
- * so a partial file is never observable by the reader.
+ * so a partial file is never observable by the reader. POSIX `rename()` is
+ * atomic when source and destination live on the same filesystem; on
+ * Windows or across filesystem boundaries the underlying `MoveFileEx` /
+ * copy+unlink fallback may not provide the same guarantee. Configure
+ * `sidecar_dir` to live alongside the merge target (same FS) to keep the
+ * atomic guarantee.
  */
 final class CoverageSidecarWriter
 {
+    public const FAILURE_MARKER_PREFIX = 'failed-';
     public const FILENAME_PREFIX = 'part-';
     public const FILENAME_SUFFIX = '.json';
 
-    /** Static-only utility — no instances. */
     private function __construct() {}
 
     /**
@@ -52,14 +55,8 @@ final class CoverageSidecarWriter
      */
     public static function write(string $sidecarDir, string $testToken, array $state): string
     {
-        $dir = rtrim($sidecarDir, '/' . DIRECTORY_SEPARATOR);
-        if (!is_dir($dir) && !@mkdir($dir, 0o755, recursive: true) && !is_dir($dir)) {
-            throw new RuntimeException(sprintf('failed to create sidecar dir "%s"', $dir));
-        }
-
-        $safeToken = self::sanitise($testToken);
-        $pid = (string) (getmypid() ?: 0);
-        $finalPath = sprintf('%s/%s%s-%s%s', $dir, self::FILENAME_PREFIX, $safeToken, $pid, self::FILENAME_SUFFIX);
+        $dir = self::ensureDir($sidecarDir);
+        $finalPath = self::pathFor($dir, self::FILENAME_PREFIX, $testToken);
         $tmpPath = $finalPath . '.tmp';
 
         try {
@@ -74,12 +71,68 @@ final class CoverageSidecarWriter
         }
 
         if (!@rename($tmpPath, $finalPath)) {
+            // Best-effort cleanup; the rename failure is the primary error.
             @unlink($tmpPath);
 
             throw new RuntimeException(sprintf('failed to rename sidecar "%s" -> "%s"', $tmpPath, $finalPath));
         }
 
         return $finalPath;
+    }
+
+    /**
+     * Drop a marker file when {@see self::write()} fails. The merge CLI
+     * detects markers and exits non-zero rather than silently producing an
+     * under-counted report from N-1 workers.
+     *
+     * Marker is itself written best-effort: if the sidecar dir cannot be
+     * created at all, there's nowhere to put a marker either, and the
+     * caller falls back to STDERR-only signalling. That's acceptable
+     * because the failure mode is already loud (worker can't write to its
+     * sidecar dir at all).
+     */
+    public static function writeFailureMarker(string $sidecarDir, string $testToken, string $reason): ?string
+    {
+        try {
+            $dir = self::ensureDir($sidecarDir);
+        } catch (RuntimeException) {
+            return null;
+        }
+        $path = self::pathFor($dir, self::FAILURE_MARKER_PREFIX, $testToken);
+        $body = json_encode(['testToken' => $testToken, 'reason' => $reason]);
+        if ($body === false || @file_put_contents($path, $body) === false) {
+            return null;
+        }
+
+        return $path;
+    }
+
+    /**
+     * @throws RuntimeException
+     */
+    private static function ensureDir(string $sidecarDir): string
+    {
+        $dir = rtrim($sidecarDir, '/' . DIRECTORY_SEPARATOR);
+        if (!is_dir($dir) && !@mkdir($dir, 0o755, recursive: true) && !is_dir($dir)) {
+            throw new RuntimeException(sprintf('failed to create sidecar dir "%s"', $dir));
+        }
+
+        return $dir;
+    }
+
+    /**
+     * @throws RuntimeException when the runtime cannot return a PID
+     */
+    private static function pathFor(string $dir, string $prefix, string $testToken): string
+    {
+        $pid = getmypid();
+        if ($pid === false) {
+            // Fail loudly — colliding sidecars from PID-less workers would
+            // silently overwrite each other.
+            throw new RuntimeException('getmypid() returned false; cannot derive a unique sidecar filename');
+        }
+
+        return sprintf('%s/%s%s-%s%s', $dir, $prefix, self::sanitise($testToken), (string) $pid, self::FILENAME_SUFFIX);
     }
 
     /**

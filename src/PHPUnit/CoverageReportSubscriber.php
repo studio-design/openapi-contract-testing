@@ -74,12 +74,13 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
 
     /**
      * Resolve the paratest worker token from the environment. Paratest sets
-     * `TEST_TOKEN` for every worker process (slot index 1..N) and unsets it
-     * for sequential PHPUnit runs. We treat the presence of this var as the
-     * single signal that puts the subscriber into sidecar-only mode.
+     * `TEST_TOKEN` for every worker process (currently a 1..N slot index)
+     * and unsets it for sequential PHPUnit runs. We treat the presence of
+     * this var as the single signal that puts the subscriber into
+     * sidecar-only mode.
      *
-     * Pest v4 `--parallel` shells out to paratest, so the same env var is
-     * present and no extra detection is needed.
+     * Parallel runners that wrap paratest (e.g. Pest `--parallel`) inherit
+     * the same env var, so no per-runner detection is needed.
      */
     private static function resolveWorkerToken(): ?string
     {
@@ -98,7 +99,14 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         try {
             CoverageSidecarWriter::write($dir, $token, OpenApiCoverageTracker::exportState());
         } catch (RuntimeException $e) {
+            // The contract assertion that triggered notify() has already
+            // passed; we don't fail the test run on sidecar I/O. But we
+            // MUST drop a failure marker so the downstream merge CLI can
+            // detect this worker is missing and exit non-zero. Without the
+            // marker the merge would silently under-count coverage by one
+            // worker's worth of data.
             $this->writeStderr("[OpenAPI Coverage] WARNING: failed to write sidecar (token={$token}): {$e->getMessage()}\n");
+            CoverageSidecarWriter::writeFailureMarker($dir, $token, $e->getMessage());
         }
     }
 

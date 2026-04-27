@@ -27,13 +27,13 @@ use function sprintf;
  */
 final class CoverageSidecarReader
 {
-    /** Static-only utility — no instances. */
     private function __construct() {}
 
     /**
-     * Decode every sidecar in the directory, in stable filename order so
-     * `--cleanup` is deterministic and merge order does not vary between
-     * runs.
+     * Decode every sidecar in the directory, in stable filename order
+     * within a single run so `--cleanup` is deterministic and merge order
+     * is reproducible across the same set of sidecars (PIDs are not stable
+     * across runs, so this is intra-run determinism only).
      *
      * Returns an empty list (rather than throwing) for a missing directory:
      * the merge CLI runs in CI right after paratest, where a no-coverage run
@@ -71,13 +71,39 @@ final class CoverageSidecarReader
      */
     public static function listPaths(string $sidecarDir): array
     {
+        return self::globPattern($sidecarDir, CoverageSidecarWriter::FILENAME_PREFIX . '*' . CoverageSidecarWriter::FILENAME_SUFFIX);
+    }
+
+    /**
+     * Worker-side failure markers (see {@see CoverageSidecarWriter::writeFailureMarker()}).
+     * The merge CLI fails loudly when any are present so a missing worker
+     * cannot silently under-count coverage.
+     *
+     * @return list<string>
+     */
+    public static function listFailureMarkerPaths(string $sidecarDir): array
+    {
+        return self::globPattern($sidecarDir, CoverageSidecarWriter::FAILURE_MARKER_PREFIX . '*' . CoverageSidecarWriter::FILENAME_SUFFIX);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function globPattern(string $sidecarDir, string $pattern): array
+    {
         $dir = rtrim($sidecarDir, '/' . DIRECTORY_SEPARATOR);
         if (!is_dir($dir)) {
             return [];
         }
 
-        $pattern = $dir . '/' . CoverageSidecarWriter::FILENAME_PREFIX . '*' . CoverageSidecarWriter::FILENAME_SUFFIX;
-        $matches = glob($pattern) ?: [];
+        $matches = glob($dir . '/' . $pattern);
+        if ($matches === false) {
+            // glob() distinguishes "no matches" (empty array) from a real
+            // I/O error (false). Treat false as a hard failure — the dir
+            // existed two lines ago, so a permission flip or libc glob
+            // failure is a genuine problem the user needs to see.
+            throw new RuntimeException(sprintf('failed to enumerate sidecar dir "%s"', $dir));
+        }
         sort($matches);
 
         /** @var list<string> */

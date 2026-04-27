@@ -169,6 +169,24 @@ class CoverageSidecarTest extends TestCase
     }
 
     #[Test]
+    public function reader_distinguishes_sidecars_from_failure_markers(): void
+    {
+        // The merge CLI reads sidecars and failure markers separately —
+        // markers fail loudly, sidecars decode and merge. Pin that the
+        // reader's filename patterns don't bleed into each other.
+        CoverageSidecarWriter::write($this->tmpDir, '1', ['version' => 1, 'specs' => []]);
+        CoverageSidecarWriter::writeFailureMarker($this->tmpDir, '2', 'simulated failure');
+
+        $sidecars = CoverageSidecarReader::listPaths($this->tmpDir);
+        $markers = CoverageSidecarReader::listFailureMarkerPaths($this->tmpDir);
+
+        $this->assertCount(1, $sidecars);
+        $this->assertCount(1, $markers);
+        $this->assertStringContainsString('part-1-', $sidecars[0]);
+        $this->assertStringContainsString('failed-2-', $markers[0]);
+    }
+
+    #[Test]
     public function reader_lists_paths_for_cleanup(): void
     {
         $a = CoverageSidecarWriter::write($this->tmpDir, '1', ['version' => 1, 'specs' => []]);

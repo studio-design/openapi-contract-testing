@@ -13,11 +13,15 @@ use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
 use Studio\OpenApiContractTesting\PHPUnit\CoverageReportSubscriber;
 use Studio\OpenApiContractTesting\PHPUnit\CoverageSidecarReader;
+use Throwable;
 
+use function file_get_contents;
 use function file_put_contents;
 use function getenv;
+use function getmypid;
 use function glob;
 use function is_dir;
+use function json_decode;
 use function mkdir;
 use function ob_get_clean;
 use function ob_start;
@@ -183,7 +187,8 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
         putenv('TEST_TOKEN=1');
 
         // Pass a path that points at an existing FILE, not a directory, so
-        // mkdir/rename both fail. The subscriber must catch and warn.
+        // mkdir/rename both fail. The subscriber must catch, warn, and
+        // (per C2) drop a failure marker the merge CLI can detect.
         $blocker = sys_get_temp_dir() . '/openapi-coverage-blocker-' . uniqid('', true);
         file_put_contents($blocker, 'not a dir');
 
@@ -199,14 +204,65 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
             },
         );
 
+        $exception = null;
+
         try {
             $subscriber->notify($this->fakeExecutionFinished());
+        } catch (Throwable $e) {
+            $exception = $e;
         } finally {
             @unlink($blocker);
         }
 
+        $this->assertNull($exception, 'sidecar write failure must NOT bubble out of notify()');
         $this->assertStringContainsString('WARNING', $stderrLog);
         $this->assertStringContainsString('sidecar', $stderrLog);
+    }
+
+    #[Test]
+    public function worker_mode_writes_failure_marker_when_sidecar_write_fails(): void
+    {
+        // C2: when the sidecar write fails, the worker drops a
+        // `failed-<token>.json` marker in the sidecar dir so the merge CLI
+        // can detect a missing worker and exit non-zero. Without the
+        // marker, the merge would silently under-count coverage.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        putenv('TEST_TOKEN=7');
+
+        // sidecarDir is writable but the sidecar write itself fails by
+        // pointing the writer at a target whose `*.tmp` rename target is
+        // a directory rather than a file. We simulate this more simply
+        // by pre-occupying the final filename with a directory.
+        mkdir($this->tmpDir, 0o755, recursive: true);
+        $expectedSidecar = $this->tmpDir . '/part-7-' . (string) getmypid() . '.json';
+        mkdir($expectedSidecar, 0o755);
+
+        $subscriber = new CoverageReportSubscriber(
+            specs: ['petstore-3.0'],
+            outputFile: null,
+            consoleOutput: ConsoleOutput::DEFAULT,
+            githubSummaryPath: null,
+            sidecarDir: $this->tmpDir,
+            stderrWriter: static fn(string $msg): null => null,
+        );
+
+        $subscriber->notify($this->fakeExecutionFinished());
+
+        $markerPath = $this->tmpDir . '/failed-7-' . (string) getmypid() . '.json';
+        $this->assertFileExists($markerPath, 'C2: failure marker must be dropped');
+        $payload = json_decode((string) file_get_contents($markerPath), true);
+        $this->assertSame('7', $payload['testToken']);
+        $this->assertNotEmpty($payload['reason']);
+
+        @unlink($markerPath);
+        @rmdir($expectedSidecar);
     }
 
     /**

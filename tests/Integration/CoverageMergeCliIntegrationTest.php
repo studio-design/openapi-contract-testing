@@ -15,6 +15,7 @@ use function escapeshellarg;
 use function fclose;
 use function file_exists;
 use function file_get_contents;
+use function file_put_contents;
 use function glob;
 use function is_resource;
 use function mkdir;
@@ -135,6 +136,88 @@ class CoverageMergeCliIntegrationTest extends TestCase
         $this->assertSame(0, $exit);
         $this->assertStringContainsString('openapi-coverage-merge', $stdout);
         $this->assertStringContainsString('--spec-base-path', $stdout);
+    }
+
+    #[Test]
+    public function bin_exits_two_when_spec_base_path_is_missing(): void
+    {
+        [$exit, , $stderr] = $this->runCli(['--specs=petstore-3.0']);
+
+        $this->assertSame(2, $exit);
+        $this->assertStringContainsString('--spec-base-path is required', $stderr);
+    }
+
+    #[Test]
+    public function bin_no_cleanup_preserves_sidecars(): void
+    {
+        OpenApiSpecLoader::configure($this->repoRoot . '/tests/fixtures/specs');
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        OpenApiCoverageTracker::reset();
+        OpenApiSpecLoader::reset();
+
+        [$exit] = $this->runCli([
+            '--spec-base-path=' . $this->repoRoot . '/tests/fixtures/specs',
+            '--specs=petstore-3.0',
+            '--sidecar-dir=' . $this->sidecarDir,
+            '--output-file=' . $this->outputFile,
+            '--no-cleanup',
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertCount(1, glob($this->sidecarDir . '/*.json') ?: [], '--no-cleanup must preserve sidecars');
+    }
+
+    #[Test]
+    public function bin_exits_one_on_corrupt_sidecar(): void
+    {
+        file_put_contents($this->sidecarDir . '/part-1-9999.json', '{not json');
+
+        [$exit, , $stderr] = $this->runCli([
+            '--spec-base-path=' . $this->repoRoot . '/tests/fixtures/specs',
+            '--specs=petstore-3.0',
+            '--sidecar-dir=' . $this->sidecarDir,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('failed to decode', $stderr);
+    }
+
+    #[Test]
+    public function bin_exits_one_when_worker_failure_marker_present(): void
+    {
+        OpenApiSpecLoader::configure($this->repoRoot . '/tests/fixtures/specs');
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+        CoverageSidecarWriter::writeFailureMarker($this->sidecarDir, '2', 'simulated I/O failure');
+
+        OpenApiCoverageTracker::reset();
+        OpenApiSpecLoader::reset();
+
+        [$exit, , $stderr] = $this->runCli([
+            '--spec-base-path=' . $this->repoRoot . '/tests/fixtures/specs',
+            '--specs=petstore-3.0',
+            '--sidecar-dir=' . $this->sidecarDir,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('failed to write a sidecar', $stderr);
     }
 
     /**

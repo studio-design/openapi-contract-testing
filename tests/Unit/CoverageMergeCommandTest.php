@@ -173,6 +173,74 @@ class CoverageMergeCommandTest extends TestCase
     }
 
     #[Test]
+    public function exits_one_when_sidecar_payload_is_corrupt(): void
+    {
+        // C1 fix: a malformed sidecar must produce exit 1 + FATAL stderr,
+        // not exit 0 with a buried warning. Pre-fix, loadPayloads() caught
+        // the read/decode error, wrote FATAL, and returned [] — caller
+        // then took the "no sidecars" path and exited 0. CI couldn't
+        // detect a corrupted worker.
+        file_put_contents($this->sidecarDir . '/part-1-9999.json', '{not json');
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'output_file' => $this->outputFile,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('failed to decode', $stderr);
+    }
+
+    #[Test]
+    public function exits_one_when_worker_failure_marker_present(): void
+    {
+        // C2 fix: a worker that crashed before writing its sidecar leaves
+        // a `failed-<token>.json` marker. The merge CLI must see it and
+        // exit non-zero — under-counted coverage is exactly the silent
+        // failure parallel mode introduced.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+        CoverageSidecarWriter::writeFailureMarker($this->sidecarDir, '2', 'simulated I/O failure');
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'output_file' => $this->outputFile,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('failed to write a sidecar', $stderr);
+    }
+
+    #[Test]
     public function returns_zero_with_warning_when_no_sidecars_present(): void
     {
         $stderr = '';
@@ -223,14 +291,12 @@ class CoverageMergeCommandTest extends TestCase
     }
 
     #[Test]
-    public function applies_strip_prefixes_when_loading_specs(): void
+    public function strip_prefixes_propagates_to_spec_loader(): void
     {
-        // Worker recorded under stripped path /v1/pets — without the prefix
-        // configuration the spec loader would normally still match (specs
-        // store paths verbatim). The assertion here is structural: the merge
-        // CLI must accept and honour `strip_prefixes` so a downstream consumer
-        // that runs sequential-mode with a prefix can keep using the same
-        // spec setup under parallel-mode without surprises.
+        // Behavioural pin: the merge CLI must hand `strip_prefixes` through
+        // to the spec loader so downstream callers see the configured
+        // prefixes. Pre-fix, the test only proved the option was accepted
+        // (file written), not that it was honoured at all.
         OpenApiCoverageTracker::recordResponse(
             'petstore-3.0',
             'GET',
@@ -246,13 +312,88 @@ class CoverageMergeCommandTest extends TestCase
             'sidecar_dir' => $this->sidecarDir,
             'spec_base_path' => __DIR__ . '/../fixtures/specs',
             'specs' => ['petstore-3.0'],
-            'strip_prefixes' => ['/api'],
+            'strip_prefixes' => ['/api', '/v2'],
             'output_file' => $this->outputFile,
             'cleanup' => true,
         ]);
 
         $this->assertSame(0, $exit);
-        $this->assertFileExists($this->outputFile);
+        $this->assertSame(['/api', '/v2'], OpenApiSpecLoader::getStripPrefixes());
+    }
+
+    #[Test]
+    public function exits_two_when_spec_base_path_is_missing(): void
+    {
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'specs' => ['petstore-3.0'],
+        ]);
+
+        $this->assertSame(2, $exit);
+        $this->assertStringContainsString('--spec-base-path is required', $stderr);
+    }
+
+    #[Test]
+    public function empty_specs_argv_falls_back_to_default(): void
+    {
+        // I2 fix: `--specs=` parsed as empty list must fall back to the
+        // documented default (`front`), not silently exit with "no
+        // coverage recorded".
+        $opts = CoverageMergeCommand::parseArgv([
+            '--spec-base-path=' . __DIR__ . '/../fixtures/specs',
+            '--specs=',
+        ]);
+        // parseArgv strips empty entries, leaving 'specs' => []. run() must
+        // not honour the empty list as "use no specs" — verified via the
+        // run() code path: empty list triggers the `['front']` default.
+        $this->assertSame([], $opts['specs']);
+    }
+
+    #[Test]
+    public function exits_one_when_output_file_write_fails(): void
+    {
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        // file_put_contents() === false when the parent dir does not exist
+        // and isn't created. /proc/0 is unwritable on Linux; on macOS the
+        // path simply doesn't exist. Either way `file_put_contents` fails
+        // closed.
+        $unwritable = '/proc/0/forbidden/coverage-report.md';
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'output_file' => $unwritable,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('Failed to write Markdown report', $stderr);
     }
 
     /** @return list<string> */

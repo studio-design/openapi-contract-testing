@@ -473,4 +473,158 @@ class OpenApiCoverageTrackerStateSerializationTest extends TestCase
             ],
         ]);
     }
+
+    #[Test]
+    public function import_state_rejects_non_string_spec_name(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('invalid spec entry');
+
+        OpenApiCoverageTracker::importState([
+            'version' => 1,
+            'specs' => [
+                42 => ['GET /v1/pets' => ['requestReached' => true, 'responses' => []]],
+            ],
+        ]);
+    }
+
+    #[Test]
+    public function import_state_rejects_non_array_endpoint_entry(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('invalid endpoint entry');
+
+        OpenApiCoverageTracker::importState([
+            'version' => 1,
+            'specs' => [
+                'petstore-3.0' => ['GET /v1/pets' => 'not an array'],
+            ],
+        ]);
+    }
+
+    #[Test]
+    public function import_state_rejects_non_array_response_row(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('invalid response entry');
+
+        OpenApiCoverageTracker::importState([
+            'version' => 1,
+            'specs' => [
+                'petstore-3.0' => [
+                    'GET /v1/pets' => [
+                        'requestReached' => false,
+                        'responses' => ['200:application/json' => 'not an array'],
+                    ],
+                ],
+            ],
+        ]);
+    }
+
+    #[Test]
+    public function import_state_rejects_non_string_response_state(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('invalid response state');
+
+        OpenApiCoverageTracker::importState([
+            'version' => 1,
+            'specs' => [
+                'petstore-3.0' => [
+                    'GET /v1/pets' => [
+                        'requestReached' => false,
+                        'responses' => ['200:application/json' => [
+                            'state' => 42,
+                            'hits' => 1,
+                            'skipReason' => null,
+                        ]],
+                    ],
+                ],
+            ],
+        ]);
+    }
+
+    #[Test]
+    public function import_state_does_not_partially_apply_when_payload_is_invalid(): void
+    {
+        // Pre-PR, importer mutated state per-endpoint and threw partway,
+        // leaving the tracker inconsistent. Two-pass validate-then-apply
+        // must roll back cleanly: nothing is mutated when validation
+        // would eventually fail.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        $beforeSnapshot = OpenApiCoverageTracker::exportState();
+
+        try {
+            OpenApiCoverageTracker::importState([
+                'version' => 1,
+                'specs' => [
+                    'petstore-3.0' => [
+                        'POST /v1/pets' => [
+                            'requestReached' => false,
+                            'responses' => ['201:application/json' => [
+                                'state' => 'validated',
+                                'hits' => 1,
+                                'skipReason' => null,
+                            ]],
+                        ],
+                        'GET /v1/widgets' => [
+                            'requestReached' => false,
+                            'responses' => ['200:application/json' => [
+                                'state' => 'bogus',
+                                'hits' => 1,
+                                'skipReason' => null,
+                            ]],
+                        ],
+                    ],
+                ],
+            ]);
+            $this->fail('expected InvalidArgumentException');
+        } catch (InvalidArgumentException) {
+            // Expected — the second endpoint's "bogus" state must abort.
+        }
+
+        $this->assertSame($beforeSnapshot, OpenApiCoverageTracker::exportState());
+    }
+
+    #[Test]
+    public function reconcile_response_agrees_between_record_and_import_paths(): void
+    {
+        // Sequential single-record path: 2 skip + 1 validated.
+        OpenApiCoverageTracker::reset();
+        OpenApiCoverageTracker::recordResponse('petstore-3.0', 'GET', '/v1/pets', '200', 'application/json', schemaValidated: false, skipReason: 'reason-1');
+        OpenApiCoverageTracker::recordResponse('petstore-3.0', 'GET', '/v1/pets', '200', 'application/json', schemaValidated: false, skipReason: 'reason-2');
+        OpenApiCoverageTracker::recordResponse('petstore-3.0', 'GET', '/v1/pets', '200', 'application/json', schemaValidated: true);
+        $sequential = OpenApiCoverageTracker::exportState();
+
+        // Bulk-merge path: equivalent observations split across two payloads.
+        // First payload aggregates two skipped recordings into a single
+        // entry of hits=2 with the latest skipReason.
+        OpenApiCoverageTracker::reset();
+        OpenApiCoverageTracker::importState([
+            'version' => 1,
+            'specs' => ['petstore-3.0' => ['GET /v1/pets' => [
+                'requestReached' => false,
+                'responses' => ['200:application/json' => ['state' => 'skipped', 'hits' => 2, 'skipReason' => 'reason-2']],
+            ]]],
+        ]);
+        OpenApiCoverageTracker::importState([
+            'version' => 1,
+            'specs' => ['petstore-3.0' => ['GET /v1/pets' => [
+                'requestReached' => false,
+                'responses' => ['200:application/json' => ['state' => 'validated', 'hits' => 1, 'skipReason' => null]],
+            ]]],
+        ]);
+        $bulk = OpenApiCoverageTracker::exportState();
+
+        // The two paths must agree on the final reconciled state — pinned
+        // here so a future tweak to one branch and not the other is caught.
+        $this->assertSame($sequential, $bulk);
+    }
 }

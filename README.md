@@ -696,6 +696,16 @@ path if `sys_get_temp_dir()` is unavailable in your runner.
   any leftover sidecars in the dir will be picked up by the next merge —
   delete the sidecar dir at the start of CI if you can't trust the previous
   run's exit code.
+- **Worker write failures fail the merge loudly.** When a worker can't
+  persist its sidecar, it drops a `failed-<token>.json` marker. The merge
+  CLI exits non-zero (`FATAL`) when any markers are present, since a missing
+  worker would silently under-count coverage.
+- **HTTP `$ref` auto-resolution from the merge CLI.** The CLI calls
+  `OpenApiSpecLoader::configure()` with only `spec_base_path` and
+  `strip_prefixes` — `allowRemoteRefs` cannot be set via CLI flags. If your
+  spec uses HTTP(S) `$ref`, run the merge step from a process that calls
+  `OpenApiSpecLoader::configure(..., allowRemoteRefs: true, ...)` first
+  (e.g. a Composer script), or pre-bundle remote refs offline.
 
 ## CI Integration
 
