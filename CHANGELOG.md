@@ -6,24 +6,58 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project is **pre-1.0**, so breaking changes may land in any minor release
 until 1.0.0 ships. Each entry below tags whether it is breaking.
 
-## Unreleased
+## v0.14.0 — 2026-04-28
+
+Parallel-runner support unblocks `pest --parallel` / paratest in
+downstream CI. Non-breaking minor release: sequential PHPUnit behaviour
+is unchanged; the new behaviour is gated on paratest's `TEST_TOKEN`
+environment variable.
 
 ### Added
 
 - **#129 — paratest / Pest `--parallel` support**. Coverage state is
-  per-process, so parallel test runners previously produced N partial
-  reports that overwrote (`output_file`) or stacked
-  (`GITHUB_STEP_SUMMARY`). The extension now detects paratest workers via
-  `TEST_TOKEN` and writes per-worker JSON sidecars instead of rendering.
-  A new `vendor/bin/openapi-coverage-merge` CLI combines the sidecars
-  into a single report after the parallel run finishes — same workflow
-  shape as `phpunit/php-code-coverage` + `phpcov merge`. New
-  `sidecar_dir` parameter on `OpenApiCoverageExtension` configures the
-  worker drop point; `OpenApiCoverageTracker::exportState()` /
-  `importState()` expose the merge primitives for callers building
-  custom aggregators.
-- README "Parallel test runners" section documents the workflow,
-  sidecar directory defaults, and the merge CLI flags.
+  per-process, so under paratest each worker previously produced a
+  partial report that either overwrote (`output_file`) or stacked
+  (`GITHUB_STEP_SUMMARY`) the others. The extension now detects
+  paratest workers via `TEST_TOKEN` and writes per-worker JSON sidecars
+  instead of rendering. A new `vendor/bin/openapi-coverage-merge` CLI
+  combines the sidecars into a single report after the parallel run
+  finishes — same workflow shape as `phpunit/php-code-coverage` +
+  `phpcov merge`.
+- New optional `sidecar_dir` parameter on `OpenApiCoverageExtension`
+  (default `sys_get_temp_dir()/openapi-coverage-sidecars`). Workers
+  drop sidecars here; the merge CLI reads from the same path.
+- New public APIs: `OpenApiCoverageTracker::exportState()` /
+  `importState()` expose the JSON-safe state and union-merge primitives
+  for callers building custom aggregators. `STATE_FORMAT_VERSION = 1`
+  is stamped on every payload.
+- New `vendor/bin/openapi-coverage-merge` CLI. Flags:
+  `--spec-base-path`, `--specs`, `--strip-prefixes`, `--sidecar-dir`,
+  `--output-file`, `--github-step-summary`, `--console-output`,
+  `--no-cleanup`, `--help`.
+- **Worker write failures now fail the merge loudly.** When a worker
+  cannot persist its sidecar it drops a `failed-<token>.json` marker
+  in the sidecar dir; the merge CLI exits non-zero (`FATAL`) when any
+  markers are present, since a missing worker would silently
+  under-count coverage.
+
+### Documentation
+
+- README adds a "Parallel test runners" section covering the workflow,
+  sidecar directory defaults, the full CLI flag table, and notes on
+  failure-marker handling, stale sidecars across runs, and the merge
+  CLI's inability to set `allowRemoteRefs` (consumers using HTTP `$ref`
+  must pre-bundle or wrap the merge step).
+
+### Migration
+
+- Sequential PHPUnit / Pest runs need no changes — the new code paths
+  are gated on `TEST_TOKEN` (set only by paratest).
+- Parallel runs require an extra step: after `pest --parallel` /
+  `paratest`, run `vendor/bin/openapi-coverage-merge --spec-base-path=…
+  --specs=…` to combine the sidecars into a single coverage report.
+
+Install via `composer require --dev studio-design/openapi-contract-testing:^0.14`.
 
 ## v0.13.0 — 2026-04-25
 
