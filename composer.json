@@ -31,6 +31,9 @@
             "Studio\\OpenApiContractTesting\\": "src/"
         }
     },
+    "bin": [
+        "bin/openapi-coverage-merge"
+    ],
     "autoload-dev": {
         "psr-4": {
             "Studio\\OpenApiContractTesting\\Tests\\": "tests/"

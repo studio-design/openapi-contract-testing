@@ -6,11 +6,16 @@ namespace Studio\OpenApiContractTesting;
 
 use const E_USER_WARNING;
 
+use InvalidArgumentException;
+
+use function array_key_exists;
 use function array_keys;
 use function count;
 use function get_debug_type;
 use function in_array;
 use function is_array;
+use function is_bool;
+use function is_int;
 use function is_string;
 use function preg_match;
 use function sprintf;
@@ -73,6 +78,13 @@ final class OpenApiCoverageTracker
      * response has no `content` block.
      */
     public const ANY_CONTENT_TYPE = '*';
+
+    /**
+     * Format version stamped on every {@see self::exportState()} payload.
+     * Bumped on incompatible structural changes; importers must reject
+     * unknown versions to avoid misinterpreting future shapes.
+     */
+    public const STATE_FORMAT_VERSION = 1;
 
     /**
      * Per-(spec, endpoint) coverage state. Endpoint key is `"{METHOD} {path}"`.
@@ -165,6 +177,97 @@ final class OpenApiCoverageTracker
     public static function reset(): void
     {
         self::$covered = [];
+    }
+
+    /**
+     * Snapshot the current tracker state as a JSON-safe array. Used by the
+     * paratest worker sidecar writer; the merge CLI reconstructs state via
+     * {@see self::importState()}.
+     *
+     * Enums are serialized as their string `value`. The shape is otherwise
+     * a 1:1 mirror of the internal {@see self::$covered} representation, so
+     * round-tripping through JSON is lossless when no other writes occur.
+     *
+     * @return array{
+     *     version: int,
+     *     specs: array<string, array<string, array{
+     *         requestReached: bool,
+     *         responses: array<string, array{state: string, hits: int, skipReason: ?string}>,
+     *     }>>,
+     * }
+     */
+    public static function exportState(): array
+    {
+        $specs = [];
+        foreach (self::$covered as $specName => $endpoints) {
+            $specOut = [];
+            foreach ($endpoints as $endpointKey => $entry) {
+                $responses = [];
+                foreach ($entry['responses'] as $responseKey => $row) {
+                    $responses[$responseKey] = [
+                        'state' => $row['state']->value,
+                        'hits' => $row['hits'],
+                        'skipReason' => $row['skipReason'] ?? null,
+                    ];
+                }
+                $specOut[$endpointKey] = [
+                    'requestReached' => $entry['requestReached'],
+                    'responses' => $responses,
+                ];
+            }
+            $specs[$specName] = $specOut;
+        }
+
+        return ['version' => self::STATE_FORMAT_VERSION, 'specs' => $specs];
+    }
+
+    /**
+     * Union-merge an exported state into the live tracker. Used by the
+     * merge CLI to combine N paratest worker sidecars into a single report.
+     *
+     * Merge rules mirror the single-process {@see self::recordResponse()}
+     * promotion semantics so the result is indistinguishable from running
+     * all the underlying records in one process:
+     *
+     * - `requestReached` is OR-merged.
+     * - For each `(statusKey, contentTypeKey)` pair, hits accumulate.
+     * - `validated` wins over `skipped`. Once an existing entry is
+     *   validated, an incoming `skipped` does not demote it.
+     * - When both sides are `skipped`, the incoming `skipReason` wins
+     *   when non-null (matches the latest-record-wins behavior of
+     *   {@see self::recordResponse()}).
+     *
+     * @param array<string, mixed> $state
+     *
+     * @throws InvalidArgumentException when the payload shape is unrecognised
+     */
+    public static function importState(array $state): void
+    {
+        if (!array_key_exists('version', $state)) {
+            throw new InvalidArgumentException('coverage state payload is missing "version"');
+        }
+        if ($state['version'] !== self::STATE_FORMAT_VERSION) {
+            throw new InvalidArgumentException(sprintf(
+                'unsupported coverage state version: %s (expected %d)',
+                is_int($state['version']) || is_string($state['version']) ? (string) $state['version'] : get_debug_type($state['version']),
+                self::STATE_FORMAT_VERSION,
+            ));
+        }
+        if (!isset($state['specs']) || !is_array($state['specs'])) {
+            throw new InvalidArgumentException('coverage state payload is missing "specs" map');
+        }
+
+        foreach ($state['specs'] as $specName => $endpoints) {
+            if (!is_string($specName) || !is_array($endpoints)) {
+                throw new InvalidArgumentException('invalid spec entry in coverage state payload');
+            }
+            foreach ($endpoints as $endpointKey => $entry) {
+                if (!is_string($endpointKey) || !is_array($entry)) {
+                    throw new InvalidArgumentException('invalid endpoint entry in coverage state payload');
+                }
+                self::mergeEndpointEntry($specName, $endpointKey, $entry);
+            }
+        }
     }
 
     /**
@@ -286,6 +389,63 @@ final class OpenApiCoverageTracker
             'responseSkipped' => $responseSkipped,
             'responseUncovered' => $responseTotal - $responseCovered - $responseSkipped,
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    private static function mergeEndpointEntry(string $specName, string $endpointKey, array $entry): void
+    {
+        $requestReached = isset($entry['requestReached']) && is_bool($entry['requestReached'])
+            ? $entry['requestReached']
+            : false;
+        $responses = isset($entry['responses']) && is_array($entry['responses']) ? $entry['responses'] : [];
+
+        self::$covered[$specName][$endpointKey] ??= ['requestReached' => false, 'responses' => []];
+        if ($requestReached) {
+            self::$covered[$specName][$endpointKey]['requestReached'] = true;
+        }
+
+        foreach ($responses as $responseKey => $row) {
+            if (!is_string($responseKey) || !is_array($row)) {
+                throw new InvalidArgumentException('invalid response entry in coverage state payload');
+            }
+            $stateRaw = $row['state'] ?? null;
+            if (!is_string($stateRaw)) {
+                throw new InvalidArgumentException('invalid response state in coverage state payload');
+            }
+            $state = ResponseCoverageState::tryFrom($stateRaw);
+            if ($state === null) {
+                throw new InvalidArgumentException(sprintf('invalid response state "%s" in coverage state payload', $stateRaw));
+            }
+            $hits = isset($row['hits']) && is_int($row['hits']) ? $row['hits'] : 0;
+            $skipReason = isset($row['skipReason']) && is_string($row['skipReason']) ? $row['skipReason'] : null;
+
+            $existing = self::$covered[$specName][$endpointKey]['responses'][$responseKey] ?? null;
+            if ($existing === null) {
+                self::$covered[$specName][$endpointKey]['responses'][$responseKey] = [
+                    'state' => $state,
+                    'hits' => $hits,
+                    'skipReason' => $skipReason,
+                ];
+
+                continue;
+            }
+
+            $existing['hits'] += $hits;
+            if ($state === ResponseCoverageState::Validated) {
+                $existing['state'] = ResponseCoverageState::Validated;
+                $existing['skipReason'] = null;
+            } elseif (
+                $existing['state'] === ResponseCoverageState::Skipped &&
+                $state === ResponseCoverageState::Skipped &&
+                $skipReason !== null
+            ) {
+                $existing['skipReason'] = $skipReason;
+            }
+
+            self::$covered[$specName][$endpointKey]['responses'][$responseKey] = $existing;
+        }
     }
 
     private static function endpointKey(string $method, string $path): string

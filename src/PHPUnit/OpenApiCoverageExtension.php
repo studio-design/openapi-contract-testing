@@ -24,15 +24,29 @@ use function fwrite;
 use function getcwd;
 use function getenv;
 use function str_starts_with;
+use function sys_get_temp_dir;
 
 final class OpenApiCoverageExtension implements Extension
 {
+    /**
+     * Default location used by paratest workers when no `sidecar_dir`
+     * parameter is configured. Kept stable across runs so the merge CLI
+     * can find it without coordination, and namespaced enough that other
+     * tools won't collide with it.
+     */
+    public const DEFAULT_SIDECAR_SUBDIR = 'openapi-coverage-sidecars';
+
     /**
      * Test-only override for STDERR writes.
      *
      * @var null|resource
      */
     private static $stderrOverride;
+
+    public static function defaultSidecarDir(): string
+    {
+        return sys_get_temp_dir() . '/' . self::DEFAULT_SIDECAR_SUBDIR;
+    }
 
     /**
      * Redirect STDERR writes to a test-supplied stream.
@@ -142,6 +156,14 @@ final class OpenApiCoverageExtension implements Extension
             $parameters->has('console_output') ? $parameters->get('console_output') : null,
         );
 
+        $sidecarDir = null;
+        if ($parameters->has('sidecar_dir')) {
+            $sidecarDir = $parameters->get('sidecar_dir');
+            if (!str_starts_with($sidecarDir, '/')) {
+                $sidecarDir = getcwd() . '/' . $sidecarDir;
+            }
+        }
+
         if ($facade === null) {
             return;
         }
@@ -151,6 +173,7 @@ final class OpenApiCoverageExtension implements Extension
             outputFile: $outputFile,
             consoleOutput: $consoleOutput,
             githubSummaryPath: $githubSummaryPath,
+            sidecarDir: $sidecarDir,
         ));
     }
 

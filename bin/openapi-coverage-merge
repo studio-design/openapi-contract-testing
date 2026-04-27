@@ -1,0 +1,36 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Studio\OpenApiContractTesting\PHPUnit\CoverageMergeCommand;
+
+// Locate the autoloader regardless of whether the binary is invoked from the
+// package's own `vendor/bin` (during local development) or from a downstream
+// project's `vendor/bin` (the typical install).
+$autoloadCandidates = [
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../../autoload.php',
+];
+
+$autoload = null;
+foreach ($autoloadCandidates as $candidate) {
+    if (file_exists($candidate)) {
+        $autoload = $candidate;
+
+        break;
+    }
+}
+
+if ($autoload === null) {
+    fwrite(STDERR, "[OpenAPI Coverage] FATAL: could not locate Composer autoload.\n");
+    exit(1);
+}
+
+require $autoload;
+
+$argv = $_SERVER['argv'] ?? [];
+array_shift($argv); // drop script name
+
+$command = new CoverageMergeCommand();
+exit($command->run(CoverageMergeCommand::parseArgv($argv)));
