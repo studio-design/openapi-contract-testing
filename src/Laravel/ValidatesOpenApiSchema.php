@@ -13,8 +13,11 @@ use const STDERR;
 use Illuminate\Testing\TestResponse;
 use InvalidArgumentException;
 use JsonException;
+use PHPUnit\Framework\Assert;
+use PHPUnit\Framework\AssertionFailedError;
 use RuntimeException;
 use Studio\OpenApiContractTesting\HttpMethod;
+use Studio\OpenApiContractTesting\Laravel\Internal\StackTraceFilter;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiPathMatcher;
 use Studio\OpenApiContractTesting\OpenApiRequestValidator;
@@ -289,7 +292,7 @@ trait ValidatesOpenApiSchema
 
         $specName = $this->resolveOpenApiSpec();
         if ($specName === '') {
-            $this->fail(
+            $this->failOpenApi(
                 'openApiSpec() must return a non-empty spec name, but an empty string was returned. '
                 . 'Either add #[OpenApiSpec(\'your-spec\')] to your test class or method, '
                 . 'override openApiSpec() in your test class, or set the "default_spec" key '
@@ -341,7 +344,7 @@ trait ValidatesOpenApiSchema
             );
         }
 
-        $this->assertTrue(
+        $this->assertOpenApi(
             $result->isValid(),
             "OpenAPI request validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"
             . $result->errorMessage(),
@@ -427,7 +430,7 @@ trait ValidatesOpenApiSchema
 
         $specName = $this->resolveOpenApiSpec();
         if ($specName === '') {
-            $this->fail(
+            $this->failOpenApi(
                 'openApiSpec() must return a non-empty spec name, but an empty string was returned. '
                 . 'Either add #[OpenApiSpec(\'your-spec\')] to your test class or method, '
                 . 'override openApiSpec() in your test class, or set the "default_spec" key '
@@ -448,7 +451,7 @@ trait ValidatesOpenApiSchema
 
         $content = $response->getContent();
         if ($content === false) {
-            $this->fail('OpenAPI contract testing requires buffered responses, but getContent() returned false (streamed response?).');
+            $this->failOpenApi('OpenAPI contract testing requires buffered responses, but getContent() returned false (streamed response?).');
         }
 
         $contentType = $response->headers->get('Content-Type', '');
@@ -497,7 +500,7 @@ trait ValidatesOpenApiSchema
             );
         }
 
-        $this->assertTrue(
+        $this->assertOpenApi(
             $result->isValid(),
             "OpenAPI schema validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"
             . $result->errorMessage(),
@@ -693,7 +696,7 @@ trait ValidatesOpenApiSchema
         $raw = config('openapi-contract-testing.skip_response_codes', OpenApiResponseValidator::DEFAULT_SKIP_RESPONSE_CODES);
 
         if (!is_array($raw)) {
-            $this->fail(sprintf(
+            $this->failOpenApi(sprintf(
                 'openapi-contract-testing.skip_response_codes must be an array of regex patterns, got %s: %s.',
                 get_debug_type($raw),
                 var_export($raw, true),
@@ -703,14 +706,14 @@ trait ValidatesOpenApiSchema
         $patterns = [];
         foreach ($raw as $index => $pattern) {
             if (!is_string($pattern)) {
-                $this->fail(sprintf(
+                $this->failOpenApi(sprintf(
                     'openapi-contract-testing.skip_response_codes[%s] must be a string regex pattern, got %s.',
                     (string) $index,
                     get_debug_type($pattern),
                 ));
             }
             if ($pattern === '') {
-                $this->fail(sprintf(
+                $this->failOpenApi(sprintf(
                     'openapi-contract-testing.skip_response_codes[%s] must not be an empty string.',
                     (string) $index,
                 ));
@@ -767,6 +770,33 @@ trait ValidatesOpenApiSchema
         trigger_error($message, E_USER_DEPRECATED);
     }
 
+    /**
+     * fail() with this library's + Laravel testing-concern frames trimmed off
+     * the resulting trace so the user-relevant test line appears first
+     * (issue #131).
+     */
+    private function failOpenApi(string $message): never
+    {
+        try {
+            Assert::fail($message);
+        } catch (AssertionFailedError $e) {
+            StackTraceFilter::rethrowWithCleanTrace($e);
+        }
+    }
+
+    /**
+     * assertTrue() counterpart to {@see self::failOpenApi()} — re-throws with
+     * a trimmed trace on failure, no-ops on success.
+     */
+    private function assertOpenApi(bool $condition, string $message): void
+    {
+        try {
+            Assert::assertTrue($condition, $message);
+        } catch (AssertionFailedError $e) {
+            StackTraceFilter::rethrowWithCleanTrace($e);
+        }
+    }
+
     private function isAutoAssertEnabled(): bool
     {
         return $this->resolveBoolConfig('auto_assert');
@@ -802,7 +832,7 @@ trait ValidatesOpenApiSchema
 
         $parsed = filter_var($raw, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
         if ($parsed === null) {
-            $this->fail(sprintf(
+            $this->failOpenApi(sprintf(
                 'openapi-contract-testing.%s must be a boolean (or a boolean-compatible value '
                 . 'like "true"/"false"/"1"/"0"), got %s: %s.',
                 $key,
@@ -835,7 +865,7 @@ trait ValidatesOpenApiSchema
             /** @var mixed $decoded */
             $decoded = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
-            $this->fail(
+            $this->failOpenApi(
                 'Request body could not be parsed as JSON: ' . $e->getMessage()
                 . ($contentType === '' ? ' (no Content-Type header was present on the request)' : ''),
             );
@@ -860,7 +890,7 @@ trait ValidatesOpenApiSchema
         try {
             return $response->json();
         } catch (JsonException $e) {
-            $this->fail(
+            $this->failOpenApi(
                 'Response body could not be parsed as JSON: ' . $e->getMessage()
                 . ($contentType === '' ? ' (no Content-Type header was present on the response)' : ''),
             );
