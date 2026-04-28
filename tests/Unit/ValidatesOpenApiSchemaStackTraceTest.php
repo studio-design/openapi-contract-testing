@@ -132,7 +132,8 @@ class ValidatesOpenApiSchemaStackTraceTest extends TestCase
             }
             $normalized = str_replace('\\', '/', $file);
             $this->assertStringStartsNotWith(
-                $this->libraryLaravelDir, $normalized,
+                $this->libraryLaravelDir,
+                $normalized,
                 "Frame #{$index} should not be inside {$this->libraryLaravelDir} but was: {$file}",
             );
         }
