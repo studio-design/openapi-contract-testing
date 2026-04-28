@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Laravel\Internal;
 
+use Error;
 use Exception;
 use PHPUnit\Framework\AssertionFailedError;
+use ReflectionException;
 use ReflectionProperty;
 
 use function array_values;
@@ -16,7 +18,7 @@ use function str_replace;
 /**
  * @internal Trims this library's own + Laravel test-concern frames out of an
  *           assertion-failure trace so a contract-test failure points at the
- *           user's test line, not at vendor code (issue #131).
+ *           user's test line, not at vendor code.
  */
 final class StackTraceFilter
 {
@@ -31,8 +33,10 @@ final class StackTraceFilter
      *   between the trait hook and the user test method.
      *
      * PHPUnit's own internal frames (Assert, Constraint, TestCase) are
-     * already filtered by PHPUnit's `ExcludeList` at display time, so they
-     * are not listed here.
+     * filtered by PHPUnit's stack-trace formatter when the default result
+     * printer renders the failure block, so we leave them in the raw trace.
+     * Tools that read `$exception->getTrace()` directly (Sentry, custom
+     * reporters) will still see them.
      *
      * @var list<string>
      */
@@ -50,13 +54,16 @@ final class StackTraceFilter
      * Filter library/framework frames out of an assertion failure's trace
      * and re-throw. If filtering would empty the trace, the original trace
      * is preserved — a clean trace is never worth less debug info than what
-     * we started with.
+     * we started with. If the reflection-based trace rewrite fails for any
+     * reason (future PHP / PHPUnit changes the property contract), the
+     * original exception still propagates with its full trace; we never
+     * mask the contract-test failure with a reflection error.
      *
-     * Only `trace` is rewritten. `getFile()` / `getLine()` are left alone
-     * because the displayed PHPUnit failure block lists frames directly and
-     * does not surface a single "in /file:line" header — rewriting them
-     * would only affect programmatic inspection, where the natural target
-     * (the throw site) is rarely the user's test line anyway.
+     * Only `trace` is rewritten. `getFile()` / `getLine()` keep their
+     * throw-site values because rewriting them would lie about where the
+     * exception was actually constructed — a price programmatic consumers
+     * (Sentry, custom reporters) would pay for the default renderer's
+     * display preference.
      */
     public static function rethrowWithCleanTrace(AssertionFailedError $exception): never
     {
@@ -65,7 +72,13 @@ final class StackTraceFilter
         $filtered = self::filterFrames($original);
 
         if ($filtered !== [] && $filtered !== $original) {
-            self::traceProperty()->setValue($exception, $filtered);
+            try {
+                self::traceProperty()->setValue($exception, $filtered);
+            } catch (Error|ReflectionException) {
+                // Reflection contract changed underneath us — fall through
+                // and re-throw with the original trace rather than mask the
+                // assertion failure with a reflection error.
+            }
         }
 
         throw $exception;

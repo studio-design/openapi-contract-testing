@@ -770,11 +770,7 @@ trait ValidatesOpenApiSchema
         trigger_error($message, E_USER_DEPRECATED);
     }
 
-    /**
-     * fail() with this library's + Laravel testing-concern frames trimmed off
-     * the resulting trace so the user-relevant test line appears first
-     * (issue #131).
-     */
+    /** Like Assert::fail() but with vendor frames stripped from the trace. */
     private function failOpenApi(string $message): never
     {
         try {
@@ -784,10 +780,7 @@ trait ValidatesOpenApiSchema
         }
     }
 
-    /**
-     * assertTrue() counterpart to {@see self::failOpenApi()} — re-throws with
-     * a trimmed trace on failure, no-ops on success.
-     */
+    /** Like Assert::assertTrue() but with vendor frames stripped from the trace on failure. */
     private function assertOpenApi(bool $condition, string $message): void
     {
         try {

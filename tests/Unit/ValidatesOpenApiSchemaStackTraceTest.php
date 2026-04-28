@@ -9,15 +9,16 @@ use const JSON_THROW_ON_ERROR;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Tests\Helpers\CreatesTestResponse;
 
+use function dirname;
 use function is_string;
 use function json_encode;
-use function str_contains;
 use function str_replace;
 
 // Load namespace-level config() mock before the trait resolves the function call.
@@ -27,6 +28,7 @@ class ValidatesOpenApiSchemaStackTraceTest extends TestCase
 {
     use CreatesTestResponse;
     use ValidatesOpenApiSchema;
+    private string $libraryLaravelDir;
 
     protected function setUp(): void
     {
@@ -37,6 +39,13 @@ class ValidatesOpenApiSchemaStackTraceTest extends TestCase
         $GLOBALS['__openapi_testing_config'] = [
             'openapi-contract-testing.default_spec' => 'petstore-3.0',
         ];
+
+        $traitFile = (new ReflectionClass(ValidatesOpenApiSchema::class))->getFileName();
+        // The trait + the StackTraceFilter helper both sit under src/Laravel/.
+        // Deriving the directory at runtime keeps the assertions robust against
+        // CI checkout paths that don't happen to contain the literal string
+        // "/openapi-contract-testing/src/Laravel/".
+        $this->libraryLaravelDir = str_replace('\\', '/', dirname((string) $traitFile)) . '/';
     }
 
     protected function tearDown(): void
@@ -49,7 +58,7 @@ class ValidatesOpenApiSchemaStackTraceTest extends TestCase
     }
 
     #[Test]
-    public function failure_trace_excludes_validates_open_api_schema_frames(): void
+    public function explicit_assert_path_produces_clean_trace(): void
     {
         $body = (string) json_encode(['wrong_key' => 'value'], JSON_THROW_ON_ERROR);
         $response = $this->makeTestResponse($body, 200);
@@ -62,38 +71,42 @@ class ValidatesOpenApiSchemaStackTraceTest extends TestCase
             );
             $this->fail('Expected AssertionFailedError was not thrown.');
         } catch (AssertionFailedError $e) {
-            // The library frames must not appear in the trace shown to the user.
-            foreach ($e->getTrace() as $index => $frame) {
-                $file = $frame['file'] ?? null;
-                if (!is_string($file)) {
-                    continue;
-                }
-                $normalized = str_replace('\\', '/', $file);
-                $this->assertFalse(
-                    str_contains($normalized, '/openapi-contract-testing/src/Laravel/'),
-                    "Frame #{$index} should not be inside src/Laravel/ but was: {$file}",
-                );
-            }
-
-            // Header line ("in /path:NN") must point at user code, not the trait.
-            $exceptionFile = str_replace('\\', '/', $e->getFile());
-            $this->assertFalse(
-                str_contains($exceptionFile, '/openapi-contract-testing/src/Laravel/'),
-                "Exception getFile() should not point inside the library: {$exceptionFile}",
-            );
-
-            // Message is unchanged — we only rewrite trace metadata.
-            $this->assertStringContainsString(
-                'OpenAPI schema validation failed',
-                $e->getMessage(),
-            );
+            $this->assertNoLibraryFrames($e);
+            $this->assertUserFramePresent($e);
+            $this->assertStringContainsString('OpenAPI schema validation failed', $e->getMessage());
         }
     }
 
     #[Test]
-    public function user_test_frame_survives_filtering(): void
+    public function auto_assert_path_produces_clean_trace(): void
     {
+        // The user-reported scenario in #131: failure originates inside the
+        // auto-assert hook (maybeAutoAssertOpenApiSchema), which Laravel calls
+        // from createTestResponse() during $this->get(...) requests.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_assert'] = true;
+
         $body = (string) json_encode(['wrong_key' => 'value'], JSON_THROW_ON_ERROR);
+        $response = $this->makeTestResponse($body, 200);
+
+        try {
+            $this->maybeAutoAssertOpenApiSchema($response, HttpMethod::GET, '/v1/pets');
+            $this->fail('Expected AssertionFailedError was not thrown.');
+        } catch (AssertionFailedError $e) {
+            $this->assertNoLibraryFrames($e);
+            $this->assertUserFramePresent($e);
+        }
+    }
+
+    #[Test]
+    public function fail_path_produces_clean_trace(): void
+    {
+        // Triggers the failOpenApi() route (line ~433 in the trait): an empty
+        // default_spec + no #[OpenApiSpec] attribute resolves to '', which the
+        // trait reports via its own fail-with-message branch — different from
+        // the assertTrue path the explicit-assert test exercises.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = '';
+
+        $body = (string) json_encode(['data' => []], JSON_THROW_ON_ERROR);
         $response = $this->makeTestResponse($body, 200);
 
         try {
@@ -104,22 +117,36 @@ class ValidatesOpenApiSchemaStackTraceTest extends TestCase
             );
             $this->fail('Expected AssertionFailedError was not thrown.');
         } catch (AssertionFailedError $e) {
-            $hasUserFrame = false;
-            foreach ($e->getTrace() as $frame) {
-                $file = $frame['file'] ?? null;
-                if (!is_string($file)) {
-                    continue;
-                }
-                if (str_contains(str_replace('\\', '/', $file), 'ValidatesOpenApiSchemaStackTraceTest.php')) {
-                    $hasUserFrame = true;
+            $this->assertNoLibraryFrames($e);
+            $this->assertUserFramePresent($e);
+            $this->assertStringContainsString('openApiSpec()', $e->getMessage());
+        }
+    }
 
-                    break;
-                }
+    private function assertNoLibraryFrames(AssertionFailedError $e): void
+    {
+        foreach ($e->getTrace() as $index => $frame) {
+            $file = $frame['file'] ?? null;
+            if (!is_string($file)) {
+                continue;
             }
-            $this->assertTrue(
-                $hasUserFrame,
-                'Expected the user test frame to survive filtering — only library and Laravel testing-concern frames should be dropped.',
+            $normalized = str_replace('\\', '/', $file);
+            $this->assertStringStartsNotWith(
+                $this->libraryLaravelDir, $normalized,
+                "Frame #{$index} should not be inside {$this->libraryLaravelDir} but was: {$file}",
             );
         }
+    }
+
+    private function assertUserFramePresent(AssertionFailedError $e): void
+    {
+        $thisFile = str_replace('\\', '/', __FILE__);
+        foreach ($e->getTrace() as $frame) {
+            $file = $frame['file'] ?? null;
+            if (is_string($file) && str_replace('\\', '/', $file) === $thisFile) {
+                return;
+            }
+        }
+        $this->fail('Expected a frame from this test file to survive filtering — only library and Laravel testing-concern frames should be dropped.');
     }
 }
