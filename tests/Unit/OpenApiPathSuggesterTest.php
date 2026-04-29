@@ -238,6 +238,54 @@ class OpenApiPathSuggesterTest extends TestCase
     }
 
     #[Test]
+    public function suggest_returns_empty_array_for_non_positive_limit(): void
+    {
+        // PHP's array_slice treats negative offsets as "count from the end",
+        // so passing a negative $limit would produce a surprising non-empty
+        // result rather than the expected "no suggestions". Pin the
+        // documented behaviour: zero or negative limit ⇒ no suggestions.
+        $spec = [
+            'paths' => [
+                '/a' => ['get' => ['responses' => []]],
+                '/b' => ['get' => ['responses' => []]],
+            ],
+        ];
+
+        $this->assertSame([], OpenApiPathSuggester::suggest($spec, '/x', 0));
+        $this->assertSame([], OpenApiPathSuggester::suggest($spec, '/x', -1));
+    }
+
+    #[Test]
+    public function suggest_ignores_non_openapi_method_keys(): void
+    {
+        // OpenAPI 3.x defines exactly 8 path-item operation methods. HTTP
+        // verbs that exist outside that set (`connect`, `link`, `unlink`,
+        // arbitrary spec-author typos like `gett`) must not leak into
+        // suggestion output even when they sit alongside legitimate
+        // operations. Locks the path-item method allowlist against
+        // accidental expansion.
+        $spec = [
+            'paths' => [
+                '/v1/op' => [
+                    'connect' => ['responses' => []],
+                    'link' => ['responses' => []],
+                    'gett' => ['responses' => []],
+                    'get' => ['responses' => []],
+                ],
+            ],
+        ];
+
+        $this->assertSame(
+            [['method' => 'GET', 'path' => '/v1/op']],
+            OpenApiPathSuggester::suggest($spec, '/v1/op', 10),
+        );
+        $this->assertSame(
+            ['GET'],
+            OpenApiPathSuggester::methodsForPath($spec, '/v1/op'),
+        );
+    }
+
+    #[Test]
     public function suggest_ignores_non_array_path_item_entries(): void
     {
         // A spec with an unresolved $ref or a malformed entry (e.g. scalar

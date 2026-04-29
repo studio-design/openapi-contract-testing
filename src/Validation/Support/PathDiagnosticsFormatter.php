@@ -25,10 +25,12 @@ use function strtoupper;
  * - The "closest spec paths:" section is omitted entirely when the suggester
  *   produces no candidates (empty / malformed spec).
  * - The "Defined methods:" suffix renders `(none)` when a path item declares
- *   only non-operation keys (`parameters`, `summary`, ...). Theoretically
- *   unreachable from the current call sites — the helper is only invoked when
- *   one specific method is missing, not all — but rendering a sentinel keeps
- *   a malformed spec visible instead of silently producing "Defined methods: .".
+ *   only non-operation keys. This is reachable in practice when the spec has
+ *   a path-item with shared `parameters` / `summary` but no operations
+ *   declared yet (a legal OpenAPI 3.x construction) — the validator will
+ *   route to this helper because the requested method is missing AND every
+ *   other method is too. Rendering an explicit `(none)` keeps that case
+ *   visible instead of producing "Defined methods: .".
  */
 final class PathDiagnosticsFormatter
 {

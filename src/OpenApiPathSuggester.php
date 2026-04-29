@@ -33,11 +33,12 @@ final class OpenApiPathSuggester
 {
     /**
      * The full set of operation keys that OpenAPI 3.x recognises at the
-     * path-item level. Kept local to the suggester (rather than reusing
-     * `HttpMethod`) because the latter models *request* methods that the
-     * library validates, which is a smaller set than what a spec author may
-     * legitimately document. If `HttpMethod` ever expands, this constant can
-     * be revisited.
+     * path-item level. Kept local to the suggester rather than reusing the
+     * library's request-method enum — that enum models *request* methods the
+     * library validates (a smaller set), whereas the suggester needs the
+     * broader spec-vocabulary including HEAD / OPTIONS / TRACE. If the
+     * request-method enum ever expands to cover the same ground, this
+     * constant can be revisited.
      */
     private const OPENAPI_PATH_ITEM_METHODS = [
         'get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace',
@@ -57,6 +58,14 @@ final class OpenApiPathSuggester
      */
     public static function suggest(array $spec, string $normalizedPath, int $limit = 3): array
     {
+        // PHP's array_slice would interpret a negative $limit as "count from
+        // the end", producing a surprising non-empty result for what callers
+        // intend as "no suggestions". Treat zero / negative as the obvious
+        // semantic: nothing requested ⇒ nothing returned.
+        if ($limit < 1) {
+            return [];
+        }
+
         // A malformed spec where `paths` is null / scalar / list (rather than a
         // string-keyed map) would otherwise warn on `foreach`. The diagnostic
         // helper must never compound a primary failure with a secondary

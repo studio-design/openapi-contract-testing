@@ -155,9 +155,9 @@ class OpenApiResponseValidatorTest extends TestCase
 
         $this->assertFalse($result->isValid());
         $error = $result->errors()[0];
-        // Issue #132: the error must surface the request method (so a
-        // method-mismatch is obvious at a glance) and include "did you mean?"
-        // suggestions drawn from the spec's actual paths.
+        // The error must surface the request method (so a method-mismatch is
+        // obvious at a glance) and include "did you mean?" suggestions drawn
+        // from the spec's actual paths.
         $this->assertStringContainsString("No matching path found in 'petstore-3.0' spec for GET /v1/unknown", $error);
         $this->assertStringContainsString('closest spec paths:', $error);
         $this->assertStringContainsString('GET /v1/pets', $error);
@@ -188,8 +188,8 @@ class OpenApiResponseValidatorTest extends TestCase
     #[Test]
     public function path_not_found_error_renders_full_diagnostic_block(): void
     {
-        // End-to-end pin against the issue #132 suggested-fix wording. Locks
-        // the indentation, line ordering, prefix-stripping callout, and the
+        // End-to-end pin of the path-not-found diagnostic wording. Locks the
+        // indentation, line ordering, prefix-stripping callout, and the
         // (method, path) layout of the suggestion list so future formatting
         // tweaks surface as visible test diffs rather than silent UX drift.
         OpenApiSpecLoader::reset();
@@ -227,9 +227,8 @@ class OpenApiResponseValidatorTest extends TestCase
         $this->assertFalse($result->isValid());
         $error = $result->errors()[0];
         $this->assertStringContainsString('Method PATCH not defined', $error);
-        // Issue #132: list the methods the spec actually defines for the
-        // matched path so a method-mismatch typo (POST→PATCH, GET→POST)
-        // resolves in one read.
+        // List the methods the spec actually defines for the matched path so
+        // a method-mismatch typo (POST→PATCH, GET→POST) resolves in one read.
         $this->assertStringContainsString('Defined methods: GET, POST', $error);
     }
 
