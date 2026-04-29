@@ -21,6 +21,26 @@ class OpenApiPathSuggesterTest extends TestCase
     }
 
     #[Test]
+    public function suggest_returns_empty_array_for_non_array_paths_value(): void
+    {
+        // A malformed spec where `paths` decoded to a non-mapping (null, scalar)
+        // would TypeError on `foreach` if not guarded. The diagnostic helper
+        // must never compound a primary failure with a TypeError of its own —
+        // the user is already debugging an unmatched path.
+        $this->assertSame([], OpenApiPathSuggester::suggest(['paths' => null], '/v1/x'));
+        $this->assertSame([], OpenApiPathSuggester::suggest(['paths' => 'oops'], '/v1/x'));
+        $this->assertSame([], OpenApiPathSuggester::suggest(['paths' => 42], '/v1/x'));
+    }
+
+    #[Test]
+    public function methods_for_path_returns_empty_array_for_non_array_paths_value(): void
+    {
+        $this->assertSame([], OpenApiPathSuggester::methodsForPath(['paths' => null], '/v1/x'));
+        $this->assertSame([], OpenApiPathSuggester::methodsForPath(['paths' => 'oops'], '/v1/x'));
+        $this->assertSame([], OpenApiPathSuggester::methodsForPath(['paths' => 42], '/v1/x'));
+    }
+
+    #[Test]
     public function suggest_filters_non_operation_keys_at_path_item_level(): void
     {
         // OpenAPI 3.x permits `parameters`, `summary`, `description`, `servers`,

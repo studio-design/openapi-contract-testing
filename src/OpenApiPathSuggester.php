@@ -57,12 +57,16 @@ final class OpenApiPathSuggester
      */
     public static function suggest(array $spec, string $normalizedPath, int $limit = 3): array
     {
-        /** @var array<string, mixed> $paths */
+        // A malformed spec where `paths` is null / scalar / list (rather than a
+        // string-keyed map) would otherwise warn on `foreach`. The diagnostic
+        // helper must never compound a primary failure with a secondary
+        // TypeError or warning the user can't act on — bail out quietly.
         $paths = $spec['paths'] ?? [];
-        if ($paths === []) {
+        if (!is_array($paths) || $paths === []) {
             return [];
         }
 
+        /** @var array<string, mixed> $paths */
         $requestSegments = self::segments($normalizedPath);
         $entries = [];
 
@@ -136,7 +140,12 @@ final class OpenApiPathSuggester
      */
     public static function methodsForPath(array $spec, string $matchedPath): array
     {
-        $pathItem = $spec['paths'][$matchedPath] ?? null;
+        $paths = $spec['paths'] ?? null;
+        if (!is_array($paths)) {
+            return [];
+        }
+
+        $pathItem = $paths[$matchedPath] ?? null;
         if (!is_array($pathItem)) {
             return [];
         }
