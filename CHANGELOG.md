@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project is **pre-1.0**, so breaking changes may land in any minor release
 until 1.0.0 ships. Each entry below tags whether it is breaking.
 
+## Unreleased
+
+### Fixed
+
+- **#131 — Clean stack trace for contract validation failures**. PHPUnit's
+  failure block no longer surfaces this library's internal frames or
+  Laravel's `MakesHttpRequests` / `TestResponse` testing-concern frames
+  before the user's test line. The trait intercepts the
+  `AssertionFailedError` raised at its own failure sites and re-throws
+  with a trimmed trace. Behavior change is trace-only — exception type,
+  message, and the user-visible test line are unchanged. No user-side
+  configuration is required.
+
 ## v0.14.0 — 2026-04-28
 
 Parallel-runner support unblocks `pest --parallel` / paratest in
