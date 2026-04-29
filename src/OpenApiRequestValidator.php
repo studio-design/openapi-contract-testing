@@ -10,13 +10,12 @@ use Studio\OpenApiContractTesting\Validation\Request\PathParameterValidator;
 use Studio\OpenApiContractTesting\Validation\Request\QueryParameterValidator;
 use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Request\SecurityValidator;
+use Studio\OpenApiContractTesting\Validation\Support\PathDiagnosticsFormatter;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
 
 use function array_keys;
-use function implode;
 use function strtolower;
-use function strtoupper;
 
 final class OpenApiRequestValidator
 {
@@ -73,7 +72,7 @@ final class OpenApiRequestValidator
 
         if ($matched === null) {
             return OpenApiValidationResult::failure([
-                self::formatPathNotFoundError($specName, $method, $requestPath, $matcher, $spec),
+                PathDiagnosticsFormatter::pathNotFound($specName, $method, $requestPath, $matcher, $spec),
             ]);
         }
 
@@ -86,7 +85,7 @@ final class OpenApiRequestValidator
 
         if (!isset($pathSpec[$lowerMethod])) {
             return OpenApiValidationResult::failure([
-                self::formatMethodNotDefinedError($specName, $method, $matchedPath, $spec),
+                PathDiagnosticsFormatter::methodNotDefined($specName, $method, $matchedPath, $spec),
             ], $matchedPath);
         }
 
@@ -124,56 +123,6 @@ final class OpenApiRequestValidator
         }
 
         return OpenApiValidationResult::failure($errors, $matchedPath);
-    }
-
-    /**
-     * Mirrors OpenApiResponseValidator::formatPathNotFoundError. Duplicated
-     * intentionally — both validators need the same diagnostic shape, but
-     * extracting the helper would either add a new public class for two short
-     * call sites or force a circular dependency through a shared trait.
-     *
-     * @param array<string, mixed> $spec
-     */
-    private static function formatPathNotFoundError(
-        string $specName,
-        string $method,
-        string $requestPath,
-        OpenApiPathMatcher $matcher,
-        array $spec,
-    ): string {
-        $upperMethod = strtoupper($method);
-        $normalized = $matcher->normalizeRequestPath($requestPath);
-        $suggestions = OpenApiPathSuggester::suggest($spec, $normalized['path']);
-
-        $lines = ["No matching path found in '{$specName}' spec for {$upperMethod} {$requestPath}"];
-
-        if ($normalized['strippedPrefix'] !== null) {
-            $lines[] = "  searched as: {$normalized['path']} (after stripping prefix '{$normalized['strippedPrefix']}')";
-        }
-
-        if ($suggestions !== []) {
-            $lines[] = '  closest spec paths:';
-            foreach ($suggestions as $s) {
-                $lines[] = "    - {$s['method']} {$s['path']}";
-            }
-        }
-
-        return implode("\n", $lines);
-    }
-
-    /**
-     * @param array<string, mixed> $spec
-     */
-    private static function formatMethodNotDefinedError(
-        string $specName,
-        string $method,
-        string $matchedPath,
-        array $spec,
-    ): string {
-        $methods = OpenApiPathSuggester::methodsForPath($spec, $matchedPath);
-        $defined = $methods === [] ? '(none)' : implode(', ', $methods);
-
-        return "Method {$method} not defined for path {$matchedPath} in '{$specName}' spec. Defined methods: {$defined}.";
     }
 
     /**
