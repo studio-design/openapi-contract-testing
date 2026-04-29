@@ -148,7 +148,32 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('No matching path found', $result->errors()[0]);
+        $error = $result->errors()[0];
+        $this->assertStringContainsString("No matching path found in 'petstore-3.0' spec for POST /v1/unknown", $error);
+        $this->assertStringContainsString('closest spec paths:', $error);
+    }
+
+    #[Test]
+    public function unknown_path_error_reveals_stripped_prefix(): void
+    {
+        OpenApiSpecLoader::reset();
+        OpenApiSpecLoader::configure(__DIR__ . '/../fixtures/specs', ['/api']);
+
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'POST',
+            '/api/v1/unknown',
+            [],
+            [],
+            ['name' => 'Fido'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "searched as: /v1/unknown (after stripping prefix '/api')",
+            $result->errors()[0],
+        );
     }
 
     #[Test]
@@ -165,7 +190,9 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('Method PUT not defined', $result->errors()[0]);
+        $error = $result->errors()[0];
+        $this->assertStringContainsString('Method PUT not defined', $error);
+        $this->assertStringContainsString('Defined methods: GET, POST', $error);
     }
 
     // ========================================

@@ -83,6 +83,44 @@ final class OpenApiPathMatcher
     }
 
     /**
+     * Apply the matcher's prefix-stripping and trailing-slash policy to a raw
+     * request URI without attempting to match it against the spec. Exposed so
+     * diagnostic code (e.g. "did you mean?" suggestions) can show users the
+     * exact string that the matcher actually compared against, distinct from
+     * the raw URI they passed in.
+     *
+     * `strippedPrefix` is the literal prefix value that was removed (verbatim
+     * from the constructor's `$stripPrefixes`), or null when no configured
+     * prefix matched. Trailing-slash trimming is applied unconditionally
+     * after prefix stripping but does not surface as a separate signal — its
+     * effect on diagnostic messages is judged not worth a second field.
+     *
+     * @return array{path: string, strippedPrefix: ?string}
+     */
+    public function normalizeRequestPath(string $requestPath): array
+    {
+        $normalizedPath = $requestPath;
+        $strippedPrefix = null;
+
+        foreach ($this->stripPrefixes as $prefix) {
+            if (str_starts_with($normalizedPath, $prefix)) {
+                $normalizedPath = substr($normalizedPath, strlen($prefix));
+                $strippedPrefix = $prefix;
+
+                break;
+            }
+        }
+
+        // Keep the root path intact — collapsing `/` to `` would make the
+        // single literal-root entry unreachable.
+        if ($normalizedPath !== '/' && str_ends_with($normalizedPath, '/')) {
+            $normalizedPath = rtrim($normalizedPath, '/');
+        }
+
+        return ['path' => $normalizedPath, 'strippedPrefix' => $strippedPrefix];
+    }
+
+    /**
      * Match a request path and return both the matched spec path template and
      * the raw values captured for each `{placeholder}` segment.
      *
@@ -98,19 +136,7 @@ final class OpenApiPathMatcher
      */
     public function matchWithVariables(string $requestPath): ?array
     {
-        $normalizedPath = $requestPath;
-
-        foreach ($this->stripPrefixes as $prefix) {
-            if (str_starts_with($normalizedPath, $prefix)) {
-                $normalizedPath = substr($normalizedPath, strlen($prefix));
-                break;
-            }
-        }
-
-        // Strip trailing slash (but keep root /)
-        if ($normalizedPath !== '/' && str_ends_with($normalizedPath, '/')) {
-            $normalizedPath = rtrim($normalizedPath, '/');
-        }
+        $normalizedPath = $this->normalizeRequestPath($requestPath)['path'];
 
         foreach ($this->compiledPaths as $compiled) {
             if (preg_match($compiled['pattern'], $normalizedPath, $matches) !== 1) {
