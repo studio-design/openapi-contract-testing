@@ -1,0 +1,31 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Path suggester pin fixture",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v2/admin/early_accesses": {
+      "get": {
+        "operationId": "listEarlyAccess",
+        "responses": {
+          "200": {"description": "OK"}
+        }
+      },
+      "post": {
+        "operationId": "createEarlyAccess",
+        "responses": {
+          "201": {"description": "Created"}
+        }
+      }
+    },
+    "/v2/admin/users/{user_id}": {
+      "get": {
+        "operationId": "getUser",
+        "responses": {
+          "200": {"description": "OK"}
+        }
+      }
+    }
+  }
+}

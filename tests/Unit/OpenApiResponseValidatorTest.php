@@ -154,7 +154,63 @@ class OpenApiResponseValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('No matching path found', $result->errors()[0]);
+        $error = $result->errors()[0];
+        // Issue #132: the error must surface the request method (so a
+        // method-mismatch is obvious at a glance) and include "did you mean?"
+        // suggestions drawn from the spec's actual paths.
+        $this->assertStringContainsString("No matching path found in 'petstore-3.0' spec for GET /v1/unknown", $error);
+        $this->assertStringContainsString('closest spec paths:', $error);
+        $this->assertStringContainsString('GET /v1/pets', $error);
+    }
+
+    #[Test]
+    public function unknown_path_error_reveals_stripped_prefix(): void
+    {
+        // When the user configured strip_prefixes the matcher silently drops
+        // the prefix before comparing — without this hint, a near-miss
+        // (request `/api/v1/...` vs spec `/v1/...`) is invisible.
+        OpenApiSpecLoader::reset();
+        OpenApiSpecLoader::configure(__DIR__ . '/../fixtures/specs', ['/api']);
+
+        $result = $this->validator->validate(
+            'petstore-3.0',
+            'GET',
+            '/api/v1/unknown',
+            200,
+            [],
+        );
+
+        $this->assertFalse($result->isValid());
+        $error = $result->errors()[0];
+        $this->assertStringContainsString("searched as: /v1/unknown (after stripping prefix '/api')", $error);
+    }
+
+    #[Test]
+    public function path_not_found_error_renders_full_diagnostic_block(): void
+    {
+        // End-to-end pin against the issue #132 suggested-fix wording. Locks
+        // the indentation, line ordering, prefix-stripping callout, and the
+        // (method, path) layout of the suggestion list so future formatting
+        // tweaks surface as visible test diffs rather than silent UX drift.
+        OpenApiSpecLoader::reset();
+        OpenApiSpecLoader::configure(__DIR__ . '/../fixtures/specs', ['/api']);
+
+        $result = $this->validator->validate(
+            'path-suggester-pin',
+            'GET',
+            '/api/v2/admin/totally-nonexistent-endpoint-xyz',
+            200,
+            [],
+        );
+
+        $this->assertFalse($result->isValid());
+        $expected = "No matching path found in 'path-suggester-pin' spec for GET /api/v2/admin/totally-nonexistent-endpoint-xyz\n"
+            . "  searched as: /v2/admin/totally-nonexistent-endpoint-xyz (after stripping prefix '/api')\n"
+            . "  closest spec paths:\n"
+            . "    - GET /v2/admin/early_accesses\n"
+            . "    - POST /v2/admin/early_accesses\n"
+            . '    - GET /v2/admin/users/{user_id}';
+        $this->assertSame($expected, $result->errors()[0]);
     }
 
     #[Test]
@@ -169,7 +225,12 @@ class OpenApiResponseValidatorTest extends TestCase
         );
 
         $this->assertFalse($result->isValid());
-        $this->assertStringContainsString('Method PATCH not defined', $result->errors()[0]);
+        $error = $result->errors()[0];
+        $this->assertStringContainsString('Method PATCH not defined', $error);
+        // Issue #132: list the methods the spec actually defines for the
+        // matched path so a method-mismatch typo (POST→PATCH, GET→POST)
+        // resolves in one read.
+        $this->assertStringContainsString('Defined methods: GET, POST', $error);
     }
 
     #[Test]

@@ -17,11 +17,13 @@ use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
 use function array_keys;
 use function array_merge;
 use function get_debug_type;
+use function implode;
 use function is_array;
 use function preg_last_error_msg;
 use function preg_match;
 use function sprintf;
 use function strtolower;
+use function strtoupper;
 use function trigger_error;
 
 final class OpenApiResponseValidator
@@ -85,7 +87,7 @@ final class OpenApiResponseValidator
 
         if ($matchedPath === null) {
             return OpenApiValidationResult::failure([
-                "No matching path found in '{$specName}' spec for: {$requestPath}",
+                self::formatPathNotFoundError($specName, $method, $requestPath, $matcher, $spec),
             ]);
         }
 
@@ -94,7 +96,7 @@ final class OpenApiResponseValidator
 
         if (!isset($pathSpec[$lowerMethod])) {
             return OpenApiValidationResult::failure([
-                "Method {$method} not defined for path {$matchedPath} in '{$specName}' spec.",
+                self::formatMethodNotDefinedError($specName, $method, $matchedPath, $spec),
             ], $matchedPath);
         }
 
@@ -204,6 +206,62 @@ final class OpenApiResponseValidator
             $statusCodeStr,
             $bodyResult->matchedContentType,
         );
+    }
+
+    /**
+     * Compose the "no matching path" diagnostic. Multi-line so the structured
+     * pieces (stripped path, suggestions) stay visually separate from the raw
+     * request URI on the lead line.
+     *
+     * @param array<string, mixed> $spec
+     */
+    private static function formatPathNotFoundError(
+        string $specName,
+        string $method,
+        string $requestPath,
+        OpenApiPathMatcher $matcher,
+        array $spec,
+    ): string {
+        $upperMethod = strtoupper($method);
+        $normalized = $matcher->normalizeRequestPath($requestPath);
+        $suggestions = OpenApiPathSuggester::suggest($spec, $normalized['path']);
+
+        $lines = ["No matching path found in '{$specName}' spec for {$upperMethod} {$requestPath}"];
+
+        // Only mention the stripping when it actually changed the path.
+        // Trailing-slash trim alone is not surfaced — it's universal and
+        // adding a line for it dilutes the more useful prefix signal.
+        if ($normalized['strippedPrefix'] !== null) {
+            $lines[] = "  searched as: {$normalized['path']} (after stripping prefix '{$normalized['strippedPrefix']}')";
+        }
+
+        if ($suggestions !== []) {
+            $lines[] = '  closest spec paths:';
+            foreach ($suggestions as $s) {
+                $lines[] = "    - {$s['method']} {$s['path']}";
+            }
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @param array<string, mixed> $spec
+     */
+    private static function formatMethodNotDefinedError(
+        string $specName,
+        string $method,
+        string $matchedPath,
+        array $spec,
+    ): string {
+        $methods = OpenApiPathSuggester::methodsForPath($spec, $matchedPath);
+        // The "(none)" branch is theoretically unreachable from this call site
+        // (we got here because a method-keyed entry was missing for one
+        // specific method, not because every method was missing). Surface it
+        // anyway so a malformed spec doesn't render an empty list.
+        $defined = $methods === [] ? '(none)' : implode(', ', $methods);
+
+        return "Method {$method} not defined for path {$matchedPath} in '{$specName}' spec. Defined methods: {$defined}.";
     }
 
     /**

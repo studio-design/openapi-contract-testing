@@ -208,6 +208,72 @@ class OpenApiPathMatcherTest extends TestCase
     }
 
     #[Test]
+    public function normalize_request_path_strips_configured_prefix(): void
+    {
+        $matcher = new OpenApiPathMatcher(['/v2/account'], ['/api']);
+
+        $this->assertSame(
+            ['path' => '/v2/account', 'strippedPrefix' => '/api'],
+            $matcher->normalizeRequestPath('/api/v2/account'),
+        );
+    }
+
+    #[Test]
+    public function normalize_request_path_returns_null_prefix_when_none_matches(): void
+    {
+        $matcher = new OpenApiPathMatcher(['/v2/account'], ['/api']);
+
+        $this->assertSame(
+            ['path' => '/v2/account', 'strippedPrefix' => null],
+            $matcher->normalizeRequestPath('/v2/account'),
+        );
+    }
+
+    #[Test]
+    public function normalize_request_path_trims_trailing_slash(): void
+    {
+        $matcher = new OpenApiPathMatcher(['/v2/account']);
+
+        $this->assertSame(
+            ['path' => '/v2/account', 'strippedPrefix' => null],
+            $matcher->normalizeRequestPath('/v2/account/'),
+        );
+    }
+
+    #[Test]
+    public function normalize_request_path_preserves_root_slash(): void
+    {
+        $matcher = new OpenApiPathMatcher(['/']);
+
+        // The trailing-slash trim must not collapse the root path itself,
+        // otherwise a request to `/` would normalize to an empty string and
+        // never match the literal root entry.
+        $this->assertSame(
+            ['path' => '/', 'strippedPrefix' => null],
+            $matcher->normalizeRequestPath('/'),
+        );
+    }
+
+    #[Test]
+    public function normalize_request_path_only_strips_first_matching_prefix(): void
+    {
+        // Mirrors the behaviour of matchWithVariables(): once a prefix
+        // strips, subsequent prefixes are not considered. Ensures
+        // `strippedPrefix` reports the actually-applied prefix rather than
+        // the last entry in the array.
+        $matcher = new OpenApiPathMatcher(['/v2/account'], ['/api', '/internal']);
+
+        $this->assertSame(
+            ['path' => '/v2/account', 'strippedPrefix' => '/api'],
+            $matcher->normalizeRequestPath('/api/v2/account'),
+        );
+        $this->assertSame(
+            ['path' => '/v2/account', 'strippedPrefix' => '/internal'],
+            $matcher->normalizeRequestPath('/internal/v2/account'),
+        );
+    }
+
+    #[Test]
     public function constructor_rejects_duplicate_placeholder_names(): void
     {
         // OpenAPI forbids the same placeholder name appearing twice in one template.
