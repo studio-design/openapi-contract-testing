@@ -89,11 +89,21 @@ final class OpenApiPathMatcher
      * exact string that the matcher actually compared against, distinct from
      * the raw URI they passed in.
      *
-     * `strippedPrefix` is the literal prefix value that was removed (verbatim
-     * from the constructor's `$stripPrefixes`), or null when no configured
-     * prefix matched. Trailing-slash trimming is applied unconditionally
-     * after prefix stripping but does not surface as a separate signal — its
-     * effect on diagnostic messages is judged not worth a second field.
+     * Contract specifics callers should know:
+     * - **First match wins.** `$stripPrefixes` is iterated in construction
+     *   order; once one matches, the loop breaks. Subsequent prefixes are not
+     *   considered even if they would also match.
+     * - **Prefix matching is literal `str_starts_with`, not segment-aware.**
+     *   A configured prefix `/api` will also strip a request path of
+     *   `/api2/foo` (yielding `2/foo`). Configure prefixes with explicit
+     *   trailing slashes or include a path separator (`/api/`) if segment
+     *   semantics matter.
+     * - `strippedPrefix` is the literal prefix value that was removed
+     *   (verbatim from the constructor's `$stripPrefixes`), or null when no
+     *   configured prefix matched.
+     * - Trailing-slash trimming is applied unconditionally after prefix
+     *   stripping but does not surface as a separate signal — its effect on
+     *   diagnostic messages is judged not worth a second field.
      *
      * @return array{path: string, strippedPrefix: ?string}
      */
