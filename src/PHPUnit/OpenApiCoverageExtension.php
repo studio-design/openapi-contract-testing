@@ -15,7 +15,7 @@ use PHPUnit\TextUI\Configuration\Configuration;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
 use Studio\OpenApiContractTesting\InvalidThresholdConfigurationException;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function array_map;
 use function explode;

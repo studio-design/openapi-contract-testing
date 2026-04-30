@@ -6,9 +6,9 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\SchemaContext;
+use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 
 class OpenApiSchemaConverterTest extends TestCase
 {

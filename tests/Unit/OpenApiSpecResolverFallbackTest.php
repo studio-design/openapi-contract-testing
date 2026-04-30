@@ -6,7 +6,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\OpenApiSpecResolver;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver;
 
 class OpenApiSpecResolverFallbackTest extends TestCase
 {

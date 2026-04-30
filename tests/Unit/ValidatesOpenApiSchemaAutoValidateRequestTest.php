@@ -14,7 +14,7 @@ use Studio\OpenApiContractTesting\EndpointCoverageState;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Symfony\Component\HttpFoundation\Request;
 
 use function json_encode;

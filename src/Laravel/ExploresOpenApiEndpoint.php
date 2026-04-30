@@ -11,7 +11,7 @@ use RuntimeException;
 use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
 use Studio\OpenApiContractTesting\Fuzz\OpenApiEndpointExplorer;
 use Studio\OpenApiContractTesting\Laravel\Internal\StackTraceFilter;
-use Studio\OpenApiContractTesting\OpenApiSpecResolver;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver;
 
 use function is_string;
 

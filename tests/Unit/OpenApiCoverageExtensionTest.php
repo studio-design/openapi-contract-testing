@@ -11,8 +11,8 @@ use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
 use Studio\OpenApiContractTesting\InvalidThresholdConfigurationException;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function fclose;
 use function file_get_contents;

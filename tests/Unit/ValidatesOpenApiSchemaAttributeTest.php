@@ -12,7 +12,7 @@ use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Tests\Helpers\CreatesTestResponse;
 
 use function json_encode;

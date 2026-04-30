@@ -11,7 +11,7 @@ use RuntimeException;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Symfony\Component\HttpFoundation\Request;
 
 // Load namespace-level config() mock before the trait resolves the function call.

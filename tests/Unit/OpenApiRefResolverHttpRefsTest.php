@@ -11,7 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
-use Studio\OpenApiContractTesting\OpenApiRefResolver;
+use Studio\OpenApiContractTesting\Spec\OpenApiRefResolver;
 use Studio\OpenApiContractTesting\Tests\Helpers\FakeHttpClient;
 
 use function file_put_contents;

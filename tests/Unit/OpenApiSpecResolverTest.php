@@ -7,7 +7,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
-use Studio\OpenApiContractTesting\OpenApiSpecResolver;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver;
 
 #[OpenApiSpec('petstore-3.0')]
 class OpenApiSpecResolverTest extends TestCase

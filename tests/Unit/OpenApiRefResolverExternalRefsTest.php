@@ -8,7 +8,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
-use Studio\OpenApiContractTesting\OpenApiRefResolver;
+use Studio\OpenApiContractTesting\Spec\OpenApiRefResolver;
 
 use function file_put_contents;
 use function is_dir;

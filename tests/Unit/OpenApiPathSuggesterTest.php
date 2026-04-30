@@ -6,7 +6,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\OpenApiPathSuggester;
+use Studio\OpenApiContractTesting\Spec\OpenApiPathSuggester;
 
 use function array_map;
 use function sort;

@@ -8,7 +8,7 @@ use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\OpenApiPathMatcher;
+use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
 
 class OpenApiPathMatcherTest extends TestCase
 {

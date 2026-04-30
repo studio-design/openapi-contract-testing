@@ -10,9 +10,9 @@ use Studio\OpenApiContractTesting\EndpointCoverageState;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\OpenApiValidationResult;
 use Studio\OpenApiContractTesting\ResponseCoverageState;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 class ResponseValidationTest extends TestCase
 {

@@ -7,9 +7,9 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\PHPUnit\CoverageMergeCommand;
 use Studio\OpenApiContractTesting\PHPUnit\CoverageSidecarWriter;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function dirname;
 use function file_exists;

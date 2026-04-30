@@ -8,6 +8,8 @@ use const E_USER_WARNING;
 
 use InvalidArgumentException;
 use RuntimeException;
+use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidationResult;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseHeaderValidator;

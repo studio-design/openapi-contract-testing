@@ -7,6 +7,7 @@ namespace Studio\OpenApiContractTesting;
 use const E_USER_WARNING;
 
 use InvalidArgumentException;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function array_key_exists;
 use function array_keys;

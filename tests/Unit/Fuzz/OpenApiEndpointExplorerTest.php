@@ -12,7 +12,7 @@ use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
 use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
 use Studio\OpenApiContractTesting\Fuzz\OpenApiEndpointExplorer;
 use Studio\OpenApiContractTesting\HttpMethod;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function json_decode;
 use function json_encode;

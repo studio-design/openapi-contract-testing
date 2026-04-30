@@ -8,8 +8,8 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\EndpointCoverageState;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\ResponseCoverageState;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function implode;
 use function restore_error_handler;

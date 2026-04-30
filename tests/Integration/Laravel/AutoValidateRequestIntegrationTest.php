@@ -11,7 +11,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Studio\OpenApiContractTesting\Laravel\OpenApiContractTestingServiceProvider;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function dirname;
 

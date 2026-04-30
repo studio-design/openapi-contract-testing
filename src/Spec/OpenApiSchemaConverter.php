@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting;
+namespace Studio\OpenApiContractTesting\Spec;
+
+use Studio\OpenApiContractTesting\OpenApiVersion;
+use Studio\OpenApiContractTesting\SchemaContext;
 
 use function array_is_list;
 use function in_array;
