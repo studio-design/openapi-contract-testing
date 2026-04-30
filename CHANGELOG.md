@@ -70,6 +70,32 @@ the public API without those leaking into the SemVer contract.
   silent passes, but where features are out of scope it now says so
   explicitly rather than leaving users to discover it through silently
   green tests.
+- New `CONTRIBUTING.md`, `SECURITY.md`, `UPGRADING.md`, GitHub issue
+  templates, and pull request template. v1.0.0 will draw a wider audience
+  than v0.x; structured templates reduce triage cost and pin the SemVer /
+  security-disclosure expectations explicitly.
+
+### Release infrastructure
+
+- **CI hardening**. Added `composer-validate` and `composer-audit` jobs.
+  Added a `--prefer-lowest` matrix leg so constraint changes that
+  accidentally require a newer minor of opis/json-schema or PHPUnit are
+  caught instead of silently breaking downstream pin-pinned consumers.
+- **Tag-driven release pipeline**. Pushing a `v*` tag now runs the full
+  CI matrix once more and then publishes a GitHub Release with
+  auto-generated notes via `gh release create --generate-notes`. Notes
+  are grouped by PR labels per `.github/release.yml`. Eliminates the
+  "tagged but forgot to publish the Release" footgun.
+- **PR title convention enforcement** via `amannn/action-semantic-pull-request`.
+  History was already conventional-style; the workflow formalises it so
+  the squash-merge commit history stays parseable for changelog
+  automation.
+- **`composer.json` polish** — added `scripts` (`composer test` /
+  `stan` / `cs` / `cs-check` / `ci`), `support` URLs, and `archive.exclude`
+  so Packagist tarballs ship without `tests/`, `.github/`, dotfiles, etc.
+- **Renovate** now runs Mondays Asia/Tokyo, auto-merges runtime *patch*
+  updates as well as the existing dev minor/patch group. Runtime *minor*
+  stays manual because `opis/json-schema` semantics may shift.
 
 ## v0.15.0 — 2026-04-30
 

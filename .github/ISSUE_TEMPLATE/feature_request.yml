@@ -1,0 +1,50 @@
+name: Feature request
+description: Suggest a new feature or behaviour
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening: please skim the README "Supported features and known
+        limitations" section and the existing issues to check this is not
+        already documented or being worked on.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: |
+        Describe the user-facing problem first. "I want X" is less useful
+        than "When I do A, I expected B but got C."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: |
+        Sketch the API or behaviour you have in mind. Code examples help.
+        Be honest about whether it's a complete proposal or just an idea.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What else did you think about, and why is the proposal preferred?
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Schema validation
+        - Request validation
+        - Response validation
+        - Coverage tracking
+        - Fuzzing
+        - Laravel adapter
+        - PHPUnit extension
+        - CLI tooling
+        - Documentation
+        - Other
+    validations:
+      required: true

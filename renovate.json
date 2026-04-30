@@ -4,6 +4,8 @@
     "config:recommended"
   ],
   "labels": ["dependencies"],
+  "schedule": ["before 9am on Monday"],
+  "timezone": "Asia/Tokyo",
   "packageRules": [
     {
       "description": "Group GitHub Actions updates",
@@ -16,6 +18,12 @@
       "matchDepTypes": ["require-dev"],
       "matchUpdateTypes": ["minor", "patch"],
       "groupName": "dev dependencies (non-major)",
+      "automerge": true
+    },
+    {
+      "description": "Automerge runtime patch updates only — minor stays manual because validator semantics may shift",
+      "matchDepTypes": ["require"],
+      "matchUpdateTypes": ["patch"],
       "automerge": true
     }
   ]

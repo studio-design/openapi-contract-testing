@@ -1,0 +1,35 @@
+name: PR title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  conventional:
+    name: Conventional Commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            refactor
+            test
+            chore
+            perf
+            build
+            ci
+            style
+          requireScope: false
+          subjectPattern: ^(?!.*[A-Z]).+$
+          subjectPatternError: |
+            The PR title subject must start lowercase to match the existing
+            repo convention (e.g. "feat(coverage): add foo" not "feat(coverage): Add foo").
+            Allowed prefixes: feat, fix, docs, refactor, test, chore, perf, build, ci, style.
