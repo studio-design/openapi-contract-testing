@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\PHPUnit;
+namespace Studio\OpenApiContractTesting\Coverage;
 
 use const FILE_APPEND;
 
@@ -10,7 +10,8 @@ use InvalidArgumentException;
 use RuntimeException;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
+use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function array_filter;

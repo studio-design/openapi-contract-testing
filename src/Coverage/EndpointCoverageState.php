@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting;
+namespace Studio\OpenApiContractTesting\Coverage;
 
 /**
  * Resolved coverage state for a single (method, path) operation —

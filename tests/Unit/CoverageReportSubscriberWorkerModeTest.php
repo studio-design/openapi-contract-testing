@@ -8,10 +8,10 @@ use PHPUnit\Event\TestRunner\ExecutionFinished;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\Coverage\CoverageSidecarReader;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
 use Studio\OpenApiContractTesting\PHPUnit\CoverageReportSubscriber;
-use Studio\OpenApiContractTesting\PHPUnit\CoverageSidecarReader;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Throwable;
 

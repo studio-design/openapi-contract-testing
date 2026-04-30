@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting;
+namespace Studio\OpenApiContractTesting\Coverage;
 
 use RuntimeException;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;

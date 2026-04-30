@@ -10,10 +10,10 @@ use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Attribute\SkipOpenApi;
-use Studio\OpenApiContractTesting\EndpointCoverageState;
+use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Symfony\Component\HttpFoundation\Request;
 

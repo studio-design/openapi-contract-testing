@@ -6,10 +6,10 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\EndpointCoverageState;
-use Studio\OpenApiContractTesting\PHPUnit\ConsoleCoverageRenderer;
+use Studio\OpenApiContractTesting\Coverage\ConsoleCoverageRenderer;
+use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
+use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
 use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
-use Studio\OpenApiContractTesting\ResponseCoverageState;
 
 use function explode;
 

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting;
+namespace Studio\OpenApiContractTesting\Coverage;
 
 use const E_USER_WARNING;
 

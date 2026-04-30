@@ -6,12 +6,12 @@ namespace Studio\OpenApiContractTesting\Tests\Integration;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\EndpointCoverageState;
+use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiValidationResult;
-use Studio\OpenApiContractTesting\ResponseCoverageState;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 class ResponseValidationTest extends TestCase

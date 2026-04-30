@@ -2,11 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\PHPUnit;
-
-use Studio\OpenApiContractTesting\EndpointCoverageState;
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\ResponseCoverageState;
+namespace Studio\OpenApiContractTesting\Coverage;
 
 use function implode;
 use function round;

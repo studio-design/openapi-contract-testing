@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\Route;
 use Orchestra\Testbench\TestCase;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Laravel\OpenApiContractTestingServiceProvider;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function dirname;

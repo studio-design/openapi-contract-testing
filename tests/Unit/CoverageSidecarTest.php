@@ -7,9 +7,9 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\PHPUnit\CoverageSidecarReader;
-use Studio\OpenApiContractTesting\PHPUnit\CoverageSidecarWriter;
+use Studio\OpenApiContractTesting\Coverage\CoverageSidecarReader;
+use Studio\OpenApiContractTesting\Coverage\CoverageSidecarWriter;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 
 use function array_map;
 use function file_put_contents;

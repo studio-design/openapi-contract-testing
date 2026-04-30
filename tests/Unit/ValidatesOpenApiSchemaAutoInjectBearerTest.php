@@ -8,9 +8,9 @@ use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Symfony\Component\HttpFoundation\Request;
 

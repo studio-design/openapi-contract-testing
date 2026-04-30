@@ -2,13 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\PHPUnit;
+namespace Studio\OpenApiContractTesting\Coverage;
 
 use const STR_PAD_RIGHT;
 
-use Studio\OpenApiContractTesting\EndpointCoverageState;
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\ResponseCoverageState;
+use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
 
 use function round;
 use function sprintf;

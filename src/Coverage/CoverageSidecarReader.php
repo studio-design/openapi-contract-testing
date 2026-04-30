@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\PHPUnit;
+namespace Studio\OpenApiContractTesting\Coverage;
 
 use const DIRECTORY_SEPARATOR;
 use const JSON_THROW_ON_ERROR;

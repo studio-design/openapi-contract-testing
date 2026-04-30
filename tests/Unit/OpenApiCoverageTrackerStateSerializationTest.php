@@ -9,7 +9,7 @@ use const JSON_THROW_ON_ERROR;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function json_decode;

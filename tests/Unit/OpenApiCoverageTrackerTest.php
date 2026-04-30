@@ -6,9 +6,9 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\EndpointCoverageState;
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\ResponseCoverageState;
+use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function implode;

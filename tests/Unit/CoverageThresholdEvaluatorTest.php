@@ -6,7 +6,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\PHPUnit\CoverageThresholdEvaluator;
+use Studio\OpenApiContractTesting\Coverage\CoverageThresholdEvaluator;
 
 use function explode;
 use function str_repeat;

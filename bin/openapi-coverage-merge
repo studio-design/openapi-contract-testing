@@ -3,7 +3,7 @@
 
 declare(strict_types=1);
 
-use Studio\OpenApiContractTesting\PHPUnit\CoverageMergeCommand;
+use Studio\OpenApiContractTesting\Coverage\CoverageMergeCommand;
 
 // Locate the autoloader regardless of whether the binary is invoked from the
 // package's own `vendor/bin` (during local development) or from a downstream

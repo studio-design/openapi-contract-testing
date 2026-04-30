@@ -6,9 +6,9 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\EndpointCoverageState;
-use Studio\OpenApiContractTesting\PHPUnit\MarkdownCoverageRenderer;
-use Studio\OpenApiContractTesting\ResponseCoverageState;
+use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
+use Studio\OpenApiContractTesting\Coverage\MarkdownCoverageRenderer;
+use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
 
 use function explode;
 use function strpos;
