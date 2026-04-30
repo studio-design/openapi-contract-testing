@@ -187,6 +187,146 @@ class CoverageReportSubscriberThresholdTest extends TestCase
     }
 
     #[Test]
+    public function strict_threshold_fails_when_no_coverage_recorded(): void
+    {
+        // C2: a strict CI gate must not silently pass when zero contract
+        // assertions ran. Pre-fix, the subscriber's `if ($results === [])`
+        // early-return skipped the gate entirely → exit 0, missed signal.
+        // No `recordResponse()` call here — `computeAllResults()` returns [].
+
+        $exitCode = null;
+        $stderr = '';
+        $subscriber = new CoverageReportSubscriber(
+            specs: ['petstore-3.0'],
+            outputFile: null,
+            consoleOutput: ConsoleOutput::DEFAULT,
+            githubSummaryPath: null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            sidecarDir: $this->tmpDir,
+            minEndpointCoverage: 80.0,
+            minCoverageStrict: true,
+            exitHandler: static function (int $code) use (&$exitCode): void {
+                $exitCode = $code;
+            },
+        );
+
+        ob_start();
+        $subscriber->notify($this->fakeExecutionFinished());
+        ob_get_clean();
+
+        $this->assertSame(1, $exitCode);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('no contract test coverage was recorded', $stderr);
+    }
+
+    #[Test]
+    public function warn_only_threshold_logs_when_no_coverage_recorded(): void
+    {
+        // Symmetric to the strict case but stays exit 0 — a warn-only CI
+        // still surfaces the misconfiguration without breaking the build.
+        $exitCode = null;
+        $stderr = '';
+        $subscriber = new CoverageReportSubscriber(
+            specs: ['petstore-3.0'],
+            outputFile: null,
+            consoleOutput: ConsoleOutput::DEFAULT,
+            githubSummaryPath: null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            sidecarDir: $this->tmpDir,
+            minEndpointCoverage: 80.0,
+            // strict omitted → warn-only
+            exitHandler: static function (int $code) use (&$exitCode): void {
+                $exitCode = $code;
+            },
+        );
+
+        ob_start();
+        $subscriber->notify($this->fakeExecutionFinished());
+        ob_get_clean();
+
+        $this->assertNull($exitCode);
+        $this->assertStringContainsString('WARNING', $stderr);
+        $this->assertStringContainsString('no contract test coverage was recorded', $stderr);
+    }
+
+    #[Test]
+    public function no_coverage_without_threshold_stays_silent(): void
+    {
+        // Backwards compat: when no threshold is configured, an empty run
+        // must not start emitting noise — that would break callers who
+        // don't use the gate.
+        $exitCode = null;
+        $stderr = '';
+        $subscriber = new CoverageReportSubscriber(
+            specs: ['petstore-3.0'],
+            outputFile: null,
+            consoleOutput: ConsoleOutput::DEFAULT,
+            githubSummaryPath: null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            sidecarDir: $this->tmpDir,
+            exitHandler: static function (int $code) use (&$exitCode): void {
+                $exitCode = $code;
+            },
+        );
+
+        ob_start();
+        $subscriber->notify($this->fakeExecutionFinished());
+        ob_get_clean();
+
+        $this->assertNull($exitCode);
+        $this->assertSame('', $stderr);
+    }
+
+    #[Test]
+    public function strict_threshold_miss_on_response_only_invokes_exit_handler(): void
+    {
+        // Symmetric coverage: the endpoint-only path is exercised above; pin
+        // the response-only path so a future refactor that swaps
+        // minEndpoint/minResponse parameters would surface here.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        $exitCode = null;
+        $stderr = '';
+        $subscriber = new CoverageReportSubscriber(
+            specs: ['petstore-3.0'],
+            outputFile: null,
+            consoleOutput: ConsoleOutput::DEFAULT,
+            githubSummaryPath: null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            sidecarDir: $this->tmpDir,
+            minEndpointCoverage: null,
+            minResponseCoverage: 80.0,
+            minCoverageStrict: true,
+            exitHandler: static function (int $code) use (&$exitCode): void {
+                $exitCode = $code;
+            },
+        );
+
+        ob_start();
+        $subscriber->notify($this->fakeExecutionFinished());
+        ob_get_clean();
+
+        $this->assertSame(1, $exitCode);
+        $this->assertStringContainsString('response coverage', $stderr);
+        $this->assertStringNotContainsString('endpoint coverage', $stderr);
+    }
+
+    #[Test]
     public function passing_threshold_does_not_emit_anything(): void
     {
         OpenApiCoverageTracker::recordResponse(

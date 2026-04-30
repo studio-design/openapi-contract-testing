@@ -50,8 +50,8 @@ use function unlink;
  *     github_step_summary?: string,
  *     console_output?: string,
  *     cleanup?: bool,
- *     min_endpoint_coverage?: float,
- *     min_response_coverage?: float,
+ *     min_endpoint_coverage?: float|string,
+ *     min_response_coverage?: float|string,
  *     min_coverage_strict?: bool,
  *     help?: bool,
  * }
@@ -112,13 +112,14 @@ final class CoverageMergeCommand
                     break;
                 case 'min_endpoint_coverage':
                 case 'min_response_coverage':
-                    // Skip silently when non-numeric — a casted "0.0" would
-                    // mislead run() into believing a 0% gate was configured.
-                    // Range / sign validation lives in run() so the user sees
-                    // a single WARNING rather than two.
-                    if (is_numeric($value)) {
-                        $opts[$name] = (float) $value;
-                    }
+                    // Cast numeric values up-front so phpstan can prove the
+                    // 0..100 range check in run(). For non-numeric values
+                    // pass the raw string through — run()'s resolveThreshold
+                    // is the single point of validation, so a typo'd
+                    // `--min-endpoint-coverage=eighty` reaches the user as
+                    // one WARNING/FATAL instead of being dropped silently
+                    // (issue #135 review C3).
+                    $opts[$name] = is_numeric($value) ? (float) $value : $value;
 
                     break;
                 case 'min_coverage_strict':
@@ -197,9 +198,17 @@ final class CoverageMergeCommand
             : (getenv('GITHUB_STEP_SUMMARY') ?: null);
         $consoleOutput = ConsoleOutput::resolve($options['console_output'] ?? null);
         $cleanup = $options['cleanup'] ?? true;
-        $minEndpointPct = $this->resolveThreshold('min_endpoint_coverage', $options['min_endpoint_coverage'] ?? null);
-        $minResponsePct = $this->resolveThreshold('min_response_coverage', $options['min_response_coverage'] ?? null);
         $minStrict = $options['min_coverage_strict'] ?? false;
+        $endpointResolution = $this->resolveThreshold('min_endpoint_coverage', $options['min_endpoint_coverage'] ?? null, $minStrict);
+        $responseResolution = $this->resolveThreshold('min_response_coverage', $options['min_response_coverage'] ?? null, $minStrict);
+        if ($endpointResolution['fatal'] || $responseResolution['fatal']) {
+            // Strict-mode misconfiguration: a typo'd / out-of-range threshold
+            // would otherwise silently disable the gate the user opted into.
+            // Exit 2 mirrors the `--spec-base-path is required` config error.
+            return 2;
+        }
+        $minEndpointPct = $endpointResolution['value'];
+        $minResponsePct = $responseResolution['value'];
 
         if ($specBasePath === null) {
             $this->writeStderr("[OpenAPI Coverage] FATAL: --spec-base-path is required\n");
@@ -231,6 +240,17 @@ final class CoverageMergeCommand
         }
 
         if ($payloads === []) {
+            // Strict-mode gate must fail-fast even before sidecars exist —
+            // otherwise a misconfigured paratest dir or zero workers would
+            // silently pass an opt-in CI gate (issue #135 review C2).
+            if ($minStrict && ($minEndpointPct !== null || $minResponsePct !== null)) {
+                $this->writeStderr(sprintf(
+                    "[OpenAPI Coverage] FATAL: no contract test coverage was recorded; configured threshold cannot be evaluated. (no sidecars in %s)\n",
+                    $sidecarDir,
+                ));
+
+                return 1;
+            }
             $this->writeStderr(sprintf("[OpenAPI Coverage] WARNING: no sidecars found in %s\n", $sidecarDir));
 
             return 0;
@@ -252,13 +272,20 @@ final class CoverageMergeCommand
 
         $results = $this->computeResults($specs);
         if ($results === []) {
-            $this->writeStderr("[OpenAPI Coverage] WARNING: no coverage recorded across sidecars\n");
+            $strictGated = $minStrict && ($minEndpointPct !== null || $minResponsePct !== null);
+            $this->writeStderr(sprintf(
+                "[OpenAPI Coverage] %s: no contract test coverage was recorded; %s\n",
+                $strictGated ? 'FATAL' : 'WARNING',
+                $strictGated
+                    ? 'configured threshold cannot be evaluated. (sidecars present but recorded no observations)'
+                    : 'no coverage recorded across sidecars',
+            ));
 
             if ($cleanup) {
                 $this->cleanup($sidecarDir);
             }
 
-            return 0;
+            return $strictGated ? 1 : 0;
         }
 
         $this->writeStdout(ConsoleCoverageRenderer::render($results, $consoleOutput));
@@ -319,38 +346,52 @@ final class CoverageMergeCommand
     }
 
     /**
-     * Validate a percentage threshold from CLI options. Out-of-range values
-     * become a `WARNING` and are dropped so a misconfiguration surfaces in
-     * the run log instead of silently inverting the gate.
+     * Validate a percentage threshold from CLI options. Returns the parsed
+     * value (or `null` when the option is absent / invalid) plus a fatal
+     * flag the caller uses to short-circuit `run()` with exit 2.
+     *
+     * Severity follows `min_coverage_strict`:
+     *  - non-strict: invalid values become a WARNING and the gate is dropped
+     *    — opt-in mode tolerates misconfiguration.
+     *  - strict:     invalid values become a FATAL exit-2 — a CI that opted
+     *    into fail-fast must not silently lose its gate to a typo
+     *    (issue #135 review C1).
+     *
+     * @return array{value: ?float, fatal: bool}
      */
-    private function resolveThreshold(string $name, mixed $value): ?float
+    private function resolveThreshold(string $name, mixed $value, bool $strict): array
     {
         if ($value === null) {
-            return null;
+            return ['value' => null, 'fatal' => false];
         }
 
         if (!is_numeric($value)) {
-            $this->writeStderr(sprintf(
-                "[OpenAPI Coverage] WARNING: %s='%s' is not a number; skipping threshold gate.\n",
-                $name,
-                (string) $value,
-            ));
-
-            return null;
+            return $this->reportThresholdProblem(
+                $strict,
+                sprintf("%s='%s' is not a number; skipping threshold gate.", $name, (string) $value),
+            );
         }
 
         $float = (float) $value;
         if ($float < 0.0 || $float > 100.0) {
-            $this->writeStderr(sprintf(
-                "[OpenAPI Coverage] WARNING: %s=%s is out of range (expected 0-100); skipping threshold gate.\n",
-                $name,
-                (string) $float,
-            ));
-
-            return null;
+            return $this->reportThresholdProblem(
+                $strict,
+                sprintf('%s=%s is out of range (expected 0-100); skipping threshold gate.', $name, (string) $float),
+            );
         }
 
-        return $float;
+        return ['value' => $float, 'fatal' => false];
+    }
+
+    /**
+     * @return array{value: null, fatal: bool}
+     */
+    private function reportThresholdProblem(bool $strict, string $detail): array
+    {
+        $severity = $strict ? 'FATAL' : 'WARNING';
+        $this->writeStderr(sprintf("[OpenAPI Coverage] %s: %s\n", $severity, $detail));
+
+        return ['value' => null, 'fatal' => $strict];
     }
 
     /**

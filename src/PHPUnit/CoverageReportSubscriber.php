@@ -19,6 +19,7 @@ use function fflush;
 use function file_put_contents;
 use function getenv;
 use function is_callable;
+use function sprintf;
 use function trim;
 
 /**
@@ -75,6 +76,11 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         OpenApiSpecLoader::clearCache();
 
         if ($results === []) {
+            // C2: a strict CI gate must not silently pass when zero contract
+            // assertions ran. Pre-fix, this branch quietly returned 0 even
+            // though the user had opted into fail-fast via min_*_coverage.
+            $this->failOnEmptyResultsIfGated();
+
             return;
         }
 
@@ -142,6 +148,43 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         // PHPUnit's own exit code path doesn't propagate subscriber failures,
         // so a strict threshold miss has to terminate the process directly to
         // be visible to CI.
+        $exit = $this->exitHandler;
+        if ($this->stderrWriter === null) {
+            fflush(STDERR);
+        }
+
+        if (is_callable($exit)) {
+            $exit(1);
+
+            return;
+        }
+
+        exit(1);
+    }
+
+    /**
+     * Issue #135 review C2: when no spec produced any coverage, the
+     * regular gate path never runs (the evaluator would receive an empty
+     * results array and report 100% vacuously). A strict run must still
+     * fail-fast — otherwise a CI that opted into the gate silently passes
+     * when its tests didn't actually validate anything.
+     */
+    private function failOnEmptyResultsIfGated(): void
+    {
+        if ($this->minEndpointCoverage === null && $this->minResponseCoverage === null) {
+            return;
+        }
+
+        $severity = $this->minCoverageStrict ? 'FATAL' : 'WARNING';
+        $this->writeStderr(sprintf(
+            "[OpenAPI Coverage] %s: no contract test coverage was recorded; configured threshold cannot be evaluated.\n",
+            $severity,
+        ));
+
+        if (!$this->minCoverageStrict) {
+            return;
+        }
+
         $exit = $this->exitHandler;
         if ($this->stderrWriter === null) {
             fflush(STDERR);

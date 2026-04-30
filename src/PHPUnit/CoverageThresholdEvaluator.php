@@ -88,9 +88,13 @@ final class CoverageThresholdEvaluator
      */
     private static function buildLine(int $covered, int $total, float $threshold): array
     {
-        // Vacuously OK when nothing is declared — a misconfigured spec set
-        // shouldn't fail the gate. The "no coverage recorded" case is caught
-        // upstream by hasAnyCoverage() before the gate is even evaluated.
+        // `total === 0` only happens for a spec with no declared paths /
+        // responses — there's no contract API to fail against, so report it
+        // as 100% so the gate doesn't punish well-formed empty specs.
+        // The "no coverage was recorded" silent-pass case is *not* defended
+        // here: callers (`CoverageReportSubscriber`, `CoverageMergeCommand`)
+        // detect empty results explicitly and emit FATAL/WARNING before
+        // reaching this method (issue #135 review C2).
         $percent = $total > 0 ? round($covered / $total * 100, 1) : 100.0;
 
         return [
