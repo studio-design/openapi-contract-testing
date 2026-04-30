@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\OpenApiContractTesting\Tests\Unit\PHPUnit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -62,7 +62,7 @@ class OpenApiCoverageExtensionTest extends TestCase
     {
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-unresolvable',
         ]);
 
@@ -81,7 +81,7 @@ class OpenApiCoverageExtensionTest extends TestCase
         // moment of detection — not on someone else's PR after a merge.
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'does-not-exist',
         ]);
 
@@ -103,7 +103,7 @@ class OpenApiCoverageExtensionTest extends TestCase
     {
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
         ]);
 
@@ -123,7 +123,7 @@ class OpenApiCoverageExtensionTest extends TestCase
 
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-unresolvable',
         ]);
 
@@ -154,7 +154,7 @@ class OpenApiCoverageExtensionTest extends TestCase
 
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'does-not-exist',
         ]);
 
@@ -183,7 +183,7 @@ class OpenApiCoverageExtensionTest extends TestCase
         // #79 set out to close. Pin the fatal treatment so it cannot regress.
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'malformed-json',
         ]);
 
@@ -227,7 +227,7 @@ class OpenApiCoverageExtensionTest extends TestCase
         // the same shape for the InvalidOpenApiSpecException branch.
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid,does-not-exist',
         ]);
 
@@ -245,7 +245,7 @@ class OpenApiCoverageExtensionTest extends TestCase
         // its relative-path handling had no test coverage.
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'sidecar_dir' => 'relative-sidecars',
         ]);
@@ -265,7 +265,7 @@ class OpenApiCoverageExtensionTest extends TestCase
         // don't break a CI that hasn't opted into the gate yet.
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'min_endpoint_coverage' => '150',
         ]);
@@ -282,7 +282,7 @@ class OpenApiCoverageExtensionTest extends TestCase
     {
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'min_response_coverage' => 'eighty',
         ]);
@@ -303,7 +303,7 @@ class OpenApiCoverageExtensionTest extends TestCase
         // entries fail the run after issue #134.
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'min_endpoint_coverage' => '150',
             'min_coverage_strict' => 'true',
@@ -324,7 +324,7 @@ class OpenApiCoverageExtensionTest extends TestCase
     {
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'min_response_coverage' => 'eighty',
             'min_coverage_strict' => 'true',
@@ -347,7 +347,7 @@ class OpenApiCoverageExtensionTest extends TestCase
         // code treated `''` as falsy. Pin the docstring's intent.
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'min_endpoint_coverage' => '150', // out of range
             'min_coverage_strict' => '',      // shorthand for "true"
@@ -365,7 +365,7 @@ class OpenApiCoverageExtensionTest extends TestCase
     {
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'min_endpoint_coverage' => '80',
             'min_response_coverage' => '70.5',
@@ -385,7 +385,7 @@ class OpenApiCoverageExtensionTest extends TestCase
         // successful load" refactor would be caught here.
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid,refs-unresolvable',
         ]);
 

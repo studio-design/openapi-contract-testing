@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -92,7 +92,7 @@ class CoverageMergeCommandTest extends TestCase
         $command = new CoverageMergeCommand(stdoutWriter: static fn(string $msg): null => null);
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'output_file' => $this->outputFile,
             'cleanup' => true,
@@ -125,7 +125,7 @@ class CoverageMergeCommandTest extends TestCase
         $command = new CoverageMergeCommand(stdoutWriter: static fn(string $msg): null => null);
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'output_file' => $this->outputFile,
             'cleanup' => false,
@@ -154,7 +154,7 @@ class CoverageMergeCommandTest extends TestCase
         $command = new CoverageMergeCommand(stdoutWriter: static fn(string $msg): null => null);
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'github_step_summary' => $stepSummary,
             'cleanup' => true,
@@ -192,7 +192,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'output_file' => $this->outputFile,
         ]);
@@ -230,7 +230,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'output_file' => $this->outputFile,
         ]);
@@ -253,7 +253,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'output_file' => $this->outputFile,
         ]);
@@ -310,7 +310,7 @@ class CoverageMergeCommandTest extends TestCase
         $command = new CoverageMergeCommand(stdoutWriter: static fn(string $msg): null => null);
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'strip_prefixes' => ['/api', '/v2'],
             'output_file' => $this->outputFile,
@@ -348,7 +348,7 @@ class CoverageMergeCommandTest extends TestCase
         // documented default (`front`), not silently exit with "no
         // coverage recorded".
         $opts = CoverageMergeCommand::parseArgv([
-            '--spec-base-path=' . __DIR__ . '/../fixtures/specs',
+            '--spec-base-path=' . __DIR__ . '/../../fixtures/specs',
             '--specs=',
         ]);
         // parseArgv strips empty entries, leaving 'specs' => []. run() must
@@ -383,7 +383,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'min_endpoint_coverage' => 80.0,
             'min_coverage_strict' => true,
@@ -421,7 +421,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'min_endpoint_coverage' => 80.0,
             // min_coverage_strict omitted — default false
@@ -449,7 +449,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir, // empty
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'min_endpoint_coverage' => 80.0,
             'min_coverage_strict' => true,
@@ -478,7 +478,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'min_endpoint_coverage' => 80.0,
             'min_coverage_strict' => true,
@@ -505,7 +505,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'min_endpoint_coverage' => 80.0, // strict omitted
         ]);
@@ -539,7 +539,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'min_response_coverage' => 80.0,
             'min_coverage_strict' => true,
@@ -576,7 +576,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'min_endpoint_coverage' => 0.0, // any non-negative coverage clears 0%
             'min_coverage_strict' => true,
@@ -641,7 +641,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'min_endpoint_coverage' => 150.0, // out of 0..100 range
             // min_coverage_strict omitted → warn-only
@@ -679,7 +679,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'min_endpoint_coverage' => 150.0,
             'min_coverage_strict' => true,
@@ -717,7 +717,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'min_endpoint_coverage' => 'eighty',
             'cleanup' => true,
@@ -751,7 +751,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'min_endpoint_coverage' => 'eighty',
             'min_coverage_strict' => true,
@@ -805,7 +805,7 @@ class CoverageMergeCommandTest extends TestCase
 
         $exit = $command->run([
             'sidecar_dir' => $this->sidecarDir,
-            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => ['petstore-3.0'],
             'output_file' => $unwritable,
             'cleanup' => true,

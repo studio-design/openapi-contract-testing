@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -22,7 +22,7 @@ class OpenApiCoverageTrackerTest extends TestCase
         parent::setUp();
         OpenApiCoverageTracker::reset();
         OpenApiSpecLoader::reset();
-        OpenApiSpecLoader::configure(__DIR__ . '/../fixtures/specs');
+        OpenApiSpecLoader::configure(__DIR__ . '/../../fixtures/specs');
     }
 
     protected function tearDown(): void
@@ -247,7 +247,7 @@ class OpenApiCoverageTrackerTest extends TestCase
         // for skipped responses. Spec might only declare `5XX` — reconciliation
         // surfaces the spec-declared range key as `state: skipped`.
         OpenApiSpecLoader::reset();
-        OpenApiSpecLoader::configure(__DIR__ . '/../fixtures/specs');
+        OpenApiSpecLoader::configure(__DIR__ . '/../../fixtures/specs');
         $this->recordCoverageForFakeSpec();
 
         $endpoint = $this->endpointSummary('range-keys', 'GET /widgets');

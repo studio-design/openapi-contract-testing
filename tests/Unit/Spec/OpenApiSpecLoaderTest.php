@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\OpenApiContractTesting\Tests\Unit\Spec;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\HttpFactory;
@@ -79,7 +79,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_returns_parsed_spec(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         $spec = OpenApiSpecLoader::load('petstore-3.0');
@@ -92,7 +92,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_caches_result(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         $first = OpenApiSpecLoader::load('petstore-3.0');
@@ -132,7 +132,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function clear_cache_keeps_config(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath, ['/api']);
 
         // Load to populate cache
@@ -152,7 +152,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_resolves_internal_refs(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         $spec = OpenApiSpecLoader::load('refs-valid');
@@ -191,7 +191,7 @@ class OpenApiSpecLoaderTest extends TestCase
         // bool, bare `YYYY-MM-DD` -> int timestamp), so the strict-equality
         // assertions below double as drift pins: if a scalar's decoded type
         // ever changes, the resolved-array comparisons will fail.
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         $spec = OpenApiSpecLoader::load('petstore-yaml-with-refs');
@@ -233,7 +233,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_throws_on_circular_ref(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         $this->expectException(InvalidOpenApiSpecException::class);
@@ -250,7 +250,7 @@ class OpenApiSpecLoaderTest extends TestCase
         // external refs are supported, the resolver attempts the load
         // and surfaces a precise file-not-found error instead of the
         // old blanket "external refs unsupported" rejection.
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         try {
@@ -361,7 +361,7 @@ class OpenApiSpecLoaderTest extends TestCase
         // A previously-cached spec resolved under one remote-refs policy
         // must not be served after configure() flips the policy. Pin the
         // eviction so the next load() reads from disk again.
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
         $first = OpenApiSpecLoader::load('petstore-3.0');
         $this->assertSame('3.0.3', $first['openapi']);
@@ -407,7 +407,7 @@ class OpenApiSpecLoaderTest extends TestCase
         // for both list and detail responses, plus a JSON-pointer fragment
         // ref into schemas/error.json. All should inline cleanly without
         // any pre-bundling step.
-        $fixturesPath = __DIR__ . '/../fixtures/specs/external-refs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs/external-refs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         $spec = OpenApiSpecLoader::load('multi-file');
@@ -427,7 +427,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_throws_on_unresolvable_ref(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         try {
@@ -446,7 +446,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function evict_removes_single_spec_from_cache(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         // Load two specs
@@ -467,7 +467,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function failed_load_does_not_poison_cache(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         try {
@@ -486,7 +486,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function failed_load_does_not_affect_other_specs(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         try {
@@ -508,7 +508,7 @@ class OpenApiSpecLoaderTest extends TestCase
         // on: mutating the returned array must not corrupt the cached copy.
         // Swapping to by-reference returns (or accidentally sharing the root
         // snapshot) would show up here.
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         $first = OpenApiSpecLoader::load('refs-valid');
@@ -521,7 +521,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_parses_yaml_spec(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         $spec = OpenApiSpecLoader::load('petstore-yaml');
@@ -534,7 +534,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_parses_yml_spec(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         $spec = OpenApiSpecLoader::load('petstore-yml');
@@ -546,7 +546,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_caches_yaml_spec(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         $first = OpenApiSpecLoader::load('petstore-yaml');
@@ -588,7 +588,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_throws_when_yaml_is_malformed(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         try {
@@ -604,7 +604,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_throws_when_yaml_root_is_not_an_array(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         try {
@@ -620,7 +620,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_throws_when_json_root_is_not_an_array(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         try {
@@ -636,7 +636,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_throws_when_json_is_malformed(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
 
         try {
@@ -652,7 +652,7 @@ class OpenApiSpecLoaderTest extends TestCase
     #[Test]
     public function load_yaml_throws_with_install_hint_when_symfony_yaml_missing(): void
     {
-        $fixturesPath = __DIR__ . '/../fixtures/specs';
+        $fixturesPath = __DIR__ . '/../../fixtures/specs';
         OpenApiSpecLoader::configure($fixturesPath);
         YamlAvailability::overrideForTesting(false);
 

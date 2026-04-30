@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\OpenApiContractTesting\Tests\Unit\Spec;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;

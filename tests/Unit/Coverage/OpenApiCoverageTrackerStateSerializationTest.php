@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -30,7 +30,7 @@ class OpenApiCoverageTrackerStateSerializationTest extends TestCase
         parent::setUp();
         OpenApiCoverageTracker::reset();
         OpenApiSpecLoader::reset();
-        OpenApiSpecLoader::configure(__DIR__ . '/../fixtures/specs');
+        OpenApiSpecLoader::configure(__DIR__ . '/../../fixtures/specs');
     }
 
     protected function tearDown(): void

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\OpenApiContractTesting\Tests\Unit\PHPUnit;
 
 use PHPUnit\Event\TestRunner\ExecutionFinished;
 use PHPUnit\Framework\Attributes\Test;
@@ -48,7 +48,7 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
         parent::setUp();
         OpenApiCoverageTracker::reset();
         OpenApiSpecLoader::reset();
-        OpenApiSpecLoader::configure(__DIR__ . '/../fixtures/specs');
+        OpenApiSpecLoader::configure(__DIR__ . '/../../fixtures/specs');
 
         $this->tmpDir = sys_get_temp_dir() . '/openapi-coverage-subscriber-' . uniqid('', true);
 
