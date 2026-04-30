@@ -728,7 +728,7 @@ vendor/bin/openapi-coverage-merge \
 | `--github-step-summary=<path>` | `$GITHUB_STEP_SUMMARY` | Append Markdown report to this file |
 | `--console-output=<mode>` | `default` | `default` / `all` / `uncovered_only` |
 | `--min-endpoint-coverage=<pct>` | — | Threshold gate (see [Coverage threshold gate](#coverage-threshold-gate)) |
-| `--min-response-coverage=<pct>` | — | Threshold gate at `(status, content-type)` granularity |
+| `--min-response-coverage=<pct>` | — | Threshold gate at `(method, path, status, content-type)` granularity |
 | `--min-coverage-strict` | `false` (warn-only) | Treat threshold misses as exit non-zero |
 | `--no-cleanup` | (cleanup is on by default) | Keep sidecar files after merge |
 

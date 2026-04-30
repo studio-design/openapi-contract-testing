@@ -39,7 +39,7 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
      * @param null|float $minEndpointCoverage Optional gate: when not null and `endpointFullyCovered/endpointTotal`
      *                                        (rolled across `$specs`) is below this percent, the subscriber prints
      *                                        a FAIL/WARN line. See issue #135.
-     * @param null|float $minResponseCoverage Same idea against (status, content-type) granularity.
+     * @param null|float $minResponseCoverage Same idea, but at `(method, path, status, content-type)` granularity.
      * @param bool $minCoverageStrict Treat threshold misses as exit non-zero (default warn-only).
      * @param null|callable(int): void $exitHandler Test seam for the strict-miss exit. Defaults to native `exit()`
      *                                              so production behavior matches PHPUnit's own coverage gate.

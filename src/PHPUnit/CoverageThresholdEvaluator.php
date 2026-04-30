@@ -14,10 +14,12 @@ use function strlen;
 
 /**
  * Pure evaluator that gates a CI run on coverage thresholds. Mirrors PHPUnit's
- * own `--coverage-threshold`: take the rolled-up percentages computed from
- * {@see OpenApiCoverageTracker::computeCoverage()} per spec, sum them across
- * configured specs, and compare against optional `min_endpoint_coverage` /
- * `min_response_coverage` percent values.
+ * own `--coverage-threshold`: take the per-spec results from
+ * {@see OpenApiCoverageTracker::computeCoverage()}, sum the raw covered/total
+ * counts across configured specs (NOT an average of per-spec percentages —
+ * that would weight uneven specs incorrectly), recompute a single percentage,
+ * and compare against optional `min_endpoint_coverage` / `min_response_coverage`
+ * percent values.
  *
  * Decoupled from I/O so {@see CoverageReportSubscriber} (in-process) and
  * {@see CoverageMergeCommand} (paratest post-step) can share gating logic

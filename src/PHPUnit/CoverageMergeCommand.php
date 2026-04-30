@@ -155,7 +155,7 @@ final class CoverageMergeCommand
               --console-output=<mode>       default | all | uncovered_only.
               --min-endpoint-coverage=<pct> Fail-fast (with --min-coverage-strict) when fully-
                                             covered-endpoint percent is below this value (0-100).
-              --min-response-coverage=<pct> Same idea, against (status, content-type) granularity.
+              --min-response-coverage=<pct> Same, at (method, path, status, content-type) granularity.
               --min-coverage-strict[=BOOL]  Treat threshold misses as exit non-zero (default
                                             warn-only).
               --no-cleanup                  Keep sidecar files after merge (default: cleanup).
