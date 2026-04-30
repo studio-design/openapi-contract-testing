@@ -86,9 +86,16 @@ final class ConsoleCoverageRenderer
 
     /**
      * A spec is "active" when at least one validated/skipped response was
-     * recorded, or any endpoint was reached request-only (request hook fired
-     * without a response assertion). Used by ACTIVE_ONLY mode to collapse
-     * specs that no test in this run touched.
+     * recorded, or any endpoint resolved to the `RequestOnly` bucket — see
+     * {@see OpenApiCoverageTracker::deriveEndpointState()}
+     * for the full definition (request hook fired, or only unexpected
+     * observations recorded). Used by ACTIVE_ONLY mode to collapse specs
+     * that no test in this run touched.
+     *
+     * Counts only declared-endpoint activity. Recordings whose endpoint key
+     * is absent from the live spec (e.g. an orphan in a paratest sidecar
+     * after a mid-run spec edit) are dropped by `computeCoverage` and so do
+     * not flip a spec to active here either.
      *
      * @param CoverageResult $result
      */

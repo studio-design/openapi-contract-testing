@@ -110,6 +110,14 @@ class ConsoleOutputTest extends TestCase
     }
 
     #[Test]
+    public function resolve_returns_active_only_from_env(): void
+    {
+        putenv('OPENAPI_CONSOLE_OUTPUT=active_only');
+
+        $this->assertSame(ConsoleOutput::ACTIVE_ONLY, ConsoleOutput::resolve(null));
+    }
+
+    #[Test]
     public function resolve_env_trims_whitespace(): void
     {
         putenv('OPENAPI_CONSOLE_OUTPUT=  all  ');

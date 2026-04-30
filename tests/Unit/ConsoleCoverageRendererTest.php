@@ -269,6 +269,55 @@ class ConsoleCoverageRendererTest extends TestCase
 
         $this->assertStringNotContainsString('no test activity', $output);
         $this->assertStringContainsString('[front] endpoints', $output);
+        // Pin that the endpoint row actually rendered (not just the header).
+        // A regression that emitted the summary block but skipped
+        // renderEndpoints would otherwise pass.
+        $this->assertStringContainsString('DELETE /v1/pets/{petId}', $output);
+    }
+
+    #[Test]
+    public function active_only_collapses_every_spec_when_all_inactive(): void
+    {
+        $results = [
+            'front' => self::coverage(
+                endpoints: [
+                    self::endpoint('GET /v1/pets', 'uncovered', responses: [
+                        self::row('200', 'application/json', 'uncovered'),
+                    ], totalResponseCount: 1),
+                ],
+                endpointTotal: 10,
+                endpointUncovered: 10,
+                responseTotal: 20,
+                responseUncovered: 20,
+            ),
+            'admin' => self::coverage(
+                endpoints: [
+                    self::endpoint('GET /v2/admin/early_accesses', 'uncovered', responses: [
+                        self::row('200', 'application/json', 'uncovered'),
+                    ], totalResponseCount: 1),
+                ],
+                endpointTotal: 5,
+                endpointUncovered: 5,
+                responseTotal: 8,
+                responseUncovered: 8,
+            ),
+        ];
+
+        $output = ConsoleCoverageRenderer::render($results, ConsoleOutput::ACTIVE_ONLY);
+
+        $this->assertStringContainsString('OpenAPI Contract Test Coverage', $output);
+        $this->assertStringContainsString('[front] no test activity (10 endpoints, 20 responses in spec)', $output);
+        $this->assertStringContainsString('[admin] no test activity (5 endpoints, 8 responses in spec)', $output);
+        // No legend or per-endpoint rows when every spec is collapsed.
+        $this->assertStringNotContainsString('Legend:', $output);
+        $this->assertStringNotContainsString('GET /v1/pets', $output);
+        $this->assertStringNotContainsString('GET /v2/admin/early_accesses', $output);
+    }
+
+    #[Test]
+    public function active_only_returns_empty_string_for_empty_results(): void
+    {
+        $this->assertSame('', ConsoleCoverageRenderer::render([], ConsoleOutput::ACTIVE_ONLY));
     }
 
     #[Test]
