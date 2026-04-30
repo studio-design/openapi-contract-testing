@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Fuzz;
 
+use const E_USER_WARNING;
+
 use Faker\Factory;
 use Faker\Generator;
 use InvalidArgumentException;
@@ -19,10 +21,12 @@ use function is_int;
 use function is_string;
 use function max;
 use function min;
+use function sprintf;
 use function str_pad;
 use function str_repeat;
 use function strlen;
 use function substr;
+use function trigger_error;
 
 /**
  * Generate happy-path values that conform to a JSON Schema (Draft 07).
@@ -46,6 +50,15 @@ use function substr;
  */
 final class SchemaDataGenerator
 {
+    /**
+     * Per-process record of formats already announced as "faker missing".
+     * Keyed by format name; we only warn once per format to avoid spamming
+     * a long fuzz run that touches many `email` properties.
+     *
+     * @var array<string, true>
+     */
+    private static array $warnedFakerFormats = [];
+
     /**
      * @param array<string, mixed> $schema
      *
@@ -98,8 +111,9 @@ final class SchemaDataGenerator
     }
 
     /**
-     * Build a faker generator when the package is installed. Returning null
-     * is the documented fallback path — callers must handle either branch.
+     * Build a faker generator when the package is installed; null otherwise.
+     * The null branch is documented and exercised by tests — see the class
+     * docblock for the determinism contract in either case.
      */
     public static function createFaker(?int $seed): ?Generator
     {
@@ -113,6 +127,18 @@ final class SchemaDataGenerator
         }
 
         return $faker;
+    }
+
+    /**
+     * Reset the per-process "already warned" record. Tests use this to
+     * exercise the warning path multiple times without leaking state across
+     * cases; production callers never need to.
+     *
+     * @internal
+     */
+    public static function resetWarningStateForTesting(): void
+    {
+        self::$warnedFakerFormats = [];
     }
 
     /**
@@ -227,6 +253,16 @@ final class SchemaDataGenerator
             }
         }
 
+        if ($faker === null && $format !== null && self::isSupportedFormat($format)) {
+            // Without faker, format-constrained strings (`email`, `uuid`, …)
+            // degrade to the deterministic primitive fallback below — which
+            // will not satisfy the format constraint and every fuzzed request
+            // will fail at validation. Surface this once per process so the
+            // user can install fakerphp/faker, instead of letting the test
+            // appear "unstable" with no diagnostic.
+            self::warnFakerMissing($format);
+        }
+
         $minLength = isset($schema['minLength']) && is_int($schema['minLength']) && $schema['minLength'] >= 0
             ? $schema['minLength']
             : 0;
@@ -235,10 +271,11 @@ final class SchemaDataGenerator
             : 16;
 
         if ($faker !== null) {
-            // bothify('?') yields random alpha; fixed length keeps values
-            // inside [minLength, maxLength] without an extra clamp pass.
-            // The target is always >= 1 because $maxLength is constrained > 0
-            // above and min($maxLength, 8) >= 1.
+            // bothify('?') yields random alpha sized to the chosen target.
+            // Target is always >= 1 because $maxLength is constrained > 0
+            // above and min($maxLength, 8) >= 1. clampLength still runs to
+            // honor `minLength > 8` (where the target was capped at 8) and
+            // to defensively pad when bothify ever returns a short result.
             $target = max($minLength, min($maxLength, 8));
             $generated = $faker->bothify(str_repeat('?', $target));
 
@@ -264,6 +301,47 @@ final class SchemaDataGenerator
             'ipv6' => $faker->ipv6(),
             default => null,
         };
+    }
+
+    /**
+     * Mirrors the format keys that {@see self::generateStringByFormat()}
+     * actually handles. Listing them here lets the faker-missing warning
+     * fire only for cases where faker would have helped — exotic formats
+     * (e.g. `byte`, `binary`, `password`) stay silent because the
+     * deterministic fallback wasn't going to satisfy them either way.
+     */
+    private static function isSupportedFormat(string $format): bool
+    {
+        return in_array(
+            $format,
+            ['email', 'idn-email', 'uuid', 'date', 'date-time', 'time', 'uri', 'url', 'iri', 'hostname', 'ipv4', 'ipv6'],
+            true,
+        );
+    }
+
+    /**
+     * Emit a one-shot warning per missing format. We dedupe by `$format` so
+     * a long fuzz run with many email fields still only nags once per format
+     * — matching how the rest of the library uses E_USER_WARNING for
+     * spec-author advisories (see OpenApiCoverageTracker::warnMalformed()).
+     */
+    private static function warnFakerMissing(string $format): void
+    {
+        if (isset(self::$warnedFakerFormats[$format])) {
+            return;
+        }
+        self::$warnedFakerFormats[$format] = true;
+
+        trigger_error(
+            sprintf(
+                '[openapi-contract-testing] fakerphp/faker is not installed; '
+                . "string format '%s' will be generated as a deterministic primitive "
+                . 'and is unlikely to satisfy the spec constraint. '
+                . 'Install via: composer require --dev fakerphp/faker',
+                $format,
+            ),
+            E_USER_WARNING,
+        );
     }
 
     /**
@@ -293,14 +371,33 @@ final class SchemaDataGenerator
      */
     private static function generateInteger(array $schema, ?Generator $faker, int $iteration): int
     {
-        $min = isset($schema['minimum']) && (is_int($schema['minimum']) || is_float($schema['minimum']))
-            ? (int) $schema['minimum']
-            : 1;
-        $max = isset($schema['maximum']) && (is_int($schema['maximum']) || is_float($schema['maximum']))
-            ? (int) $schema['maximum']
-            : 1000;
+        // Resolve bounds in three modes so a one-sided constraint never produces
+        // out-of-range values: when only `maximum: 0` is set, anchoring `min`
+        // to a static 1 would silently emit 1 every time. Anchor relative to
+        // the supplied bound instead and only fall back to flat defaults when
+        // both ends are unspecified.
+        $minSet = isset($schema['minimum']) && (is_int($schema['minimum']) || is_float($schema['minimum']));
+        $maxSet = isset($schema['maximum']) && (is_int($schema['maximum']) || is_float($schema['maximum']));
+
+        if ($minSet && $maxSet) {
+            $min = (int) $schema['minimum'];
+            $max = (int) $schema['maximum'];
+        } elseif ($minSet) {
+            $min = (int) $schema['minimum'];
+            $max = $min + 1000;
+        } elseif ($maxSet) {
+            $max = (int) $schema['maximum'];
+            $min = $max - 1000;
+        } else {
+            $min = 1;
+            $max = 1000;
+        }
 
         if ($max < $min) {
+            // Spec inversion (e.g. min=10, max=5). Honor `min` since it is the
+            // tighter constraint for "this value must exist at all"; the tests
+            // that pass a contradictory schema are expected to fail validation
+            // downstream — we just refuse to amplify the contradiction.
             $max = $min;
         }
 
@@ -318,22 +415,43 @@ final class SchemaDataGenerator
      */
     private static function generateNumber(array $schema, ?Generator $faker, int $iteration): float
     {
-        $min = isset($schema['minimum']) && (is_int($schema['minimum']) || is_float($schema['minimum']))
-            ? (float) $schema['minimum']
-            : 0.0;
-        $max = isset($schema['maximum']) && (is_int($schema['maximum']) || is_float($schema['maximum']))
-            ? (float) $schema['maximum']
-            : 1000.0;
+        $minSet = isset($schema['minimum']) && (is_int($schema['minimum']) || is_float($schema['minimum']));
+        $maxSet = isset($schema['maximum']) && (is_int($schema['maximum']) || is_float($schema['maximum']));
+
+        if ($minSet && $maxSet) {
+            $min = (float) $schema['minimum'];
+            $max = (float) $schema['maximum'];
+        } elseif ($minSet) {
+            $min = (float) $schema['minimum'];
+            $max = $min + 1000.0;
+        } elseif ($maxSet) {
+            $max = (float) $schema['maximum'];
+            $min = $max - 1000.0;
+        } else {
+            $min = 0.0;
+            $max = 1000.0;
+        }
 
         if ($max < $min) {
             $max = $min;
         }
 
         if ($faker !== null) {
-            return $faker->randomFloat(2, $min, $max);
+            // randomFloat(null, …) lets faker pick precision dynamically so
+            // tight ranges (e.g. minimum=0.001 maximum=0.002) don't collapse
+            // to 0.00 from a fixed two-decimal rounding.
+            return $faker->randomFloat(null, $min, $max);
         }
 
-        return $min + ($iteration % 100) / 10.0;
+        // Scale the iteration-driven offset to the actual span so the value
+        // never escapes [min, max] — using a fixed `iter / 10` step would
+        // exit the range whenever the span < 10.
+        $span = $max - $min;
+        if ($span <= 0.0) {
+            return $min;
+        }
+
+        return $min + ($iteration % 100) / 100.0 * $span;
     }
 
     private static function generateBoolean(int $iteration): bool

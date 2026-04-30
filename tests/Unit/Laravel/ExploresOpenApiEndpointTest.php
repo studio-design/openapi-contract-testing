@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
 use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
+use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ExploresOpenApiEndpoint;
 use Studio\OpenApiContractTesting\OpenApiSpec;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
@@ -59,7 +60,7 @@ class ExploresOpenApiEndpointTest extends TestCase
         $hits = 0;
         $this->exploreEndpoint('POST', '/v1/pets', cases: 4, seed: 1)
             ->each(function (ExploredCase $case) use (&$hits): void {
-                $this->assertSame('POST', $case->method);
+                $this->assertSame(HttpMethod::POST, $case->method);
                 $hits++;
             });
 
@@ -103,6 +104,19 @@ class ExploresOpenApiEndpointTest extends TestCase
         $cases = $this->exploreEndpoint('POST', '/v1/pets', cases: 1, seed: 1);
 
         $this->assertCount(1, $cases);
+    }
+
+    #[Test]
+    #[OpenApiSpec('does-not-exist')]
+    public function spec_loader_failure_routes_through_fail_explore(): void
+    {
+        // Without the broadened catch in ExploresOpenApiEndpoint, the spec
+        // loader's RuntimeException would leak as a raw stack trace instead
+        // of a clean PHPUnit assertion.
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('does-not-exist');
+
+        $this->exploreEndpoint('POST', '/v1/pets', cases: 1);
     }
 }
 

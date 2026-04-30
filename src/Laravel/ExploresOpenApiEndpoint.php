@@ -7,6 +7,7 @@ namespace Studio\OpenApiContractTesting\Laravel;
 use InvalidArgumentException;
 use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\AssertionFailedError;
+use RuntimeException;
 use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
 use Studio\OpenApiContractTesting\Fuzz\OpenApiEndpointExplorer;
 use Studio\OpenApiContractTesting\Laravel\Internal\StackTraceFilter;
@@ -18,24 +19,18 @@ use function is_string;
  * Schema-driven request fuzzing trait — issue #136.
  *
  * Generates N happy-path request inputs for a single (method, path) operation
- * directly from the OpenAPI spec, returning an iterable collection that the
- * test author drives through any HTTP client of choice. Each HTTP call still
- * goes through the existing {@see ValidatesOpenApiSchema} auto-assert hook,
- * so the response side and coverage tracking happen automatically.
+ * directly from the OpenAPI spec, returning an iterable {@see ExplorationCases}
+ * collection that the test author drives through any HTTP client of choice.
+ * Each HTTP call still goes through the existing {@see ValidatesOpenApiSchema}
+ * auto-assert hook, so the response side and coverage tracking happen
+ * automatically.
  *
- * Usage (matches issue #136 sketch):
- *
- *     #[OpenApiSpec('front')]
- *     public function test_create_pet_contract(): void
- *     {
- *         $this->exploreEndpoint('POST', '/v1/pets', cases: 50)
- *             ->each(fn ($input) => $this->postJson('/api/v1/pets', $input->body)
- *                 ->assertSuccessful());
- *     }
- *
- * Spec name is resolved via the same precedence as {@see ValidatesOpenApiSchema}:
+ * Spec-name resolution mirrors {@see ValidatesOpenApiSchema}:
  * `#[OpenApiSpec]` method/class attribute → `openApiSpec()` override →
  * `config('openapi-contract-testing.default_spec')`.
+ *
+ * See README "Schema-driven request fuzzing" for usage examples; the
+ * {@see ExploresOpenApiEndpointTest} suite pins the supported behaviour.
  */
 trait ExploresOpenApiEndpoint
 {
@@ -72,7 +67,11 @@ trait ExploresOpenApiEndpoint
 
         try {
             return OpenApiEndpointExplorer::explore($specName, $method, $path, $cases, $seed);
-        } catch (InvalidArgumentException $e) {
+        } catch (InvalidArgumentException|RuntimeException $e) {
+            // RuntimeException covers OpenApiSpecLoader failures
+            // (InvalidOpenApiSpecException, SpecFileNotFoundException, etc.)
+            // — without this, a missing or malformed spec leaks the loader's
+            // raw stack trace into PHPUnit instead of a clean assertion.
             $this->failExplore($e->getMessage());
         }
     }
@@ -94,9 +93,9 @@ trait ExploresOpenApiEndpoint
     }
 
     /**
-     * Mirrors {@see ValidatesOpenApiSchema::failOpenApi()} — strip vendor
-     * frames so the failure points at the user's test method rather than
-     * the trait's call site.
+     * Strip vendor frames so the failure points at the user's test method
+     * rather than the trait's call site. The pattern matches
+     * {@see ValidatesOpenApiSchema} so the two failure shapes stay consistent.
      */
     private function failExplore(string $message): never
     {

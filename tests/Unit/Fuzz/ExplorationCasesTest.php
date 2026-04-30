@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit\Fuzz;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
 use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
+use Studio\OpenApiContractTesting\HttpMethod;
 
 use function iterator_to_array;
 
@@ -58,6 +60,17 @@ class ExplorationCasesTest extends TestCase
         $this->assertSame($collection, $collection->each(static fn(ExploredCase $c): null => null));
     }
 
+    #[Test]
+    public function rejects_empty_construction(): void
+    {
+        // Direct instantiation with `[]` would let `->each()` silently pass
+        // tests that asserted nothing — this guard makes that misuse loud.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('at least one ExploredCase');
+
+        new ExplorationCases([]);
+    }
+
     private function case(string $marker): ExploredCase
     {
         return new ExploredCase(
@@ -65,7 +78,7 @@ class ExplorationCasesTest extends TestCase
             query: [],
             headers: [],
             pathParams: [],
-            method: 'GET',
+            method: HttpMethod::GET,
             matchedPath: $marker,
         );
     }

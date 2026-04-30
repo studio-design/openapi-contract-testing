@@ -6,14 +6,19 @@ namespace Studio\OpenApiContractTesting\Fuzz;
 
 use Faker\Generator;
 use InvalidArgumentException;
+use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiPathMatcher;
 use Studio\OpenApiContractTesting\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\SchemaContext;
 use Studio\OpenApiContractTesting\Validation\Request\ParameterCollector;
+use ValueError;
 
 use function array_filter;
+use function array_keys;
+use function array_map;
+use function implode;
 use function is_array;
 use function is_string;
 use function sprintf;
@@ -61,6 +66,16 @@ final class OpenApiEndpointExplorer
         $methodUpper = strtoupper($method);
         $methodLower = strtolower($method);
 
+        try {
+            $methodEnum = HttpMethod::from($methodUpper);
+        } catch (ValueError) {
+            throw new InvalidArgumentException(sprintf(
+                "Unsupported HTTP method '%s' — explorer accepts %s.",
+                $method,
+                implode(', ', array_map(static fn(HttpMethod $m): string => $m->value, HttpMethod::cases())),
+            ));
+        }
+
         $spec = OpenApiSpecLoader::load($specName);
         /** @var array<string, mixed> $paths */
         $paths = is_array($spec['paths'] ?? null) ? $spec['paths'] : [];
@@ -87,9 +102,10 @@ final class OpenApiEndpointExplorer
         }
 
         $version = OpenApiVersion::fromSpec($spec);
-        $bodySchema = self::extractRequestBodySchema($operation, $version);
+        $bodySchema = self::extractRequestBodySchema($operation, $version, $methodUpper, $matchedPath, $specName);
         /** @var list<array<string, mixed>> $parameters */
         $parameters = ParameterCollector::collect($methodUpper, $matchedPath, $pathSpec, $operation)->parameters;
+        self::assertParametersGeneratable($parameters, $methodUpper, $matchedPath, $specName);
 
         $faker = SchemaDataGenerator::createFaker($seed);
         $built = [];
@@ -99,7 +115,7 @@ final class OpenApiEndpointExplorer
                 query: self::generateParameterValues($parameters, 'query', $version, $faker, $i),
                 headers: self::generateParameterValues($parameters, 'header', $version, $faker, $i),
                 pathParams: self::generateParameterValues($parameters, 'path', $version, $faker, $i),
-                method: $methodUpper,
+                method: $methodEnum,
                 matchedPath: $matchedPath,
             );
         }
@@ -135,28 +151,66 @@ final class OpenApiEndpointExplorer
 
     /**
      * Find the JSON-shaped requestBody schema and convert it to Draft 07.
-     * Returns null when the operation has no body, no JSON media type, or
-     * the schema is missing — the explorer simply emits a case with
-     * `body = null` for those endpoints.
+     * Returns null only when the operation declares no `requestBody` at all
+     * (or one that isn't required and lacks a JSON variant) — that's the
+     * "GET-style endpoint" case and the explorer correctly emits cases with
+     * `body = null`.
+     *
+     * Throws when the spec declares `requestBody.required: true` but the
+     * explorer cannot synthesize a JSON body. Without this guard every
+     * generated case would 4xx at the server with no signal back to the
+     * test author about why fuzzing degraded — exactly the silent-failure
+     * mode the rest of the library tries to avoid.
      *
      * @param array<string, mixed> $operation
      *
      * @return null|array<string, mixed>
+     *
+     * @throws InvalidArgumentException
      */
-    private static function extractRequestBodySchema(array $operation, OpenApiVersion $version): ?array
-    {
+    private static function extractRequestBodySchema(
+        array $operation,
+        OpenApiVersion $version,
+        string $method,
+        string $matchedPath,
+        string $specName,
+    ): ?array {
         $requestBody = $operation['requestBody'] ?? null;
         if (!is_array($requestBody)) {
             return null;
         }
 
+        $required = ($requestBody['required'] ?? false) === true;
         $content = $requestBody['content'] ?? null;
-        if (!is_array($content)) {
+
+        if (!is_array($content) || $content === []) {
+            if ($required) {
+                throw new InvalidArgumentException(sprintf(
+                    "Operation %s '%s' in spec '%s' declares `requestBody.required: true` but no `content` map. "
+                    . 'Add at least an `application/json` schema so the explorer can synthesize a body.',
+                    $method,
+                    $matchedPath,
+                    $specName,
+                ));
+            }
+
             return null;
         }
 
         $schema = self::pickJsonSchema($content);
         if (!is_array($schema)) {
+            if ($required) {
+                throw new InvalidArgumentException(sprintf(
+                    "Operation %s '%s' in spec '%s' declares `requestBody.required: true` but no JSON-compatible "
+                    . 'media type (`application/json` / `+json`) carries a `schema` definition (saw: %s). '
+                    . 'The explorer cannot synthesize a body without one — add a schema or skip this operation.',
+                    $method,
+                    $matchedPath,
+                    $specName,
+                    implode(', ', array_keys($content)),
+                ));
+            }
+
             return null;
         }
 
@@ -198,9 +252,15 @@ final class OpenApiEndpointExplorer
 
     /**
      * Filter spec parameters to a single `in:` location and generate a value
-     * per name for the current iteration. Later entries with the same name
-     * overwrite earlier ones, matching ParameterCollector's
-     * operation-overrides-path-level merge semantics.
+     * per name for the current iteration.
+     *
+     * `ParameterCollector::collect()` has already deduped on `(in, name)`, so
+     * the explorer never sees a duplicate to overwrite — the assignment
+     * semantics here are write-once, matching the merged spec view.
+     *
+     * `content`-form parameters (OAS 3.x §4.7.12.6) are filtered out earlier
+     * by {@see self::assertParametersGeneratable()} when they would have made
+     * the request unsatisfiable; remaining ones are non-required and skipped.
      *
      * @param list<array<string, mixed>> $parameters
      *
@@ -224,9 +284,6 @@ final class OpenApiEndpointExplorer
             $name = $param['name'];
             $schema = isset($param['schema']) && is_array($param['schema']) ? $param['schema'] : null;
             if ($schema === null) {
-                // OAS allows `content` instead of `schema` for parameters; the
-                // MVP skips those silently. ParameterCollector already surfaces
-                // structural issues on the validator path.
                 continue;
             }
             $converted = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
@@ -234,5 +291,50 @@ final class OpenApiEndpointExplorer
         }
 
         return $values;
+    }
+
+    /**
+     * Refuse to explore an operation whose `required: true` parameters can't
+     * be synthesized — e.g. `content`-form parameters (OAS 3.x §4.7.12.6) or
+     * malformed schema-less entries. Silent skips here would cause every
+     * fuzzed request to 4xx with no link back to the explorer.
+     *
+     * @param list<array<string, mixed>> $parameters
+     *
+     * @throws InvalidArgumentException
+     */
+    private static function assertParametersGeneratable(
+        array $parameters,
+        string $method,
+        string $matchedPath,
+        string $specName,
+    ): void {
+        foreach ($parameters as $param) {
+            $name = is_string($param['name'] ?? null) ? $param['name'] : '';
+            $location = is_string($param['in'] ?? null) ? $param['in'] : '';
+            $required = ($param['required'] ?? false) === true || $location === 'path';
+            if (!$required) {
+                continue;
+            }
+
+            $hasSchema = isset($param['schema']) && is_array($param['schema']);
+            if ($hasSchema) {
+                continue;
+            }
+
+            $reason = isset($param['content']) && is_array($param['content'])
+                ? 'declares a `content` map instead of `schema` (the explorer only generates `schema`-form parameters)'
+                : 'is missing a `schema` definition';
+
+            throw new InvalidArgumentException(sprintf(
+                "Required %s parameter '%s' on %s '%s' in spec '%s' %s.",
+                $location !== '' ? $location : 'parameter',
+                $name,
+                $method,
+                $matchedPath,
+                $specName,
+                $reason,
+            ));
+        }
     }
 }

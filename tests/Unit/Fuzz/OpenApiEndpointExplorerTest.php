@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
 use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
 use Studio\OpenApiContractTesting\Fuzz\OpenApiEndpointExplorer;
+use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 
 use function json_decode;
@@ -67,7 +68,7 @@ class OpenApiEndpointExplorerTest extends TestCase
         $this->assertCount(3, $cases);
         foreach ($cases as $case) {
             $this->assertInstanceOf(ExploredCase::class, $case);
-            $this->assertSame('POST', $case->method);
+            $this->assertSame(HttpMethod::POST, $case->method);
             $this->assertSame('/v1/pets', $case->matchedPath);
         }
     }
@@ -157,6 +158,39 @@ class OpenApiEndpointExplorerTest extends TestCase
         $this->assertCount(1, $cases);
         foreach ($cases as $case) {
             $this->assertSame('/v1/pets/{petId}', $case->matchedPath);
+        }
+    }
+
+    #[Test]
+    public function throws_when_required_request_body_has_no_schema(): void
+    {
+        // PUT /v1/pets/{petId} in petstore-3.0 declares `application/json: {}`
+        // (required:true but no schema). Without a loud failure, every fuzzed
+        // case would 4xx and the user would have no signal back to the
+        // explorer.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('requestBody.required: true');
+
+        OpenApiEndpointExplorer::explore('petstore-3.0', 'PUT', '/v1/pets/{petId}', cases: 1);
+    }
+
+    #[Test]
+    public function rejects_unsupported_http_method(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage("Unsupported HTTP method 'TRACE'");
+
+        OpenApiEndpointExplorer::explore('petstore-3.0', 'TRACE', '/v1/pets', cases: 1);
+    }
+
+    #[Test]
+    public function exposes_method_as_http_method_enum(): void
+    {
+        $cases = OpenApiEndpointExplorer::explore('petstore-3.0', 'post', '/v1/pets', cases: 1, seed: 1);
+
+        $this->assertCount(1, $cases);
+        foreach ($cases as $case) {
+            $this->assertSame(HttpMethod::POST, $case->method);
         }
     }
 }
