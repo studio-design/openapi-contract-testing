@@ -16,6 +16,7 @@ enum ConsoleOutput: string
     case DEFAULT = 'default';
     case ALL = 'all';
     case UNCOVERED_ONLY = 'uncovered_only';
+    case ACTIVE_ONLY = 'active_only';
 
     /**
      * Resolve the console output mode from environment variable and/or phpunit.xml parameter.
@@ -30,7 +31,7 @@ enum ConsoleOutput: string
             $resolved = self::tryFrom(mb_strtolower(trim($envValue)));
 
             if ($resolved === null) {
-                fwrite(STDERR, "[OpenAPI Coverage] WARNING: Invalid OPENAPI_CONSOLE_OUTPUT value '{$envValue}'. Valid values: default, all, uncovered_only. Falling back to 'default'.\n");
+                fwrite(STDERR, "[OpenAPI Coverage] WARNING: Invalid OPENAPI_CONSOLE_OUTPUT value '{$envValue}'. Valid values: default, all, uncovered_only, active_only. Falling back to 'default'.\n");
             }
 
             return $resolved ?? self::DEFAULT;
@@ -40,7 +41,7 @@ enum ConsoleOutput: string
             $resolved = self::tryFrom(mb_strtolower(trim($parameterValue)));
 
             if ($resolved === null) {
-                fwrite(STDERR, "[OpenAPI Coverage] WARNING: Invalid console_output parameter '{$parameterValue}'. Valid values: default, all, uncovered_only. Falling back to 'default'.\n");
+                fwrite(STDERR, "[OpenAPI Coverage] WARNING: Invalid console_output parameter '{$parameterValue}'. Valid values: default, all, uncovered_only, active_only. Falling back to 'default'.\n");
             }
 
             return $resolved ?? self::DEFAULT;

@@ -58,6 +58,12 @@ class ConsoleOutputTest extends TestCase
     }
 
     #[Test]
+    public function resolve_returns_active_only_from_parameter(): void
+    {
+        $this->assertSame(ConsoleOutput::ACTIVE_ONLY, ConsoleOutput::resolve('active_only'));
+    }
+
+    #[Test]
     public function resolve_returns_default_from_parameter(): void
     {
         $this->assertSame(ConsoleOutput::DEFAULT, ConsoleOutput::resolve('default'));
@@ -70,6 +76,8 @@ class ConsoleOutputTest extends TestCase
         $this->assertSame(ConsoleOutput::ALL, ConsoleOutput::resolve('All'));
         $this->assertSame(ConsoleOutput::UNCOVERED_ONLY, ConsoleOutput::resolve('UNCOVERED_ONLY'));
         $this->assertSame(ConsoleOutput::UNCOVERED_ONLY, ConsoleOutput::resolve('Uncovered_Only'));
+        $this->assertSame(ConsoleOutput::ACTIVE_ONLY, ConsoleOutput::resolve('ACTIVE_ONLY'));
+        $this->assertSame(ConsoleOutput::ACTIVE_ONLY, ConsoleOutput::resolve('Active_Only'));
     }
 
     #[Test]
