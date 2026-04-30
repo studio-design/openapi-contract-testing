@@ -8,6 +8,19 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 
 ## Unreleased
 
+### Added
+
+- **#135 — `min_coverage` threshold gate for CI**. New PHPUnit extension
+  parameters `min_endpoint_coverage` / `min_response_coverage` (percent,
+  optional) and `min_coverage_strict` (default `false` → warn-only, set to
+  `true` to exit non-zero on a miss) make contract coverage gateable the
+  same way PHPUnit's own `--coverage-threshold` works. The gate aggregates
+  over every spec listed in `specs=`. The merge CLI gains matching
+  `--min-endpoint-coverage` / `--min-response-coverage` /
+  `--min-coverage-strict` flags so paratest workflows can gate too. Both
+  paths emit a `[OpenAPI Coverage] FAIL: …` line to stderr on a strict
+  miss (or `WARN:` when warn-only).
+
 ### Fixed
 
 - **#131 — Clean stack trace for contract validation failures**. PHPUnit's

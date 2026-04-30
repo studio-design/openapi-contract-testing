@@ -640,6 +640,47 @@ Or via environment variable (takes priority over `phpunit.xml`):
 OPENAPI_CONSOLE_OUTPUT=uncovered_only vendor/bin/phpunit
 ```
 
+## Coverage threshold gate
+
+Optional CI gate that fails the run when contract coverage drops below a configured percentage — the contract-testing analogue of PHPUnit's own `--coverage-threshold`. Both metrics are aggregated across every spec listed in `specs=`:
+
+- `min_endpoint_coverage` — percentage of endpoints with **all** declared `(status, content-type)` pairs validated.
+- `min_response_coverage` — percentage of `(method, path, status, content-type)` rows validated (the same rate the report calls "responses covered").
+
+Default is **warn-only**: a miss prints `[OpenAPI Coverage] WARN: …` to stderr but the run exits 0. Flip `min_coverage_strict=true` to make a miss fail-fast with exit 1.
+
+```xml
+<extensions>
+    <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+        <parameter name="spec_base_path" value="openapi/bundled"/>
+        <parameter name="specs" value="front,admin"/>
+        <parameter name="min_endpoint_coverage" value="80"/>   <!-- percent, optional -->
+        <parameter name="min_response_coverage" value="60"/>   <!-- percent, optional -->
+        <parameter name="min_coverage_strict" value="true"/>   <!-- default false → warn-only -->
+    </bootstrap>
+</extensions>
+```
+
+Failure looks like:
+
+```
+[OpenAPI Coverage] FAIL: endpoint coverage 67.4% < threshold 80%.
+                         response coverage 71.2% (>= 60%, ok).
+```
+
+Out-of-range or non-numeric values produce a `WARNING` to stderr and skip that gate (rather than silently treating the misconfiguration as `0%`).
+
+For paratest / `pest --parallel`, the merge CLI accepts the same options as flags:
+
+```bash
+vendor/bin/openapi-coverage-merge \
+    --spec-base-path=openapi/bundled \
+    --specs=front,admin \
+    --min-endpoint-coverage=80 \
+    --min-response-coverage=60 \
+    --min-coverage-strict
+```
+
 <a id="parallel-test-runners"></a>
 ## Parallel test runners (paratest / Pest `--parallel`)
 
@@ -686,6 +727,9 @@ vendor/bin/openapi-coverage-merge \
 | `--output-file=<path>` | — | Markdown report output path |
 | `--github-step-summary=<path>` | `$GITHUB_STEP_SUMMARY` | Append Markdown report to this file |
 | `--console-output=<mode>` | `default` | `default` / `all` / `uncovered_only` |
+| `--min-endpoint-coverage=<pct>` | — | Threshold gate (see [Coverage threshold gate](#coverage-threshold-gate)) |
+| `--min-response-coverage=<pct>` | — | Threshold gate at `(status, content-type)` granularity |
+| `--min-coverage-strict` | `false` (warn-only) | Treat threshold misses as exit non-zero |
 | `--no-cleanup` | (cleanup is on by default) | Keep sidecar files after merge |
 
 Sidecar dir defaults are deliberately stable — workers and the merge CLI
