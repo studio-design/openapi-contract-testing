@@ -9,6 +9,7 @@ use PHPUnit\Framework\TestCase;
 use PHPUnit\Runner\Extension\ParameterCollection;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
+use Studio\OpenApiContractTesting\InvalidThresholdConfigurationException;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
 use Studio\OpenApiContractTesting\SpecFileNotFoundException;
@@ -252,6 +253,125 @@ class OpenApiCoverageExtensionTest extends TestCase
         // setupExtension does not raise on relative paths; the exercise here
         // is mainly that the codepath runs without error and that the
         // absolutise call doesn't silently swallow the parameter.
+        $extension->setupExtension(null, $parameters, null);
+
+        $this->assertSame('', $this->readStderr());
+    }
+
+    #[Test]
+    public function bootstrap_warns_on_out_of_range_min_endpoint_coverage_when_not_strict(): void
+    {
+        // Warn-only (default) tolerates misconfiguration: surface it but
+        // don't break a CI that hasn't opted into the gate yet.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'refs-valid',
+            'min_endpoint_coverage' => '150',
+        ]);
+
+        $extension->setupExtension(null, $parameters, null);
+
+        $stderr = $this->readStderr();
+        $this->assertStringContainsString('WARNING', $stderr);
+        $this->assertStringContainsString('min_endpoint_coverage', $stderr);
+    }
+
+    #[Test]
+    public function bootstrap_warns_on_non_numeric_min_response_coverage_when_not_strict(): void
+    {
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'refs-valid',
+            'min_response_coverage' => 'eighty',
+        ]);
+
+        $extension->setupExtension(null, $parameters, null);
+
+        $stderr = $this->readStderr();
+        $this->assertStringContainsString('WARNING', $stderr);
+        $this->assertStringContainsString('min_response_coverage', $stderr);
+    }
+
+    #[Test]
+    public function bootstrap_throws_on_out_of_range_threshold_when_strict(): void
+    {
+        // C1: strict=true must treat a typo'd threshold as a configuration
+        // error, not warn-and-skip. The exception is caught by bootstrap()
+        // and translated into exit(1) — symmetric with how stale `specs=`
+        // entries fail the run after issue #134.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'refs-valid',
+            'min_endpoint_coverage' => '150',
+            'min_coverage_strict' => 'true',
+        ]);
+
+        $this->expectException(InvalidThresholdConfigurationException::class);
+
+        try {
+            $extension->setupExtension(null, $parameters, null);
+        } finally {
+            $this->assertStringContainsString('FATAL', $this->readStderr());
+            $this->assertStringContainsString('min_endpoint_coverage', $this->readStderr());
+        }
+    }
+
+    #[Test]
+    public function bootstrap_throws_on_non_numeric_threshold_when_strict(): void
+    {
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'refs-valid',
+            'min_response_coverage' => 'eighty',
+            'min_coverage_strict' => 'true',
+        ]);
+
+        $this->expectException(InvalidThresholdConfigurationException::class);
+
+        try {
+            $extension->setupExtension(null, $parameters, null);
+        } finally {
+            $this->assertStringContainsString('FATAL', $this->readStderr());
+        }
+    }
+
+    #[Test]
+    public function bootstrap_treats_empty_strict_value_as_enabled(): void
+    {
+        // I1: `<parameter name="min_coverage_strict" />` (no value) was a
+        // contradiction — the docstring promised "set = strict on" but the
+        // code treated `''` as falsy. Pin the docstring's intent.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'refs-valid',
+            'min_endpoint_coverage' => '150', // out of range
+            'min_coverage_strict' => '',      // shorthand for "true"
+        ]);
+
+        // Empty strict value must enable strict mode → C1 FATAL on the bad
+        // threshold below.
+        $this->expectException(InvalidThresholdConfigurationException::class);
+
+        $extension->setupExtension(null, $parameters, null);
+    }
+
+    #[Test]
+    public function bootstrap_accepts_well_formed_threshold_parameters(): void
+    {
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'refs-valid',
+            'min_endpoint_coverage' => '80',
+            'min_response_coverage' => '70.5',
+            'min_coverage_strict' => 'true',
+        ]);
+
         $extension->setupExtension(null, $parameters, null);
 
         $this->assertSame('', $this->readStderr());

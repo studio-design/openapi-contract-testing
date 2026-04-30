@@ -358,6 +358,425 @@ class CoverageMergeCommandTest extends TestCase
     }
 
     #[Test]
+    public function exits_one_on_threshold_miss_when_strict(): void
+    {
+        // Issue #135: strict gate must fail-fast with exit 1 + FAIL stderr.
+        // Single recorded validation against a 25-endpoint fixture is well
+        // below 80%, so the gate trips reliably without per-fixture math.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'min_endpoint_coverage' => 80.0,
+            'min_coverage_strict' => true,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('[OpenAPI Coverage] FAIL:', $stderr);
+        $this->assertStringContainsString('endpoint coverage', $stderr);
+        $this->assertStringContainsString('< threshold 80%', $stderr);
+    }
+
+    #[Test]
+    public function exits_zero_on_threshold_miss_when_not_strict(): void
+    {
+        // Default warn-only mode: print WARN to stderr but keep the run green.
+        // Lets teams adopt the gate behind a flag without breaking CI on day 1.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'min_endpoint_coverage' => 80.0,
+            // min_coverage_strict omitted — default false
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('[OpenAPI Coverage] WARN:', $stderr);
+        $this->assertStringNotContainsString('FAIL:', $stderr);
+    }
+
+    #[Test]
+    public function strict_gate_with_no_sidecars_exits_one(): void
+    {
+        // C2: an opt-in strict CI gate must not silently pass when paratest
+        // produced zero workers / a wrong --sidecar-dir was passed. Pre-fix,
+        // the empty-payload branch returned 0 with a WARNING.
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir, // empty
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'min_endpoint_coverage' => 80.0,
+            'min_coverage_strict' => true,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('no contract test coverage', $stderr);
+    }
+
+    #[Test]
+    public function strict_gate_with_empty_recorded_coverage_exits_one(): void
+    {
+        // Sidecars exist but recorded no coverage (e.g. workers ran zero
+        // contract assertions). Same silent-pass risk as no-sidecars.
+        OpenApiCoverageTracker::reset(); // empty state
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'min_endpoint_coverage' => 80.0,
+            'min_coverage_strict' => true,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('no contract test coverage', $stderr);
+    }
+
+    #[Test]
+    public function warn_only_gate_with_no_sidecars_keeps_existing_warning_path(): void
+    {
+        // Backwards compat: warn-only mode (or threshold absent) keeps the
+        // pre-#135 "no sidecars found" warning + exit 0.
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'min_endpoint_coverage' => 80.0, // strict omitted
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('no sidecars found', $stderr);
+    }
+
+    #[Test]
+    public function exits_one_on_response_only_threshold_miss_when_strict(): void
+    {
+        // Pin the response-only configuration end-to-end through the CLI;
+        // merge gate must distinguish endpoint vs response misses.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'min_response_coverage' => 80.0,
+            'min_coverage_strict' => true,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('FAIL', $stderr);
+        $this->assertStringContainsString('response coverage', $stderr);
+        $this->assertStringNotContainsString('endpoint coverage', $stderr);
+    }
+
+    #[Test]
+    public function exits_zero_when_threshold_met(): void
+    {
+        // No threshold-related stderr noise on the happy path.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'min_endpoint_coverage' => 0.0, // any non-negative coverage clears 0%
+            'min_coverage_strict' => true,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringNotContainsString('FAIL:', $stderr);
+        $this->assertStringNotContainsString('WARN:', $stderr);
+    }
+
+    #[Test]
+    public function parse_argv_decodes_threshold_flags(): void
+    {
+        $opts = CoverageMergeCommand::parseArgv([
+            '--spec-base-path=/tmp/spec',
+            '--min-endpoint-coverage=80',
+            '--min-response-coverage=70.5',
+            '--min-coverage-strict',
+        ]);
+
+        $this->assertSame(80.0, $opts['min_endpoint_coverage']);
+        $this->assertSame(70.5, $opts['min_response_coverage']);
+        $this->assertTrue($opts['min_coverage_strict']);
+    }
+
+    #[Test]
+    public function parse_argv_treats_strict_false_value_as_false(): void
+    {
+        // Symmetry with the existing `cleanup` flag: `--min-coverage-strict=false`
+        // must turn the gate into warn-only, not silently flip it on.
+        $opts = CoverageMergeCommand::parseArgv([
+            '--spec-base-path=/tmp/spec',
+            '--min-coverage-strict=false',
+        ]);
+
+        $this->assertFalse($opts['min_coverage_strict']);
+    }
+
+    #[Test]
+    public function out_of_range_threshold_warns_when_not_strict(): void
+    {
+        // Warn-only path: a typo'd threshold must surface as a WARNING but
+        // not break a CI that opted out of fail-fast gating.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'min_endpoint_coverage' => 150.0, // out of 0..100 range
+            // min_coverage_strict omitted → warn-only
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('WARNING', $stderr);
+        $this->assertStringContainsString('min_endpoint_coverage', $stderr);
+    }
+
+    #[Test]
+    public function out_of_range_threshold_exits_two_when_strict(): void
+    {
+        // C1: silent-failure-hunter & code-reviewer flagged that strict mode
+        // must treat a typo'd threshold as a config error, not silently
+        // disable the gate. Mirrors how `--spec-base-path` missing exits 2.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'min_endpoint_coverage' => 150.0,
+            'min_coverage_strict' => true,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(2, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('min_endpoint_coverage', $stderr);
+    }
+
+    #[Test]
+    public function non_numeric_threshold_warns_when_not_strict(): void
+    {
+        // C3: parseArgv used to silently drop non-numeric values, so run()
+        // never saw them. After C3 the raw string flows through and run()
+        // is the single place that warns / fails.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'min_endpoint_coverage' => 'eighty',
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('WARNING', $stderr);
+        $this->assertStringContainsString("min_endpoint_coverage='eighty'", $stderr);
+    }
+
+    #[Test]
+    public function non_numeric_threshold_exits_two_when_strict(): void
+    {
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'min_endpoint_coverage' => 'eighty',
+            'min_coverage_strict' => true,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(2, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+    }
+
+    #[Test]
+    public function parse_argv_keeps_non_numeric_threshold_value_for_run_to_validate(): void
+    {
+        // C3: a typo'd `--min-endpoint-coverage=eighty` must reach run() so
+        // the user sees a single WARNING/FATAL message. Pre-fix, parseArgv
+        // dropped the value silently and the gate was disabled invisibly.
+        $opts = CoverageMergeCommand::parseArgv([
+            '--spec-base-path=/tmp/spec',
+            '--min-endpoint-coverage=eighty',
+        ]);
+
+        $this->assertSame('eighty', $opts['min_endpoint_coverage']);
+    }
+
+    #[Test]
     public function exits_one_when_output_file_write_fails(): void
     {
         OpenApiCoverageTracker::recordResponse(

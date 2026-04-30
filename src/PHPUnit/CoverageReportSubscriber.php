@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\PHPUnit;
 
 use const FILE_APPEND;
+use const STDERR;
 
 use PHPUnit\Event\TestRunner\ExecutionFinished;
 use PHPUnit\Event\TestRunner\ExecutionFinishedSubscriber;
@@ -14,9 +15,11 @@ use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\SpecFileNotFoundException;
 
+use function fflush;
 use function file_put_contents;
 use function getenv;
 use function is_callable;
+use function sprintf;
 use function trim;
 
 /**
@@ -33,6 +36,13 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
      *                                subscriber detects `TEST_TOKEN` (set by paratest in every child process) it
      *                                short-circuits rendering and writes the tracker state here for the merge CLI
      *                                to pick up. `null` falls back to a default under `sys_get_temp_dir()`.
+     * @param null|float $minEndpointCoverage Optional gate: when not null and `endpointFullyCovered/endpointTotal`
+     *                                        (rolled across `$specs`) is below this percent, the subscriber prints
+     *                                        a FAIL/WARN line. See issue #135.
+     * @param null|float $minResponseCoverage Same idea, but at `(method, path, status, content-type)` granularity.
+     * @param bool $minCoverageStrict Treat threshold misses as exit non-zero (default warn-only).
+     * @param null|callable(int): void $exitHandler Test seam for the strict-miss exit. Defaults to native `exit()`
+     *                                              so production behavior matches PHPUnit's own coverage gate.
      */
     public function __construct(
         private array $specs,
@@ -41,6 +51,10 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         private ?string $githubSummaryPath,
         private mixed $stderrWriter = null,
         private ?string $sidecarDir = null,
+        private ?float $minEndpointCoverage = null,
+        private ?float $minResponseCoverage = null,
+        private bool $minCoverageStrict = false,
+        private mixed $exitHandler = null,
     ) {}
 
     /** @phpcsSuppress SlevomatCodingStandard.Functions.UnusedParameter.UnusedParameter */
@@ -62,6 +76,11 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         OpenApiSpecLoader::clearCache();
 
         if ($results === []) {
+            // C2: a strict CI gate must not silently pass when zero contract
+            // assertions ran. Pre-fix, this branch quietly returned 0 even
+            // though the user had opted into fail-fast via min_*_coverage.
+            $this->failOnEmptyResultsIfGated();
+
             return;
         }
 
@@ -70,6 +89,8 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         if ($this->outputFile !== null || $this->githubSummaryPath !== null) {
             $this->writeMarkdownReport($results);
         }
+
+        $this->evaluateThresholdGate($results);
     }
 
     /**
@@ -90,6 +111,92 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         }
 
         return $token;
+    }
+
+    /**
+     * Issue #135: in sequential PHPUnit, evaluate the optional coverage
+     * threshold after the report renders. Worker mode never reaches here
+     * (the worker-token branch returns earlier) — the merge CLI is the gate
+     * for paratest, so this method runs only on the in-process path.
+     *
+     * @param array<string, CoverageResult> $results
+     */
+    private function evaluateThresholdGate(array $results): void
+    {
+        if ($this->minEndpointCoverage === null && $this->minResponseCoverage === null) {
+            return;
+        }
+
+        $evaluation = CoverageThresholdEvaluator::evaluate(
+            $results,
+            $this->minEndpointCoverage,
+            $this->minResponseCoverage,
+            $this->minCoverageStrict,
+        );
+
+        if ($evaluation['passed']) {
+            return;
+        }
+
+        $this->writeStderr($evaluation['message']);
+
+        if (!$this->minCoverageStrict) {
+            return;
+        }
+
+        // Mirror OpenApiCoverageExtension::bootstrap()'s fail-fast pattern:
+        // PHPUnit's own exit code path doesn't propagate subscriber failures,
+        // so a strict threshold miss has to terminate the process directly to
+        // be visible to CI.
+        $exit = $this->exitHandler;
+        if ($this->stderrWriter === null) {
+            fflush(STDERR);
+        }
+
+        if (is_callable($exit)) {
+            $exit(1);
+
+            return;
+        }
+
+        exit(1);
+    }
+
+    /**
+     * Issue #135 review C2: when no spec produced any coverage, the
+     * regular gate path never runs (the evaluator would receive an empty
+     * results array and report 100% vacuously). A strict run must still
+     * fail-fast — otherwise a CI that opted into the gate silently passes
+     * when its tests didn't actually validate anything.
+     */
+    private function failOnEmptyResultsIfGated(): void
+    {
+        if ($this->minEndpointCoverage === null && $this->minResponseCoverage === null) {
+            return;
+        }
+
+        $severity = $this->minCoverageStrict ? 'FATAL' : 'WARNING';
+        $this->writeStderr(sprintf(
+            "[OpenAPI Coverage] %s: no contract test coverage was recorded; configured threshold cannot be evaluated.\n",
+            $severity,
+        ));
+
+        if (!$this->minCoverageStrict) {
+            return;
+        }
+
+        $exit = $this->exitHandler;
+        if ($this->stderrWriter === null) {
+            fflush(STDERR);
+        }
+
+        if (is_callable($exit)) {
+            $exit(1);
+
+            return;
+        }
+
+        exit(1);
     }
 
     private function writeWorkerSidecar(string $token): void
