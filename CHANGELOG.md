@@ -6,7 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project is **pre-1.0**, so breaking changes may land in any minor release
 until 1.0.0 ships. Each entry below tags whether it is breaking.
 
-## Unreleased
+## v0.15.0 — 2026-04-30
+
+The "v1.0 prep" release: namespaces reorganised so the public surface
+reads cleanly, `Coverage/` extracted out of `PHPUnit/` so future Pest
+and Symfony adapters can share it without dragging the PHPUnit runner
+in, plus schema-driven request fuzzing (`ExploresOpenApiEndpoint`),
+a `min_coverage` CI gate (#135), and trimmed failure stack traces
+(#131). Breaking only on FQCN imports — see the migration table below.
 
 ### Changed (breaking)
 
