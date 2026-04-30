@@ -14,9 +14,14 @@ use Throwable;
  * `InvalidOpenApiSpecReason`; consumers should branch on `$reason` rather
  * than pattern-matching `$message`.
  *
- * Separate from `SpecFileNotFoundException` so the PHPUnit coverage
- * extension can hard-fail the run on broken specs while continuing to
- * warn for a missing spec file.
+ * Separate from `SpecFileNotFoundException` because the two have different
+ * downstream contracts: a *missing* spec file may legitimately appear after
+ * boot (e.g. mid-run unlink, stale CLI sidecar) and is tolerated by
+ * `CoverageReportSubscriber` / `CoverageMergeCommand` with a warning, while
+ * a *broken* spec is always a hard contract violation. Both, however, are
+ * treated as fatal at PHPUnit boot — see `OpenApiCoverageExtension` (issue
+ * #134) — so a configuration error never sits silent until an unrelated
+ * test happens to exercise the broken spec.
  */
 final class InvalidOpenApiSpecException extends RuntimeException
 {

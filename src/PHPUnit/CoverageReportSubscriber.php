@@ -146,10 +146,11 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
             try {
                 $results[$spec] = OpenApiCoverageTracker::computeCoverage($spec);
             } catch (SpecFileNotFoundException $e) {
-                // Warn-and-continue for stale specs=, same semantics
-                // as bootstrap. Unlike bootstrap, the subscriber runs
-                // after tests finished, so continuing lets partial
-                // coverage reports still render.
+                // Unlike bootstrap (which hard-fails missing files since
+                // issue #134), the subscriber runs after tests finished —
+                // so we tolerate a mid-run unlink and let partial coverage
+                // reports still render rather than discarding the run's
+                // observations.
                 $this->writeStderr("[OpenAPI Coverage] WARNING: Skipping spec '{$spec}': {$e->getMessage()}\n");
 
                 continue;
