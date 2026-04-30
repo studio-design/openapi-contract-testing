@@ -19,12 +19,15 @@ final class ContentTypeMatcher
      *
      * Resolution priority (most-specific first):
      *   1. Literal `application/json` or any `+json` structured-syntax suffix (RFC 6838)
-     *   2. `application/*` or any other `<type>/*` range that could match a JSON body
-     *   3. `*&#47;*` full wildcard
+     *   2. `application/*` — the only range that can plausibly carry JSON
      *
-     * Wildcard support exists because OpenAPI 3.x §4.7.10 allows media-type
-     * ranges as content keys; the pre-1.0 implementation matched literally
-     * only, silently skipping JSON validation when the spec used ranges.
+     * `*&#47;*` and other `<type>/*` ranges (`text/*`, `image/*`, `multipart/*`)
+     * are intentionally NOT returned: they cover non-JSON media types, and
+     * routing through JSON schema validation against them would re-introduce
+     * the silent-pass class this method is meant to eliminate. Callers that
+     * need general content-type matching (not JSON-specific) should use
+     * {@see findContentTypeKey()} instead.
+     *
      * Matching is case-insensitive.
      *
      * @param array<string, mixed> $content
@@ -38,18 +41,10 @@ final class ContentTypeMatcher
             }
         }
 
-        // Pass 2: `application/*` and other type-ranges. Prefer non-`*&#47;*`
-        // ranges because they constrain the type half.
+        // Pass 2: only `application/*` — `text/*`, `image/*`, `multipart/*`,
+        // etc. cannot plausibly hold a JSON body, and `*&#47;*` is too broad.
         foreach ($content as $contentType => $_mediaType) {
-            $lower = strtolower((string) $contentType);
-            if (self::isTypeRange($lower) && $lower !== '*/*') {
-                return (string) $contentType;
-            }
-        }
-
-        // Pass 3: `*&#47;*`.
-        foreach ($content as $contentType => $_mediaType) {
-            if (strtolower((string) $contentType) === '*/*') {
+            if (strtolower((string) $contentType) === 'application/*') {
                 return (string) $contentType;
             }
         }
@@ -137,14 +132,6 @@ final class ContentTypeMatcher
     public static function isJsonContentType(string $lowerContentType): bool
     {
         return $lowerContentType === 'application/json' || str_ends_with($lowerContentType, '+json');
-    }
-
-    /**
-     * Whether `$lower` is a `<type>/*` or `*&#47;*` range (already lower-cased).
-     */
-    private static function isTypeRange(string $lower): bool
-    {
-        return str_ends_with($lower, '/*');
     }
 
     /**

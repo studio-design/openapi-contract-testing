@@ -36,11 +36,19 @@ the public API without those leaking into the SemVer contract.
   contract test would report a spurious pass.
 - **Content-type matcher — wildcard ranges**. `findContentTypeKey()` now
   resolves with most-specific-first priority: exact match → `<type>/*` →
-  `*/*`. `findJsonContentType()` likewise considers `application/*` and
-  `*/*` as JSON-acceptable when no literal `application/json` /
-  `+json` key is declared. Specs using OpenAPI 3.x §4.7.10 media-type
-  ranges previously skipped JSON schema validation silently because the
-  matcher only compared literally.
+  `*/*`. `findJsonContentType()` resolves with literal `application/json`
+  / `+json` first, falling back to `application/*` only — `text/*`,
+  `image/*`, `multipart/*`, and `*/*` are intentionally NOT returned as
+  JSON-acceptable, since routing those through JSON schema validation
+  would re-introduce the silent-pass class this fix is meant to eliminate.
+  Specs using OpenAPI 3.x §4.7.10 media-type ranges previously skipped
+  JSON schema validation silently because the matcher only compared
+  literally.
+
+- **Schema converter — unsupported keyword warning now fires for both
+  3.0 and 3.1**. `patternProperties` and friends are valid Draft 04 / 07
+  keywords used in 3.0 specs in the wild, so version-gating the warning
+  would have left a 3.0 silent pass while closing the 3.1 case.
 
 ### Changed
 

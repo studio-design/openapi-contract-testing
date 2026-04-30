@@ -17,6 +17,22 @@ use function set_error_handler;
 
 class OpenApiSchemaConverterTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        // Reset the converter's "warned-once" set. The set is process-global,
+        // so without per-test reset the test ordering decides whether a
+        // warning fires. Run filters or test-suite reordering would otherwise
+        // produce non-deterministic outcomes for the warning tests below.
+        parent::setUp();
+        OpenApiSchemaConverter::resetWarningStateForTesting();
+    }
+
+    protected function tearDown(): void
+    {
+        OpenApiSchemaConverter::resetWarningStateForTesting();
+        parent::tearDown();
+    }
+
     // ========================================
     // OAS 3.0 tests
     // ========================================
@@ -825,10 +841,11 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
-    public function v31_each_unsupported_keyword_warns_at_most_once_per_run(): void
+    public function repeated_calls_with_same_keyword_warn_only_once(): void
     {
         // Avoid log spam: warn once per process for a given keyword, not per
         // call. The schema converter keeps an internal seen-set.
+        // (setUp() already reset the state.)
         $schema = [
             'type' => 'object',
             'patternProperties' => ['^x-' => ['type' => 'string']],
@@ -846,15 +863,218 @@ class OpenApiSchemaConverterTest extends TestCase
         });
 
         try {
-            OpenApiSchemaConverter::resetWarningStateForTesting();
             OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
             OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
             OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
         } finally {
             restore_error_handler();
-            OpenApiSchemaConverter::resetWarningStateForTesting();
         }
 
         $this->assertSame(1, $count);
+    }
+
+    #[Test]
+    public function multiple_unsupported_keywords_on_same_schema_warn_independently(): void
+    {
+        // The dedup is per-keyword, not per-call. A schema declaring three
+        // unsupported keywords at once must surface three warnings, not one.
+        // Otherwise a future loop-with-break refactor would silently drop the
+        // 2nd/3rd warnings.
+        $schema = [
+            'type' => 'object',
+            'patternProperties' => ['^x-' => ['type' => 'string']],
+            'unevaluatedProperties' => false,
+            'contentMediaType' => 'application/json',
+        ];
+
+        $captured = [];
+        set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
+            if ($errno === E_USER_WARNING) {
+                $captured[] = $errstr;
+
+                return true;
+            }
+
+            return false;
+        });
+
+        try {
+            OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertCount(3, $captured);
+    }
+
+    #[Test]
+    public function pattern_properties_emits_warning_for_oas_3_0_too(): void
+    {
+        // patternProperties has been a JSON Schema keyword since draft-3 and
+        // appears in OAS 3.0 specs in the wild. The fix must run for both
+        // versions — a 3.0-only silent pass is just as bad as the 3.1 case.
+        $schema = [
+            'type' => 'object',
+            'patternProperties' => ['^x-' => ['type' => 'string']],
+        ];
+
+        $captured = null;
+        set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
+            if ($errno === E_USER_WARNING) {
+                $captured = $errstr;
+
+                return true;
+            }
+
+            return false;
+        });
+
+        try {
+            OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertNotNull($captured);
+        $this->assertStringContainsString('patternProperties', (string) $captured);
+    }
+
+    // ========================================
+    // OAS 3.1 examples-still-stripped (regression guard)
+    // ========================================
+
+    #[Test]
+    public function v31_examples_keyword_still_stripped(): void
+    {
+        // `examples` was moved from DRAFT_2020_12_KEYS into OPENAPI_COMMON_KEYS.
+        // The 3.1 path therefore reaches it through a different code branch
+        // than before. Pin the behaviour explicitly so a future refactor
+        // doesn't accidentally remove it from OPENAPI_COMMON_KEYS thinking
+        // it is a 3.1-only concern (and breaks 3.0 too).
+        $schema = [
+            'type' => 'string',
+            'examples' => ['foo', 'bar'],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertArrayNotHasKey('examples', $result);
+    }
+
+    // ========================================
+    // Recursion: handlers must apply at every depth
+    // ========================================
+
+    #[Test]
+    public function v30_nullable_with_enum_appended_recursively_in_nested_property(): void
+    {
+        // Regression guard: handleNullable() runs on the outer schema only at
+        // the outermost convert(), but convertInPlace recurses through
+        // properties/items, so each subschema's nullable+enum should receive
+        // the same treatment at its own level.
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'status' => [
+                    'type' => 'string',
+                    'nullable' => true,
+                    'enum' => ['active', 'inactive'],
+                ],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
+
+        $this->assertContains(null, $result['properties']['status']['enum']);
+    }
+
+    #[Test]
+    public function v30_nullable_with_enum_appended_recursively_in_array_items(): void
+    {
+        $schema = [
+            'type' => 'array',
+            'items' => [
+                'type' => 'string',
+                'nullable' => true,
+                'enum' => ['a', 'b'],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
+
+        $this->assertContains(null, $result['items']['enum']);
+    }
+
+    #[Test]
+    public function v31_const_lowered_recursively_in_nested_property(): void
+    {
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'kind' => [
+                    'const' => 'pet',
+                ],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertArrayNotHasKey('const', $result['properties']['kind']);
+        $this->assertSame(['pet'], $result['properties']['kind']['enum']);
+    }
+
+    #[Test]
+    public function v31_const_lowered_recursively_in_array_items(): void
+    {
+        $schema = [
+            'type' => 'array',
+            'items' => [
+                'const' => 'fixed',
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertArrayNotHasKey('const', $result['items']);
+        $this->assertSame(['fixed'], $result['items']['enum']);
+    }
+
+    // ========================================
+    // Falsy / collection const values
+    // ========================================
+
+    #[Test]
+    public function v31_const_false_lowered_to_enum(): void
+    {
+        // `array_key_exists` correctly detects const: false; isset() would not.
+        // Pin the implementation choice with an explicit test.
+        $result = OpenApiSchemaConverter::convert(['const' => false], OpenApiVersion::V3_1);
+
+        $this->assertArrayNotHasKey('const', $result);
+        $this->assertSame([false], $result['enum']);
+    }
+
+    #[Test]
+    public function v31_const_zero_lowered_to_enum(): void
+    {
+        $result = OpenApiSchemaConverter::convert(['const' => 0], OpenApiVersion::V3_1);
+
+        $this->assertSame([0], $result['enum']);
+    }
+
+    #[Test]
+    public function v31_const_empty_string_lowered_to_enum(): void
+    {
+        $result = OpenApiSchemaConverter::convert(['const' => ''], OpenApiVersion::V3_1);
+
+        $this->assertSame([''], $result['enum']);
+    }
+
+    #[Test]
+    public function v31_const_empty_array_lowered_to_enum(): void
+    {
+        $result = OpenApiSchemaConverter::convert(['const' => []], OpenApiVersion::V3_1);
+
+        $this->assertSame([[]], $result['enum']);
     }
 }

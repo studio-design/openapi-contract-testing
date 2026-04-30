@@ -973,7 +973,7 @@ This is a contract-testing tool: where we can't enforce a constraint precisely, 
 - **`binary` / `byte` formats**: not specifically handled; bodies are validated as plain strings when not skipped.
 
 ### HTTP methods
-The PHPUnit coverage report counts `GET`, `POST`, `PUT`, `PATCH`, `DELETE`. Operations under `HEAD`, `OPTIONS`, or `TRACE` will be validated by `OpenApiResponseValidator` if you call it directly, but they do not appear in the coverage report.
+The PHPUnit coverage report counts `GET`, `POST`, `PUT`, `PATCH`, `DELETE`. Operations under `HEAD`, `OPTIONS`, and `TRACE` are not part of the coverage allowlist, and the Laravel auto-validation hook silently skips them (it normalises the request method through `HttpMethod::tryFrom()`, which returns `null` for these). Direct calls to `OpenApiResponseValidator::validate()` with one of these method strings will resolve against the spec — but if you depend on coverage tracking or the Laravel trait, treat HEAD / OPTIONS / TRACE as out of scope today.
 
 ### Spec features not consulted
 Webhooks (3.1), Callbacks, Response `Links`, Server URL templating (`servers` with `variables`), Examples (`examples` blocks at parameter / requestBody / response level — not used for fuzzing or validation), `tags`, `externalDocs`, vendor extensions (`x-*` keys, ignored harmlessly).

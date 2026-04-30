@@ -104,9 +104,13 @@ final class OpenApiSchemaConverter
         } else {
             self::handlePrefixItems($schema);
             self::lowerConstToEnum($schema);
-            self::warnIfUsesUnsupportedKeywords($schema);
             self::removeKeys($schema, self::DRAFT_2020_12_KEYS);
         }
+
+        // Warn for both 3.0 and 3.1: `patternProperties` and friends are valid
+        // Draft 04/07 keywords used in 3.0 specs as well, so silent ignoring is
+        // just as risky there.
+        self::warnIfUsesUnsupportedKeywords($schema);
 
         self::removeKeys($schema, self::OPENAPI_COMMON_KEYS);
 
@@ -277,8 +281,13 @@ final class OpenApiSchemaConverter
      * schema would silently accept any value of the correct type. Lower to
      * `enum: [value]` so the constraint is actually enforced.
      *
-     * If `enum` already exists, defer to it — `enum` is the wider constraint
-     * and a spec carrying both is malformed.
+     * Conflict policy: when both `const` and `enum` are present (rare and
+     * arguably malformed), we keep `enum` and drop `const`. JSON Schema
+     * semantics are that the two intersect — the result should equal `[const]`
+     * if `const ∈ enum`, else unsatisfiable — but reproducing that precisely
+     * is more delicate than v1.0 needs. The chosen behaviour LOOSENS the
+     * constraint relative to the spec; treat this conflict as a known
+     * limitation and prefer `const`-only or `enum`-only schemas.
      *
      * @param array<string, mixed> $schema
      */
@@ -288,7 +297,7 @@ final class OpenApiSchemaConverter
             return;
         }
 
-        if (!isset($schema['enum'])) {
+        if (!array_key_exists('enum', $schema)) {
             $schema['enum'] = [$schema['const']];
         }
 

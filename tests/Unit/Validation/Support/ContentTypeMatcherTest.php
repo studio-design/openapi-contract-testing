@@ -125,22 +125,48 @@ class ContentTypeMatcherTest extends TestCase
     }
 
     #[Test]
-    public function find_json_content_type_returns_full_wildcard_when_no_better_match(): void
+    public function find_json_content_type_does_not_return_full_wildcard(): void
     {
+        // `*&#47;*` covers everything (binary, image, html). Returning it from a
+        // method whose contract is "find a JSON-validatable spec key" would let
+        // ResponseBodyValidator validate non-JSON bodies as JSON when the response
+        // omits Content-Type. Conservative: skip JSON validation rather than
+        // pretend `*&#47;*` means JSON.
         $content = ['*/*' => ['schema' => ['type' => 'object']]];
 
-        $this->assertSame('*/*', ContentTypeMatcher::findJsonContentType($content));
+        $this->assertNull(ContentTypeMatcher::findJsonContentType($content));
     }
 
     #[Test]
-    public function find_json_content_type_prefers_explicit_json_over_wildcards(): void
+    public function find_json_content_type_does_not_return_non_json_type_ranges(): void
+    {
+        // `text/*`, `image/*`, `multipart/*` cannot plausibly carry a JSON body.
+        // findJsonContentType must not return them — pre-fix, the broad
+        // `<type>/*` accept introduced a NEW silent pass: a spec declaring only
+        // `text/*` would route through JSON schema validation.
+        $textOnly = ['text/*' => ['schema' => ['type' => 'string']]];
+        $this->assertNull(ContentTypeMatcher::findJsonContentType($textOnly));
+
+        $imageOnly = ['image/*' => ['schema' => ['type' => 'string']]];
+        $this->assertNull(ContentTypeMatcher::findJsonContentType($imageOnly));
+    }
+
+    #[Test]
+    public function find_json_content_type_prefers_explicit_json_over_application_wildcard(): void
     {
         $content = [
-            '*/*' => [],
             'application/*' => [],
             'application/json' => ['schema' => ['type' => 'string']],
         ];
 
         $this->assertSame('application/json', ContentTypeMatcher::findJsonContentType($content));
+    }
+
+    #[Test]
+    public function find_json_content_type_matches_application_wildcard_case_insensitively(): void
+    {
+        $content = ['Application/*' => ['schema' => ['type' => 'object']]];
+
+        $this->assertSame('Application/*', ContentTypeMatcher::findJsonContentType($content));
     }
 }
