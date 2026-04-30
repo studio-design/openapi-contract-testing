@@ -7,11 +7,11 @@ namespace Studio\OpenApiContractTesting\Fuzz;
 use Faker\Generator;
 use InvalidArgumentException;
 use Studio\OpenApiContractTesting\HttpMethod;
-use Studio\OpenApiContractTesting\OpenApiPathMatcher;
-use Studio\OpenApiContractTesting\OpenApiSchemaConverter;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\SchemaContext;
+use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
+use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Request\ParameterCollector;
 use ValueError;
 

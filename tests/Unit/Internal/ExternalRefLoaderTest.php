@@ -6,10 +6,10 @@ namespace Studio\OpenApiContractTesting\Tests\Unit\Internal;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\Internal\ExternalRefLoader;
 use Studio\OpenApiContractTesting\Internal\YamlAvailability;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
 
 use function chmod;
 use function file_put_contents;

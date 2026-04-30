@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Validation\Support;
 
-use Studio\OpenApiContractTesting\OpenApiPathMatcher;
-use Studio\OpenApiContractTesting\OpenApiPathSuggester;
+use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
+use Studio\OpenApiContractTesting\Spec\OpenApiPathSuggester;
 
 use function implode;
 use function strtoupper;

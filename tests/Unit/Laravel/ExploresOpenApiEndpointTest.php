@@ -7,12 +7,12 @@ namespace Studio\OpenApiContractTesting\Tests\Unit\Laravel;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
 use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
 use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ExploresOpenApiEndpoint;
-use Studio\OpenApiContractTesting\OpenApiSpec;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 // Re-use the namespace-level config() mock so config()-based fallback works.
 require_once __DIR__ . '/../../Helpers/LaravelConfigMock.php';

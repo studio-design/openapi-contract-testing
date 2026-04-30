@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
+use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Request\HeaderParameterValidator;
 use Studio\OpenApiContractTesting\Validation\Request\ParameterCollector;
 use Studio\OpenApiContractTesting\Validation\Request\PathParameterValidator;

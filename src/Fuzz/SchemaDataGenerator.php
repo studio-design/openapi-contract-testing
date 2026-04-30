@@ -9,7 +9,7 @@ use const E_USER_WARNING;
 use Faker\Factory;
 use Faker\Generator;
 use InvalidArgumentException;
-use Studio\OpenApiContractTesting\OpenApiSchemaConverter;
+use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 
 use function array_values;
 use function class_exists;

@@ -8,6 +8,56 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 
 ## Unreleased
 
+### Changed (breaking)
+
+- **Namespace reorganisation — top-level cleanup ahead of v1.0.0**. Twenty-two
+  classes moved out of the `Studio\OpenApiContractTesting\` top-level namespace
+  into focused subnamespaces (`Attribute\`, `Coverage\`, `Exception\`, `Spec\`),
+  and six coverage classes moved out of `PHPUnit\` into the new `Coverage\`.
+  PHPUnit/ slims down to just the runner-facing extension, subscriber, and
+  console output enum.
+
+  No compat shim — pre-1.0 breaking changes are the contract for this
+  release line (see the project banner above). Update any `use` statement
+  pointing at a moved class.
+
+  | Old FQCN | New FQCN |
+  | --- | --- |
+  | `Studio\OpenApiContractTesting\OpenApiSpec` | `Studio\OpenApiContractTesting\Attribute\OpenApiSpec` |
+  | `Studio\OpenApiContractTesting\SkipOpenApi` | `Studio\OpenApiContractTesting\Attribute\SkipOpenApi` |
+  | `Studio\OpenApiContractTesting\InvalidOpenApiSpecException` | `Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException` |
+  | `Studio\OpenApiContractTesting\InvalidOpenApiSpecReason` | `Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason` |
+  | `Studio\OpenApiContractTesting\SpecFileNotFoundException` | `Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException` |
+  | `Studio\OpenApiContractTesting\OpenApiSpecLoader` | `Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader` |
+  | `Studio\OpenApiContractTesting\OpenApiSpecResolver` | `Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver` |
+  | `Studio\OpenApiContractTesting\OpenApiRefResolver` | `Studio\OpenApiContractTesting\Spec\OpenApiRefResolver` |
+  | `Studio\OpenApiContractTesting\RefResolutionContext` | `Studio\OpenApiContractTesting\Spec\RefResolutionContext` |
+  | `Studio\OpenApiContractTesting\OpenApiSchemaConverter` | `Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter` |
+  | `Studio\OpenApiContractTesting\OpenApiPathMatcher` | `Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher` |
+  | `Studio\OpenApiContractTesting\OpenApiPathSuggester` | `Studio\OpenApiContractTesting\Spec\OpenApiPathSuggester` |
+  | `Studio\OpenApiContractTesting\OpenApiCoverageTracker` | `Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker` |
+  | `Studio\OpenApiContractTesting\EndpointCoverageState` | `Studio\OpenApiContractTesting\Coverage\EndpointCoverageState` |
+  | `Studio\OpenApiContractTesting\ResponseCoverageState` | `Studio\OpenApiContractTesting\Coverage\ResponseCoverageState` |
+  | `Studio\OpenApiContractTesting\InvalidThresholdConfigurationException` | `Studio\OpenApiContractTesting\Coverage\InvalidThresholdConfigurationException` |
+  | `Studio\OpenApiContractTesting\PHPUnit\ConsoleCoverageRenderer` | `Studio\OpenApiContractTesting\Coverage\ConsoleCoverageRenderer` |
+  | `Studio\OpenApiContractTesting\PHPUnit\MarkdownCoverageRenderer` | `Studio\OpenApiContractTesting\Coverage\MarkdownCoverageRenderer` |
+  | `Studio\OpenApiContractTesting\PHPUnit\CoverageMergeCommand` | `Studio\OpenApiContractTesting\Coverage\CoverageMergeCommand` |
+  | `Studio\OpenApiContractTesting\PHPUnit\CoverageThresholdEvaluator` | `Studio\OpenApiContractTesting\Coverage\CoverageThresholdEvaluator` |
+  | `Studio\OpenApiContractTesting\PHPUnit\CoverageSidecarReader` | `Studio\OpenApiContractTesting\Coverage\CoverageSidecarReader` |
+  | `Studio\OpenApiContractTesting\PHPUnit\CoverageSidecarWriter` | `Studio\OpenApiContractTesting\Coverage\CoverageSidecarWriter` |
+
+  Unchanged FQCNs (kept for stability or because they live with framework code):
+  the public `OpenApiResponseValidator` / `OpenApiRequestValidator` entry
+  points, the top-level enums (`HttpMethod`, `OpenApiVersion`,
+  `OpenApiValidationOutcome`, `SchemaContext`), `OpenApiValidationResult`,
+  `SkipOpenApiResolver`, everything under `Laravel\`, `Fuzz\`, `Internal\`,
+  and `Validation\`, plus the runner-facing
+  `PHPUnit\{OpenApiCoverageExtension, CoverageReportSubscriber, ConsoleOutput}`.
+
+  `phpunit.xml.dist` users: the bootstrap class
+  `Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension` does **not**
+  change — that one stays in `PHPUnit\`.
+
 ### Added
 
 - **#136 — Schema-driven request fuzzing (`ExploresOpenApiEndpoint` trait)**.

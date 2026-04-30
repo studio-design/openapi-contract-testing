@@ -6,9 +6,9 @@ namespace Studio\OpenApiContractTesting\Tests\Integration;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\PHPUnit\CoverageSidecarWriter;
+use Studio\OpenApiContractTesting\Coverage\CoverageSidecarWriter;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function dirname;
 use function escapeshellarg;

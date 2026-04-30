@@ -10,10 +10,14 @@ use const STDERR;
 use PHPUnit\Event\TestRunner\ExecutionFinished;
 use PHPUnit\Event\TestRunner\ExecutionFinishedSubscriber;
 use RuntimeException;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\SpecFileNotFoundException;
+use Studio\OpenApiContractTesting\Coverage\ConsoleCoverageRenderer;
+use Studio\OpenApiContractTesting\Coverage\CoverageSidecarWriter;
+use Studio\OpenApiContractTesting\Coverage\CoverageThresholdEvaluator;
+use Studio\OpenApiContractTesting\Coverage\MarkdownCoverageRenderer;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function fflush;
 use function file_put_contents;

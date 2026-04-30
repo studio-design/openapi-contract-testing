@@ -169,7 +169,7 @@ class GetPetsTest extends TestCase
 To use a different spec for a specific test class, add the `#[OpenApiSpec]` attribute:
 
 ```php
-use Studio\OpenApiContractTesting\OpenApiSpec;
+use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 
 #[OpenApiSpec('admin')]
@@ -214,7 +214,7 @@ Resolution priority (highest to lowest) — the first match wins:
 Concrete example where all four layers are populated (class name differs from the earlier `MixedApiTest` example so both snippets can coexist in one project):
 
 ```php
-use Studio\OpenApiContractTesting\OpenApiSpec;
+use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
 
 // config/openapi-contract-testing.php → ['default_spec' => 'front']   (layer 4)
 
@@ -257,8 +257,8 @@ in config/openapi-contract-testing.php.
 You can use the `#[OpenApiSpec]` attribute with the `OpenApiSpecResolver` trait in any PHPUnit test:
 
 ```php
-use Studio\OpenApiContractTesting\OpenApiSpec;
-use Studio\OpenApiContractTesting\OpenApiSpecResolver;
+use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 
 #[OpenApiSpec('front')]
@@ -288,7 +288,7 @@ Or without the attribute, pass the spec name directly:
 
 ```php
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 // Configure once (e.g., in bootstrap)
 OpenApiSpecLoader::configure(__DIR__ . '/openapi/bundled', ['/api']);
@@ -399,7 +399,7 @@ Notes:
 Some tests intentionally return responses that violate the spec (error-injection tests, experimental endpoints with a not-yet-finalized contract, etc.). For these, use the `#[SkipOpenApi]` attribute to opt out of auto-assert without turning the feature off globally:
 
 ```php
-use Studio\OpenApiContractTesting\SkipOpenApi;
+use Studio\OpenApiContractTesting\Attribute\SkipOpenApi;
 
 class ExperimentalApiTest extends TestCase
 {
@@ -547,7 +547,7 @@ The `ExploresOpenApiEndpoint` trait generates N happy-path request inputs for on
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Laravel\ExploresOpenApiEndpoint;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
-use Studio\OpenApiContractTesting\OpenApiSpec;
+use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
 
 #[OpenApiSpec('front')]
 class CreatePetTest extends TestCase
@@ -895,7 +895,7 @@ composer require --dev guzzlehttp/guzzle
 ```php
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\HttpFactory;
-use Studio\OpenApiContractTesting\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 OpenApiSpecLoader::configure(
     basePath: 'openapi/',

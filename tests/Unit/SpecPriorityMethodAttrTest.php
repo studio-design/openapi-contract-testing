@@ -6,8 +6,8 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
-use Studio\OpenApiContractTesting\OpenApiSpec;
 
 // Load namespace-level config() mock before the trait resolves the function call.
 require_once __DIR__ . '/../Helpers/LaravelConfigMock.php';
