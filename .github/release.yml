@@ -1,0 +1,30 @@
+# Configuration for GitHub's auto-generated release notes.
+# Used by `gh release create --generate-notes` and the manual UI.
+# Reference: https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes
+
+changelog:
+  exclude:
+    labels:
+      - dependencies
+      - documentation
+      - tech-debt
+    authors:
+      - renovate[bot]
+      - dependabot[bot]
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking-change
+    - title: Added
+      labels:
+        - feature
+        - enhancement
+    - title: Fixed
+      labels:
+        - bug
+    - title: Changed
+      labels:
+        - refactor
+    - title: Other
+      labels:
+        - "*"

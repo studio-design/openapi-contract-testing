@@ -163,6 +163,12 @@ final class OpenApiCoverageTracker
         );
     }
 
+    /**
+     * Reset all recorded coverage to the empty state. Intended for test
+     * isolation between runs.
+     *
+     * @internal
+     */
     public static function reset(): void
     {
         self::$covered = [];
@@ -176,6 +182,10 @@ final class OpenApiCoverageTracker
      * Enums are serialized as their string `value`. The shape is otherwise
      * a 1:1 mirror of the internal {@see self::$covered} representation, so
      * round-tripping through JSON is lossless when no other writes occur.
+     *
+     * @internal Stable wire format for sidecar writers / merge CLI. The
+     * `version` field gates compatibility — see {@see self::STATE_FORMAT_VERSION}.
+     * Public users should not depend on the array shape.
      *
      * @return CoverageStatePayload
      */
@@ -222,6 +232,9 @@ final class OpenApiCoverageTracker
      * Validation is two-pass: the entire payload is parsed and rejected
      * up front before any state is mutated, so a malformed entry deep in
      * the payload cannot leave the tracker in a partially-merged state.
+     *
+     * @internal Companion to {@see self::exportState()}. Used by the merge CLI
+     * and not part of the user-facing API.
      *
      * @param array<string, mixed> $state
      *

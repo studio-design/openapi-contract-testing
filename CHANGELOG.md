@@ -6,6 +6,97 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project is **pre-1.0**, so breaking changes may land in any minor release
 until 1.0.0 ships. Each entry below tags whether it is breaking.
 
+## Unreleased
+
+The "v1.0.0 hardening" pass: a competitive review against Spectator,
+league/openapi-psr7-validator, osteel, and kirschbaum surfaced six
+silent-pass bugs in the OAS-to-Draft-07 conversion plus a content-type
+range matching gap. All six are fixed below; the API surface picks up
+`@internal` markers on test/serialisation helpers so v1.0.0 can freeze
+the public API without those leaking into the SemVer contract.
+
+### Fixed
+
+- **Schema converter — `nullable: true` next to `enum`** now appends `null` to
+  the enum so opis Draft 07 actually accepts null values. Previously only
+  `type` was rewritten, causing `enum: ["a", "b"]` + `nullable: true` to
+  reject `null` against the enum constraint even though OAS 3.0 considers
+  null a valid value.
+- **Schema converter — `examples` (Draft 2020-12 array form)** is now
+  stripped from OAS 3.0 schemas as well as 3.1. Singular `example` was
+  already removed for both versions; `examples` was inconsistently kept on
+  3.0, leaving an unrecognised Draft 07 keyword in the output.
+- **Schema converter — OAS 3.1 `const`** is now lowered to `enum: [value]`.
+  Draft 07 has no native `const`, so the keyword silently passed before —
+  a `const: "fixed"` schema would accept any value of the right type.
+- **Schema converter — unsupported 2019-09 / 2020-12 keywords** now emit a
+  one-shot `E_USER_WARNING` when first encountered: `patternProperties`,
+  `unevaluatedProperties`, `unevaluatedItems`, `contentMediaType`,
+  `contentEncoding`. Pre-fix, opis ignored these silently and the
+  contract test would report a spurious pass.
+- **Content-type matcher — wildcard ranges**. `findContentTypeKey()` now
+  resolves with most-specific-first priority: exact match → `<type>/*` →
+  `*/*`. `findJsonContentType()` resolves with literal `application/json`
+  / `+json` first, falling back to `application/*` only — `text/*`,
+  `image/*`, `multipart/*`, and `*/*` are intentionally NOT returned as
+  JSON-acceptable, since routing those through JSON schema validation
+  would re-introduce the silent-pass class this fix is meant to eliminate.
+  Specs using OpenAPI 3.x §4.7.10 media-type ranges previously skipped
+  JSON schema validation silently because the matcher only compared
+  literally.
+
+- **Schema converter — unsupported keyword warning now fires for both
+  3.0 and 3.1**. `patternProperties` and friends are valid Draft 04 / 07
+  keywords used in 3.0 specs in the wild, so version-gating the warning
+  would have left a 3.0 silent pass while closing the 3.1 case.
+
+### Changed
+
+- **Public-API hygiene** — `OpenApiSpecLoader::clearCache()` / `evict()` /
+  `reset()`, `OpenApiCoverageTracker::reset()` / `exportState()` /
+  `importState()`, and `ValidatesOpenApiSchema::resetValidatorCache()` are
+  now annotated `@internal`. They remain `public` for the PHPUnit extension
+  / paratest sidecar protocol but are no longer part of the user-facing
+  surface that v1.0.0 will freeze.
+
+### Documentation
+
+- README gains a "Supported features and known limitations" section that
+  pins down body-validation media types, parameter style support,
+  security-scheme coverage, schema feature handling, HTTP-method coverage,
+  and spec features that are not consulted (webhooks, callbacks, links,
+  server URL templates, etc.). Important for v1.0.0 expectation-setting:
+  the library favours loud failures or explicit `Skipped` outcomes over
+  silent passes, but where features are out of scope it now says so
+  explicitly rather than leaving users to discover it through silently
+  green tests.
+- New `CONTRIBUTING.md`, `SECURITY.md`, `UPGRADING.md`, GitHub issue
+  templates, and pull request template. v1.0.0 will draw a wider audience
+  than v0.x; structured templates reduce triage cost and pin the SemVer /
+  security-disclosure expectations explicitly.
+
+### Release infrastructure
+
+- **CI hardening**. Added `composer-validate` and `composer-audit` jobs.
+  Added a `--prefer-lowest` matrix leg so constraint changes that
+  accidentally require a newer minor of opis/json-schema or PHPUnit are
+  caught instead of silently breaking downstream pin-pinned consumers.
+- **Tag-driven release pipeline**. Pushing a `v*` tag now runs the full
+  CI matrix once more and then publishes a GitHub Release with
+  auto-generated notes via `gh release create --generate-notes`. Notes
+  are grouped by PR labels per `.github/release.yml`. Eliminates the
+  "tagged but forgot to publish the Release" footgun.
+- **PR title convention enforcement** via `amannn/action-semantic-pull-request`.
+  History was already conventional-style; the workflow formalises it so
+  the squash-merge commit history stays parseable for changelog
+  automation.
+- **`composer.json` polish** — added `scripts` (`composer test` /
+  `stan` / `cs` / `cs-check` / `ci`), `support` URLs, and `archive.exclude`
+  so Packagist tarballs ship without `tests/`, `.github/`, dotfiles, etc.
+- **Renovate** now runs Mondays Asia/Tokyo, auto-merges runtime *patch*
+  updates as well as the existing dev minor/patch group. Runtime *minor*
+  stays manual because `opis/json-schema` semantics may shift.
+
 ## v0.15.0 — 2026-04-30
 
 The "v1.0 prep" release: namespaces reorganised so the public surface

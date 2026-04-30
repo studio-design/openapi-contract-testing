@@ -182,6 +182,10 @@ final class OpenApiSpecLoader
 
     /**
      * Clear only the cached specs, keeping basePath and stripPrefixes intact.
+     *
+     * @internal Used by the PHPUnit extension to free memory after coverage
+     * is computed. Production code should not call this — clearing mid-run
+     * forces a re-parse on the next {@see self::load()} call.
      */
     public static function clearCache(): void
     {
@@ -190,12 +194,20 @@ final class OpenApiSpecLoader
 
     /**
      * Remove a single spec from the cache.
+     *
+     * @internal Test seam — production code never needs this.
      */
     public static function evict(string $specName): void
     {
         unset(self::$cache[$specName]);
     }
 
+    /**
+     * Reset all configuration and cached state. Intended for test isolation
+     * between runs.
+     *
+     * @internal
+     */
     public static function reset(): void
     {
         self::$basePath = null;

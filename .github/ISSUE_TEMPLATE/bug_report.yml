@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a bug in the library
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report. Please fill in as much
+        of the form below as you can — incomplete reports are slower to
+        triage and may be closed.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. Include any error messages or warnings.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: |
+        Minimal failing example. A self-contained test (PHPUnit method or
+        Laravel feature test snippet) is much faster to triage than a
+        prose description. Include the relevant OpenAPI spec excerpt.
+      placeholder: |
+        ```php
+        public function test_my_endpoint(): void
+        {
+            // ...
+        }
+        ```
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Library version
+      description: Output of `composer show studio-design/openapi-contract-testing | grep versions`
+      placeholder: e.g. v0.15.0
+    validations:
+      required: true
+  - type: input
+    id: php
+    attributes:
+      label: PHP version
+      placeholder: e.g. 8.3.10
+    validations:
+      required: true
+  - type: input
+    id: phpunit
+    attributes:
+      label: PHPUnit version
+      placeholder: e.g. 11.5.0
+    validations:
+      required: true
+  - type: dropdown
+    id: openapi-version
+    attributes:
+      label: OpenAPI spec version
+      options:
+        - "3.0"
+        - "3.1"
+        - Both
+        - Not relevant
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Stack traces, related issues, screenshots, etc.

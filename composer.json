@@ -53,6 +53,47 @@
             ]
         }
     },
+    "scripts": {
+        "test": "phpunit",
+        "stan": "phpstan analyse",
+        "cs": "php-cs-fixer fix",
+        "cs-check": "php-cs-fixer fix --dry-run --diff",
+        "ci": [
+            "@cs-check",
+            "@stan",
+            "@test"
+        ]
+    },
+    "scripts-descriptions": {
+        "test": "Run the full PHPUnit test suite.",
+        "stan": "Run PHPStan static analysis.",
+        "cs": "Run PHP-CS-Fixer in fix mode (rewrites files).",
+        "cs-check": "Run PHP-CS-Fixer in dry-run mode (CI gate).",
+        "ci": "Run the same checks the CI matrix runs."
+    },
+    "support": {
+        "issues": "https://github.com/studio-design/openapi-contract-testing/issues",
+        "source": "https://github.com/studio-design/openapi-contract-testing",
+        "docs": "https://github.com/studio-design/openapi-contract-testing#readme"
+    },
+    "archive": {
+        "exclude": [
+            "/tests",
+            "/.github",
+            "/.php-cs-fixer.dist.php",
+            "/.php-cs-fixer.cache",
+            "/.phpstan.cache",
+            "/.phpunit.cache",
+            "/phpstan.neon.dist",
+            "/phpunit.xml.dist",
+            "/CLAUDE.md",
+            "/CONTRIBUTING.md",
+            "/UPGRADING.md",
+            "/SECURITY.md",
+            "/draft-zenn-article.md",
+            "/renovate.json"
+        ]
+    },
     "minimum-stability": "stable",
     "prefer-stable": true
 }

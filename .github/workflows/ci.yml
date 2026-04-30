@@ -5,10 +5,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_call:
 
 jobs:
   tests:
-    name: PHP ${{ matrix.php }} / PHPUnit ${{ matrix.phpunit }}
+    name: PHP ${{ matrix.php }} / PHPUnit ${{ matrix.phpunit }}${{ matrix.deps == 'lowest' && ' / lowest deps' || '' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -16,16 +17,25 @@ jobs:
         include:
           - php: '8.2'
             phpunit: '11'
+            deps: highest
+          - php: '8.2'
+            phpunit: '11'
+            deps: lowest
           - php: '8.3'
             phpunit: '11'
+            deps: highest
           - php: '8.3'
             phpunit: '12'
+            deps: highest
           - php: '8.4'
             phpunit: '11'
+            deps: highest
           - php: '8.4'
             phpunit: '12'
+            deps: highest
           - php: '8.4'
             phpunit: '13'
+            deps: highest
 
     steps:
       - uses: actions/checkout@v6
@@ -36,10 +46,14 @@ jobs:
           php-version: ${{ matrix.php }}
           coverage: none
 
-      - name: Install dependencies (PHPUnit ${{ matrix.phpunit }})
+      - name: Install dependencies
         run: |
           composer require --dev "phpunit/phpunit:^${{ matrix.phpunit }}.0" --no-interaction --no-update
-          composer update --prefer-dist --no-interaction --no-progress
+          if [ "${{ matrix.deps }}" = "lowest" ]; then
+            composer update --prefer-lowest --prefer-dist --no-interaction --no-progress
+          else
+            composer update --prefer-dist --no-interaction --no-progress
+          fi
 
       - name: Run tests
         run: vendor/bin/phpunit
@@ -79,3 +93,42 @@ jobs:
 
       - name: Check code style
         run: vendor/bin/php-cs-fixer fix --dry-run --diff
+
+  composer-validate:
+    name: composer-validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          # Run on the lowest supported PHP so any constraint mismatch
+          # between composer.json's `php: ^8.2` and the resolved lock
+          # surfaces here, not at install time on a downstream consumer.
+          php-version: '8.2'
+          coverage: none
+
+      - name: Validate composer.json + composer.lock
+        run: composer validate --strict
+
+  composer-audit:
+    name: composer-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          # Same rationale as composer-validate: the audit itself is
+          # platform-independent, but installing on the lowest PHP catches
+          # platform-constraint regressions in dependencies.
+          php-version: '8.2'
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Audit installed dependencies
+        run: composer audit --abandoned=fail

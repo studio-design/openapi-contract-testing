@@ -100,6 +100,13 @@ trait ValidatesOpenApiSchema
     /** @var string[] */
     private array $skipNextResponseCodes = [];
 
+    /**
+     * Drop the per-process validator cache so the next assertion rebuilds
+     * with current config. Intended for test isolation when multiple
+     * test classes share the same trait but want different settings.
+     *
+     * @internal
+     */
     public static function resetValidatorCache(): void
     {
         self::$cachedValidator = null;
