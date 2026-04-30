@@ -15,6 +15,7 @@ Validate your API responses against your OpenAPI specification during testing, a
 - **Content negotiation** — Accepts the actual response `Content-Type` to handle mixed-content specs. Non-JSON responses (e.g., `text/html`, `application/xml`) are verified for spec presence without body validation; JSON-compatible responses are fully schema-validated
 - **Skip-by-status-code** — Configurable regex list of status codes whose bodies are not validated (default: every `5xx`), reflecting the common convention of not documenting production error responses in the spec. Also available per-request via the fluent `skipResponseCode()` API
 - **Endpoint coverage tracking** — Unique PHPUnit extension that reports which spec endpoints are covered by tests
+- **Schema-driven request fuzzing** — `ExploresOpenApiEndpoint` trait generates N happy-path request inputs straight from the spec (Schemathesis-style); pairs with auto-assert so every fuzzed call also lights up coverage
 - **Path matching** — Handles parameterized paths (`/pets/{petId}`) with configurable prefix stripping
 - **Laravel adapter** — Optional trait for seamless integration with Laravel's `TestResponse`
 - **Zero runtime overhead** — Only used in test suites
@@ -33,6 +34,7 @@ This library fills a gap left by existing PHP OpenAPI testing tools: **endpoint 
 | Request validation (body + params) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Response header validation | ✅ | ⚠️ | ✅ | ✅ | ✅ |
 | **Endpoint coverage tracking** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Schema-driven request fuzzing** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Skip-by-status-code (default 5xx)** | ✅ | ❌ | ❌ | ❌ | ✅ |
 | PHPUnit integration | ✅ | ✅ | ❌ | ⚠️ | ✅ |
 | Pest plugin | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -536,6 +538,71 @@ Notes:
 - **Bearer only**: `apiKey` and `oauth2` endpoints are not affected (the header name for `apiKey` is arbitrary per spec; `oauth2` is classified as unsupported in phase 1 anyway).
 - **Never overrides user values**: if the test already set an `Authorization` header (in any case), the user's value wins.
 - **Requires `auto_validate_request=true`** — the inject is a sub-feature of request validation. Setting the inject flag alone has no effect.
+
+## Schema-driven request fuzzing
+
+The `ExploresOpenApiEndpoint` trait generates N happy-path request inputs for one (method, path) operation directly from the OpenAPI spec — the PHP equivalent of [Schemathesis][schemathesis]. Pair it with the existing `ValidatesOpenApiSchema` trait and every fuzzed call automatically asserts response contract conformance and records coverage.
+
+```php
+use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Laravel\ExploresOpenApiEndpoint;
+use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
+use Studio\OpenApiContractTesting\OpenApiSpec;
+
+#[OpenApiSpec('front')]
+class CreatePetTest extends TestCase
+{
+    use ExploresOpenApiEndpoint;
+    use ValidatesOpenApiSchema;
+
+    public function test_create_pet_contract(): void
+    {
+        $this->exploreEndpoint('POST', '/v1/pets', cases: 50, seed: 1)
+            ->each(fn ($input) => $this->postJson('/api/v1/pets', $input->body)
+                ->assertSuccessful());
+    }
+}
+```
+
+What you get per case (`Studio\OpenApiContractTesting\Fuzz\ExploredCase`):
+
+| Property | Description |
+|--------|-------------|
+| `body` | Generated JSON body (or `null` when the operation has no `application/json` requestBody) |
+| `query` | name → value for every `in: query` parameter |
+| `headers` | name → value for every `in: header` parameter (excludes the OpenAPI-reserved `Accept`/`Content-Type`/`Authorization`) |
+| `pathParams` | name → value for every `{placeholder}` segment |
+| `method`, `matchedPath` | The resolved spec template (`/v1/pets/{petId}`) and its method |
+
+The collection is `Countable` and `IteratorAggregate`, so `foreach ($cases as $case)` works too if you prefer it over the fluent `each()` helper.
+
+### Generation behaviour
+
+- Supported keywords: `type` (`string`/`integer`/`number`/`boolean`/`object`/`array`/`null`), `enum`, `format` (`email`/`uuid`/`date`/`date-time`/`uri`/`hostname`/`ipv4`/`ipv6`), `minLength`/`maxLength`, `minimum`/`maximum`, `required`, `properties`, `items`.
+- Optional object properties alternate between included and omitted across cases, so each batch exercises both required-only and required+optional shapes.
+- Required keys are always emitted.
+- Path resolution accepts both the spec template form (`/v1/pets/{petId}`) and concrete URIs that match it (`/api/v1/pets/123` with `strip_prefixes=/api`). Captured URI values are intentionally discarded — `pathParams` is always regenerated from the operation spec for consistency.
+
+### `seed` and determinism
+
+When [`fakerphp/faker`][faker] is installed (already a transitive dev dependency via `orchestra/testbench` for most projects), generation uses Faker's locale-aware primitives and is fully deterministic for a given `seed:`. Without Faker, the trait falls back to deterministic counter-based primitives that still pass schema validation — your CI never depends on a runtime-installed package.
+
+```bash
+# Optional but recommended for realistic generation
+composer require --dev fakerphp/faker
+```
+
+### Out of scope (today)
+
+The MVP intentionally targets happy-path generation. Tracked separately:
+
+- Boundary value injection (min/max-length extremes, Unicode edge cases)
+- Negative-case generation (deliberately invalid inputs to assert 4xx responses)
+- `oneOf` / `anyOf` / `allOf` composition; regex `pattern`; `multipleOf`; `minItems` / `maxItems`
+- Whole-spec auto-exploration (`exploreSpec()` to walk every endpoint)
+
+[schemathesis]: https://github.com/schemathesis/schemathesis
+[faker]: https://github.com/FakerPHP/Faker
 
 ## Coverage Report
 
