@@ -12,10 +12,10 @@ use PHPUnit\Runner\Extension\Extension;
 use PHPUnit\Runner\Extension\Facade;
 use PHPUnit\Runner\Extension\ParameterCollection;
 use PHPUnit\TextUI\Configuration\Configuration;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
 use Studio\OpenApiContractTesting\InvalidThresholdConfigurationException;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\SpecFileNotFoundException;
 
 use function array_map;
 use function explode;

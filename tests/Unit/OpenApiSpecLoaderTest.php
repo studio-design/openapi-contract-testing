@@ -9,11 +9,11 @@ use GuzzleHttp\Psr7\HttpFactory;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
+use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
 use Studio\OpenApiContractTesting\Internal\YamlAvailability;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\SpecFileNotFoundException;
 use Symfony\Component\Yaml\Yaml;
 
 use function class_exists;

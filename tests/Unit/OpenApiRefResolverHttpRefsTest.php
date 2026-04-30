@@ -9,8 +9,8 @@ use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\OpenApiRefResolver;
 use Studio\OpenApiContractTesting\Tests\Helpers\FakeHttpClient;
 

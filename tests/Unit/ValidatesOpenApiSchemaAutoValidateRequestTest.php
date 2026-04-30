@@ -9,12 +9,12 @@ use const JSON_THROW_ON_ERROR;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Attribute\SkipOpenApi;
 use Studio\OpenApiContractTesting\EndpointCoverageState;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\SkipOpenApi;
 use Symfony\Component\HttpFoundation\Request;
 
 use function json_encode;

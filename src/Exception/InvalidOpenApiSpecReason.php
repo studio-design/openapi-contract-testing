@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting;
+namespace Studio\OpenApiContractTesting\Exception;
 
 /**
  * Categorical reasons an OpenAPI spec is considered broken. Carried on

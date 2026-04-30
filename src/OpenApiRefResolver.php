@@ -6,6 +6,8 @@ namespace Studio\OpenApiContractTesting;
 
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\Internal\ExternalRefLoader;
 use Studio\OpenApiContractTesting\Internal\HttpRefLoader;
 

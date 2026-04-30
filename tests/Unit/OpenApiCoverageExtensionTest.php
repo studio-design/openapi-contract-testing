@@ -7,12 +7,12 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Runner\Extension\ParameterCollection;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
+use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
 use Studio\OpenApiContractTesting\InvalidThresholdConfigurationException;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
-use Studio\OpenApiContractTesting\SpecFileNotFoundException;
 
 use function fclose;
 use function file_get_contents;

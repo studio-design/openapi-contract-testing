@@ -10,8 +10,8 @@ use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use RuntimeException;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
 
 use function pathinfo;
 use function preg_replace;

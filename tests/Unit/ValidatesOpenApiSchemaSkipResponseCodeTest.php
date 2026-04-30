@@ -10,11 +10,11 @@ use InvalidArgumentException;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Attribute\SkipOpenApi;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\SkipOpenApi;
 use Studio\OpenApiContractTesting\Tests\Helpers\CreatesTestResponse;
 
 use function json_encode;

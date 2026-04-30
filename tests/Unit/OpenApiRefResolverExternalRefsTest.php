@@ -6,8 +6,8 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\OpenApiRefResolver;
 
 use function file_put_contents;

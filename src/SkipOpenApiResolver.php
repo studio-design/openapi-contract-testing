@@ -6,6 +6,7 @@ namespace Studio\OpenApiContractTesting;
 
 use ReflectionClass;
 use ReflectionMethod;
+use Studio\OpenApiContractTesting\Attribute\SkipOpenApi;
 
 trait SkipOpenApiResolver
 {

@@ -6,6 +6,7 @@ namespace Studio\OpenApiContractTesting;
 
 use ReflectionClass;
 use ReflectionMethod;
+use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
 
 /**
  * Resolves which OpenAPI spec name a test case should validate against.

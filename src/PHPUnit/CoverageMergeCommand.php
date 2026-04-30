@@ -8,10 +8,10 @@ use const FILE_APPEND;
 
 use InvalidArgumentException;
 use RuntimeException;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
 use Studio\OpenApiContractTesting\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\SpecFileNotFoundException;
 
 use function array_filter;
 use function array_map;

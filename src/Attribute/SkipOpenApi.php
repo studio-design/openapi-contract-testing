@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting;
+namespace Studio\OpenApiContractTesting\Attribute;
 
 use Attribute;
 
 #[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD)]
-final class OpenApiSpec
+final class SkipOpenApi
 {
     public function __construct(
-        public readonly string $name,
+        public readonly string $reason = '',
     ) {}
 }

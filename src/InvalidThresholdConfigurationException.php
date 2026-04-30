@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting;
 
 use RuntimeException;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
 use Throwable;
 

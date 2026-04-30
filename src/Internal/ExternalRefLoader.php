@@ -6,8 +6,8 @@ namespace Studio\OpenApiContractTesting\Internal;
 
 use const PATHINFO_EXTENSION;
 
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
 
 use function dirname;
 use function error_clear_last;
