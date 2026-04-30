@@ -59,16 +59,19 @@ class OpenApiCoverageExtensionBootstrapTest extends TestCase
     }
 
     #[Test]
-    public function phpunit_exits_zero_when_registered_spec_file_is_missing(): void
+    public function phpunit_exits_non_zero_when_registered_spec_file_is_missing(): void
     {
-        // `OpenApiVersionTest` is a lightweight, always-present target so the
-        // suite has something to pass; the stale `specs=` entry must degrade
-        // to a warning without aborting.
-        [$exit, $stderr] = $this->runPhpunit('does-not-exist', '--filter=OpenApiVersionTest');
+        // issue #134 contract pinned end-to-end: the unit test covers the
+        // throw, this one verifies PHPUnit's bootstrapper actually exits
+        // non-zero rather than demoting to a warning. The `Action:` assert
+        // guarantees the remediation hint survives the subprocess boundary
+        // (where PHP could otherwise truncate stderr on an early exit).
+        [$exit, $stderr] = $this->runPhpunit('does-not-exist', '--filter=DoesNotMatchAnyTest');
 
-        $this->assertSame(0, $exit, "Expected exit 0; stderr was:\n" . $stderr);
-        $this->assertStringContainsString('WARNING', $stderr);
+        $this->assertNotSame(0, $exit, "Expected non-zero exit; stderr was:\n" . $stderr);
+        $this->assertStringContainsString('FATAL', $stderr);
         $this->assertStringContainsString('does-not-exist', $stderr);
+        $this->assertStringContainsString('Action:', $stderr);
     }
 
     /**
