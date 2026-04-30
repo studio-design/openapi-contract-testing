@@ -11,6 +11,7 @@ use Studio\OpenApiContractTesting\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
+use Studio\OpenApiContractTesting\SpecFileNotFoundException;
 
 use function fclose;
 use function file_get_contents;
@@ -71,18 +72,29 @@ class OpenApiCoverageExtensionTest extends TestCase
     }
 
     #[Test]
-    public function bootstrap_writes_warning_but_continues_for_missing_spec_file(): void
+    public function bootstrap_throws_fatal_for_missing_spec_file(): void
     {
+        // Issue #134: stale `specs=` entries used to print a warning and let
+        // the suite continue, only blowing up later in an unrelated test.
+        // Boot must now hard-fail so the configuration error surfaces at the
+        // moment of detection — not on someone else's PR after a merge.
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
             'spec_base_path' => __DIR__ . '/../fixtures/specs',
             'specs' => 'does-not-exist',
         ]);
 
-        $extension->setupExtension(null, $parameters, null);
+        try {
+            $extension->setupExtension(null, $parameters, null);
+            $this->fail('expected SpecFileNotFoundException');
+        } catch (SpecFileNotFoundException $e) {
+            $this->assertSame('does-not-exist', $e->specName);
+        }
 
-        $this->assertStringContainsString('WARNING', $this->readStderr());
-        $this->assertStringContainsString('does-not-exist', $this->readStderr());
+        $stderr = $this->readStderr();
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString("spec 'does-not-exist'", $stderr);
+        $this->assertStringContainsString('Action:', $stderr);
     }
 
     #[Test]
@@ -128,6 +140,36 @@ class OpenApiCoverageExtensionTest extends TestCase
     }
 
     #[Test]
+    public function bootstrap_appends_fatal_block_to_github_step_summary_for_missing_spec_file(): void
+    {
+        // Issue #134: missing-file failures must reach the GitHub Step
+        // Summary too, not just stderr. CI logs scroll fast; the Step Summary
+        // is where the misconfiguration becomes unmissable for reviewers.
+        $tmp = tempnam(sys_get_temp_dir(), 'openapi-summary-');
+        if ($tmp === false) {
+            $this->fail('Could not create temp file for GITHUB_STEP_SUMMARY');
+        }
+        $this->githubSummaryTmp = $tmp;
+
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'does-not-exist',
+        ]);
+
+        try {
+            $extension->setupExtension(null, $parameters, $tmp);
+            $this->fail('expected SpecFileNotFoundException');
+        } catch (SpecFileNotFoundException) {
+            // Expected — the FATAL block must still have been written before re-throw.
+        }
+
+        $contents = (string) file_get_contents($tmp);
+        $this->assertStringContainsString('FATAL OpenAPI spec error', $contents);
+        $this->assertStringContainsString('does-not-exist', $contents);
+    }
+
+    #[Test]
     public function bootstrap_throws_for_malformed_json_spec(): void
     {
         // Pre-PR catch-all demoted malformed JSON to a stderr WARNING, which
@@ -169,23 +211,21 @@ class OpenApiCoverageExtensionTest extends TestCase
     }
 
     #[Test]
-    public function bootstrap_continues_past_missing_spec_to_load_valid_ones(): void
+    public function bootstrap_hard_fails_for_missing_spec_even_when_others_are_valid(): void
     {
-        // A stale entry in `specs=` should not block the rest of the list
-        // from being eager-loaded. Pins the warn-and-continue semantics that
-        // differentiate SpecFileNotFoundException from the fatal paths.
+        // Issue #134: a stale entry in `specs=` is a configuration error and
+        // must abort boot. Order-independence is already covered by the
+        // `refs-valid,refs-unresolvable` test below; here we pin that the
+        // missing-file case shares the fatal contract regardless of position.
         $extension = new OpenApiCoverageExtension();
         $parameters = ParameterCollection::fromArray([
             'spec_base_path' => __DIR__ . '/../fixtures/specs',
             'specs' => 'does-not-exist,refs-valid',
         ]);
 
-        $extension->setupExtension(null, $parameters, null);
+        $this->expectException(SpecFileNotFoundException::class);
 
-        $this->assertStringContainsString("WARNING: Skipping spec 'does-not-exist'", $this->readStderr());
-        // refs-valid must have loaded cleanly — its content is cached.
-        $spec = OpenApiSpecLoader::load('refs-valid');
-        $this->assertSame('Refs valid', $spec['info']['title']);
+        $extension->setupExtension(null, $parameters, null);
     }
 
     #[Test]

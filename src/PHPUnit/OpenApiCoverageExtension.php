@@ -73,7 +73,7 @@ final class OpenApiCoverageExtension implements Extension
     {
         try {
             $this->setupExtension($facade, $parameters, getenv('GITHUB_STEP_SUMMARY') ?: null);
-        } catch (InvalidOpenApiSpecException) {
+        } catch (InvalidOpenApiSpecException | SpecFileNotFoundException) {
             // setupExtension() has already written a FATAL line to stderr and
             // (if GITHUB_STEP_SUMMARY is set) appended a fatal block to it.
             // PHPUnit's ExtensionBootstrapper::bootstrap() wraps this call in
@@ -127,15 +127,22 @@ final class OpenApiCoverageExtension implements Extension
         // Eager-load every registered spec so structural problems surface at
         // PHPUnit bootstrap (hard fail via bootstrap()) rather than being
         // silently swallowed when a test happens not to exercise the broken
-        // spec. Only SpecFileNotFoundException keeps the legacy warn-and-
-        // continue behavior, so a stale entry in `specs=` does not block
-        // unrelated work; everything else — broken `$ref`, malformed
-        // JSON/YAML, non-mapping root, missing `symfony/yaml` — is fatal.
+        // spec. A spec named in `specs=` that doesn't resolve to a file is a
+        // configuration error — not a stale leftover — so it is fatal too
+        // (issue #134). Defensive warn-and-continue for missing files lives
+        // downstream in CoverageReportSubscriber / CoverageMergeCommand,
+        // where a mid-run unlink shouldn't lose the report.
         foreach ($specs as $spec) {
             try {
                 OpenApiSpecLoader::load($spec);
             } catch (SpecFileNotFoundException $e) {
-                self::writeStderr("[OpenAPI Coverage] WARNING: Skipping spec '{$spec}': {$e->getMessage()}\n");
+                self::writeStderr(
+                    "[OpenAPI Coverage] FATAL: spec '{$spec}' configured in `specs=` is not loadable: {$e->getMessage()}\n"
+                    . "  Action: regenerate the bundle (e.g. `cd openapi && npm run bundle`) or remove '{$spec}' from `specs=`.\n",
+                );
+                self::appendGithubStepSummaryFatalBlock($githubSummaryPath, $spec, $e->getMessage());
+
+                throw $e;
             } catch (InvalidOpenApiSpecException $e) {
                 self::writeStderr("[OpenAPI Coverage] FATAL: Invalid OpenAPI spec '{$spec}': {$e->getMessage()}\n");
                 self::appendGithubStepSummaryFatalBlock($githubSummaryPath, $spec, $e->getMessage());

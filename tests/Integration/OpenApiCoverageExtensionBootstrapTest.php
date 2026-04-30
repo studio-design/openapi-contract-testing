@@ -59,15 +59,16 @@ class OpenApiCoverageExtensionBootstrapTest extends TestCase
     }
 
     #[Test]
-    public function phpunit_exits_zero_when_registered_spec_file_is_missing(): void
+    public function phpunit_exits_non_zero_when_registered_spec_file_is_missing(): void
     {
-        // `OpenApiVersionTest` is a lightweight, always-present target so the
-        // suite has something to pass; the stale `specs=` entry must degrade
-        // to a warning without aborting.
-        [$exit, $stderr] = $this->runPhpunit('does-not-exist', '--filter=OpenApiVersionTest');
+        // Issue #134: stale `specs=` entries used to print a warning and pass
+        // the suite green, only blowing up later in an unrelated test. Pin
+        // the new contract — boot aborts non-zero so the misconfiguration is
+        // unmissable, not surfaced on someone else's PR after a merge.
+        [$exit, $stderr] = $this->runPhpunit('does-not-exist', '--filter=DoesNotMatchAnyTest');
 
-        $this->assertSame(0, $exit, "Expected exit 0; stderr was:\n" . $stderr);
-        $this->assertStringContainsString('WARNING', $stderr);
+        $this->assertNotSame(0, $exit, "Expected non-zero exit; stderr was:\n" . $stderr);
+        $this->assertStringContainsString('FATAL', $stderr);
         $this->assertStringContainsString('does-not-exist', $stderr);
     }
 
