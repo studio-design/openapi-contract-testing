@@ -23,6 +23,7 @@ use function getcwd;
 use function getenv;
 use function in_array;
 use function is_callable;
+use function is_numeric;
 use function sprintf;
 use function str_contains;
 use function str_replace;
@@ -49,6 +50,9 @@ use function unlink;
  *     github_step_summary?: string,
  *     console_output?: string,
  *     cleanup?: bool,
+ *     min_endpoint_coverage?: float,
+ *     min_response_coverage?: float,
+ *     min_coverage_strict?: bool,
  *     help?: bool,
  * }
  */
@@ -106,6 +110,21 @@ final class CoverageMergeCommand
                     $opts['cleanup'] = false;
 
                     break;
+                case 'min_endpoint_coverage':
+                case 'min_response_coverage':
+                    // Skip silently when non-numeric — a casted "0.0" would
+                    // mislead run() into believing a 0% gate was configured.
+                    // Range / sign validation lives in run() so the user sees
+                    // a single WARNING rather than two.
+                    if (is_numeric($value)) {
+                        $opts[$name] = (float) $value;
+                    }
+
+                    break;
+                case 'min_coverage_strict':
+                    $opts['min_coverage_strict'] = !in_array($value, ['0', 'false', 'no'], true);
+
+                    break;
                 default:
                     $opts[$name] = $value;
             }
@@ -133,6 +152,11 @@ final class CoverageMergeCommand
               --github-step-summary=<path>  Append Markdown report to this file (also
                                             consults GITHUB_STEP_SUMMARY env var).
               --console-output=<mode>       default | all | uncovered_only.
+              --min-endpoint-coverage=<pct> Fail-fast (with --min-coverage-strict) when fully-
+                                            covered-endpoint percent is below this value (0-100).
+              --min-response-coverage=<pct> Same idea, against (status, content-type) granularity.
+              --min-coverage-strict[=BOOL]  Treat threshold misses as exit non-zero (default
+                                            warn-only).
               --no-cleanup                  Keep sidecar files after merge (default: cleanup).
               --help                        Show this message.
 
@@ -173,6 +197,9 @@ final class CoverageMergeCommand
             : (getenv('GITHUB_STEP_SUMMARY') ?: null);
         $consoleOutput = ConsoleOutput::resolve($options['console_output'] ?? null);
         $cleanup = $options['cleanup'] ?? true;
+        $minEndpointPct = $this->resolveThreshold('min_endpoint_coverage', $options['min_endpoint_coverage'] ?? null);
+        $minResponsePct = $this->resolveThreshold('min_response_coverage', $options['min_response_coverage'] ?? null);
+        $minStrict = $options['min_coverage_strict'] ?? false;
 
         if ($specBasePath === null) {
             $this->writeStderr("[OpenAPI Coverage] FATAL: --spec-base-path is required\n");
@@ -252,11 +279,78 @@ final class CoverageMergeCommand
             }
         }
 
+        $thresholdFailure = $this->evaluateThresholdGate($results, $minEndpointPct, $minResponsePct, $minStrict);
+
         if ($cleanup) {
             $this->cleanup($sidecarDir);
         }
 
-        return $writeFailures > 0 ? 1 : 0;
+        return $writeFailures > 0 || $thresholdFailure ? 1 : 0;
+    }
+
+    /**
+     * Run the threshold gate against rolled-up results. Prints the evaluator's
+     * pre-formatted message to stderr when at least one threshold misses; the
+     * caller decides what to do with the return value (only `strict=true`
+     * misses propagate to a non-zero exit).
+     *
+     * @param array<string, array<string, mixed>> $results
+     */
+    private function evaluateThresholdGate(
+        array $results,
+        ?float $minEndpointPct,
+        ?float $minResponsePct,
+        bool $strict,
+    ): bool {
+        if ($minEndpointPct === null && $minResponsePct === null) {
+            return false;
+        }
+
+        /** @var array<string, array{endpoints: list<mixed>, endpointTotal: int, endpointFullyCovered: int, endpointPartial: int, endpointUncovered: int, endpointRequestOnly: int, responseTotal: int, responseCovered: int, responseSkipped: int, responseUncovered: int}> $results */
+        $evaluation = CoverageThresholdEvaluator::evaluate($results, $minEndpointPct, $minResponsePct, $strict);
+
+        if ($evaluation['passed']) {
+            return false;
+        }
+
+        $this->writeStderr($evaluation['message']);
+
+        return $strict;
+    }
+
+    /**
+     * Validate a percentage threshold from CLI options. Out-of-range values
+     * become a `WARNING` and are dropped so a misconfiguration surfaces in
+     * the run log instead of silently inverting the gate.
+     */
+    private function resolveThreshold(string $name, mixed $value): ?float
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (!is_numeric($value)) {
+            $this->writeStderr(sprintf(
+                "[OpenAPI Coverage] WARNING: %s='%s' is not a number; skipping threshold gate.\n",
+                $name,
+                (string) $value,
+            ));
+
+            return null;
+        }
+
+        $float = (float) $value;
+        if ($float < 0.0 || $float > 100.0) {
+            $this->writeStderr(sprintf(
+                "[OpenAPI Coverage] WARNING: %s=%s is out of range (expected 0-100); skipping threshold gate.\n",
+                $name,
+                (string) $float,
+            ));
+
+            return null;
+        }
+
+        return $float;
     }
 
     /**

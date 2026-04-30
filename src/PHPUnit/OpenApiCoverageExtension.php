@@ -23,8 +23,12 @@ use function file_put_contents;
 use function fwrite;
 use function getcwd;
 use function getenv;
+use function in_array;
+use function is_numeric;
+use function sprintf;
 use function str_starts_with;
 use function sys_get_temp_dir;
+use function trim;
 
 final class OpenApiCoverageExtension implements Extension
 {
@@ -171,6 +175,10 @@ final class OpenApiCoverageExtension implements Extension
             }
         }
 
+        $minEndpointCoverage = self::resolveThresholdParameter($parameters, 'min_endpoint_coverage');
+        $minResponseCoverage = self::resolveThresholdParameter($parameters, 'min_response_coverage');
+        $minCoverageStrict = self::resolveStrictFlag($parameters);
+
         if ($facade === null) {
             return;
         }
@@ -181,7 +189,62 @@ final class OpenApiCoverageExtension implements Extension
             consoleOutput: $consoleOutput,
             githubSummaryPath: $githubSummaryPath,
             sidecarDir: $sidecarDir,
+            minEndpointCoverage: $minEndpointCoverage,
+            minResponseCoverage: $minResponseCoverage,
+            minCoverageStrict: $minCoverageStrict,
         ));
+    }
+
+    /**
+     * Read a percentage parameter (`min_endpoint_coverage` /
+     * `min_response_coverage`) from `phpunit.xml`. Mirrors the merge CLI's
+     * resolveThreshold(): out-of-range / non-numeric values are demoted to a
+     * WARNING + null so a misconfigured XML attribute surfaces in the run log
+     * rather than silently disabling the gate.
+     */
+    private static function resolveThresholdParameter(ParameterCollection $parameters, string $name): ?float
+    {
+        if (!$parameters->has($name)) {
+            return null;
+        }
+        $raw = trim($parameters->get($name));
+        if ($raw === '') {
+            return null;
+        }
+        if (!is_numeric($raw)) {
+            self::writeStderr(sprintf(
+                "[OpenAPI Coverage] WARNING: %s='%s' is not a number; skipping threshold gate.\n",
+                $name,
+                $raw,
+            ));
+
+            return null;
+        }
+        $value = (float) $raw;
+        if ($value < 0.0 || $value > 100.0) {
+            self::writeStderr(sprintf(
+                "[OpenAPI Coverage] WARNING: %s=%s is out of range (expected 0-100); skipping threshold gate.\n",
+                $name,
+                (string) $value,
+            ));
+
+            return null;
+        }
+
+        return $value;
+    }
+
+    private static function resolveStrictFlag(ParameterCollection $parameters): bool
+    {
+        if (!$parameters->has('min_coverage_strict')) {
+            return false;
+        }
+        $raw = trim($parameters->get('min_coverage_strict'));
+
+        // Symmetric with the merge CLI: explicit falsey strings disable strict
+        // mode, anything else (including the empty `<parameter name="..." />`
+        // shorthand for "set") enables it.
+        return !in_array($raw, ['', '0', 'false', 'no'], true);
     }
 
     private static function appendGithubStepSummaryFatalBlock(?string $path, string $spec, string $reason): void

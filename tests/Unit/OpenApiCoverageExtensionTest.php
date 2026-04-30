@@ -258,6 +258,60 @@ class OpenApiCoverageExtensionTest extends TestCase
     }
 
     #[Test]
+    public function bootstrap_warns_on_out_of_range_min_endpoint_coverage(): void
+    {
+        // Issue #135: a misconfigured percent must not silently disable the
+        // gate. Pin the WARNING so a future "trust the user" refactor that
+        // drops range validation can't regress in a way CI doesn't catch.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'refs-valid',
+            'min_endpoint_coverage' => '150',
+        ]);
+
+        $extension->setupExtension(null, $parameters, null);
+
+        $stderr = $this->readStderr();
+        $this->assertStringContainsString('WARNING', $stderr);
+        $this->assertStringContainsString('min_endpoint_coverage', $stderr);
+    }
+
+    #[Test]
+    public function bootstrap_warns_on_non_numeric_min_response_coverage(): void
+    {
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'refs-valid',
+            'min_response_coverage' => 'eighty',
+        ]);
+
+        $extension->setupExtension(null, $parameters, null);
+
+        $stderr = $this->readStderr();
+        $this->assertStringContainsString('WARNING', $stderr);
+        $this->assertStringContainsString('min_response_coverage', $stderr);
+    }
+
+    #[Test]
+    public function bootstrap_accepts_well_formed_threshold_parameters(): void
+    {
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../fixtures/specs',
+            'specs' => 'refs-valid',
+            'min_endpoint_coverage' => '80',
+            'min_response_coverage' => '70.5',
+            'min_coverage_strict' => 'true',
+        ]);
+
+        $extension->setupExtension(null, $parameters, null);
+
+        $this->assertSame('', $this->readStderr());
+    }
+
+    #[Test]
     public function bootstrap_hard_fails_even_when_earlier_specs_are_valid(): void
     {
         // Order-independence: the loop must reach and trip on the broken spec
