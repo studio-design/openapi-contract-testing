@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Coverage;
 
+use Studio\OpenApiContractTesting\PHPUnit\CoverageReportSubscriber;
+
 use function implode;
 use function round;
 use function sprintf;
