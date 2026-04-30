@@ -42,6 +42,17 @@ final class ConsoleCoverageRenderer
         $output .= str_repeat('=', 50) . "\n";
 
         foreach ($results as $spec => $result) {
+            if ($consoleOutput === ConsoleOutput::ACTIVE_ONLY && !self::specHasActivity($result)) {
+                $output .= sprintf(
+                    "\n[%s] no test activity (%d endpoints, %d responses in spec)\n",
+                    $spec,
+                    $result['endpointTotal'],
+                    $result['responseTotal'],
+                );
+
+                continue;
+            }
+
             $endpointPct = self::percentage($result['endpointFullyCovered'], $result['endpointTotal']);
             $responsePct = self::percentage($result['responseCovered'], $result['responseTotal']);
 
@@ -74,6 +85,28 @@ final class ConsoleCoverageRenderer
     }
 
     /**
+     * A spec is "active" when at least one validated/skipped response was
+     * recorded, or any endpoint resolved to the `RequestOnly` bucket — see
+     * {@see OpenApiCoverageTracker::deriveEndpointState()}
+     * for the full definition (request hook fired, or only unexpected
+     * observations recorded). Used by ACTIVE_ONLY mode to collapse specs
+     * that no test in this run touched.
+     *
+     * Counts only declared-endpoint activity. Recordings whose endpoint key
+     * is absent from the live spec (e.g. an orphan in a paratest sidecar
+     * after a mid-run spec edit) are dropped by `computeCoverage` and so do
+     * not flip a spec to active here either.
+     *
+     * @param CoverageResult $result
+     */
+    private static function specHasActivity(array $result): bool
+    {
+        return $result['responseCovered'] > 0 ||
+            $result['responseSkipped'] > 0 ||
+            $result['endpointRequestOnly'] > 0;
+    }
+
+    /**
      * @param list<EndpointSummary> $endpoints
      */
     private static function renderEndpoints(array $endpoints, ConsoleOutput $mode): string
@@ -87,9 +120,11 @@ final class ConsoleCoverageRenderer
             // DEFAULT mode renders one line per endpoint with no sub-rows.
             // ALL renders sub-rows for every endpoint. UNCOVERED_ONLY only
             // shows sub-rows when the endpoint isn't all-covered, so a
-            // green run stays compact.
+            // green run stays compact. ACTIVE_ONLY only reaches this branch
+            // for active specs, and renders the same one-line-per-endpoint
+            // shape as DEFAULT (inactive specs are collapsed upstream).
             $showSubRows = match ($mode) {
-                ConsoleOutput::DEFAULT => false,
+                ConsoleOutput::DEFAULT, ConsoleOutput::ACTIVE_ONLY => false,
                 ConsoleOutput::ALL => true,
                 ConsoleOutput::UNCOVERED_ONLY => $endpoint['state'] !== EndpointCoverageState::AllCovered,
             };

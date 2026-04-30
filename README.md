@@ -108,7 +108,7 @@ Add the coverage extension to your `phpunit.xml`:
 | `strip_prefixes` | No | `[]` | Comma-separated prefixes to strip from request paths (e.g., `/api`) |
 | `specs` | No | `front` | Comma-separated spec names for coverage tracking |
 | `output_file` | No | — | File path to write Markdown coverage report (relative paths resolve from `getcwd()`) |
-| `console_output` | No | `default` | Console output mode: `default`, `all`, or `uncovered_only` (overridden by `OPENAPI_CONSOLE_OUTPUT` env var) |
+| `console_output` | No | `default` | Console output mode: `default`, `all`, `uncovered_only`, or `active_only` (overridden by `OPENAPI_CONSOLE_OUTPUT` env var) |
 | `sidecar_dir` | No | `sys_get_temp_dir()/openapi-coverage-sidecars` | Directory paratest workers drop per-worker JSON sidecars into. Used only under parallel test runners — see [Parallel test runners](#parallel-test-runners) below |
 
 *Not required if you call `OpenApiSpecLoader::configure()` manually.
@@ -609,6 +609,23 @@ Legend: ✓=validated  ⚠=skipped  ✗=uncovered  ◐=partial  ·=request-only 
   ✗ PUT /v1/pets/{petId}  (0/2 responses)
       ✗ 200    application/json                  uncovered
       ✗ 404    application/problem+json          uncovered
+```
+
+### `active_only` mode
+
+Useful for the local TDD loop with a multi-spec setup (e.g. `specs="front,store,admin"`). Specs that no test in this run touched are collapsed to a single line, so a focused single-test run no longer has to scroll past hundreds of `✗ uncovered` rows for unrelated specs. Specs with at least one validated, skipped, or request-only observation render the same one-line-per-endpoint view as `default`:
+
+```
+[front] no test activity (373 endpoints, 894 responses in spec)
+[store] no test activity (148 endpoints, 312 responses in spec)
+
+[admin] endpoints: 1/72 fully covered (1.4%), 0 partial, 71 uncovered
+        responses: 1/172 covered (0.6%), 0 skipped, 171 uncovered
+--------------------------------------------------
+Legend: ✓=validated  ⚠=skipped  ✗=uncovered  ◐=partial  ·=request-only  *=any/no content-type
+  ✓ GET /v2/admin/early_accesses  (1/1 responses)
+  ✗ POST /v2/admin/early_accesses  (0/2 responses)
+  ...
 ```
 
 You can set the mode via `phpunit.xml`:
