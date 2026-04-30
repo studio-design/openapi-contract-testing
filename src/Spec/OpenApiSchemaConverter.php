@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Spec;
 
+use const E_USER_WARNING;
+
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\SchemaContext;
 
 use function array_is_list;
+use function array_key_exists;
 use function in_array;
 use function is_array;
 use function is_string;
+use function sprintf;
+use function trigger_error;
 
 final class OpenApiSchemaConverter
 {
@@ -20,6 +25,7 @@ final class OpenApiSchemaConverter
         'xml',
         'externalDocs',
         'example',
+        'examples',
         'deprecated',
     ];
 
@@ -35,8 +41,23 @@ final class OpenApiSchemaConverter
         '$dynamicRef',
         '$dynamicAnchor',
         'contentSchema',
-        'examples',
     ];
+
+    /**
+     * Draft 2019-09 / 2020-12 keywords that opis (Draft 07) silently ignores.
+     * Loud warning surfaces specs that rely on them — silent passes here mean
+     * tests pass even when the contract is not actually being enforced.
+     */
+    private const DRAFT_2020_12_UNSUPPORTED_KEYS = [
+        'patternProperties',
+        'unevaluatedProperties',
+        'unevaluatedItems',
+        'contentMediaType',
+        'contentEncoding',
+    ];
+
+    /** @var array<string, true> */
+    private static array $warnedKeywords = [];
 
     /**
      * Convert an OpenAPI schema to a JSON Schema Draft 07 compatible schema.
@@ -62,6 +83,18 @@ final class OpenApiSchemaConverter
     }
 
     /**
+     * Reset the per-process "already-warned" set used by
+     * {@see warnIfUsesUnsupportedKeywords()}. Test seam — production code
+     * never needs this.
+     *
+     * @internal
+     */
+    public static function resetWarningStateForTesting(): void
+    {
+        self::$warnedKeywords = [];
+    }
+
+    /**
      * @param array<string, mixed> $schema
      */
     private static function convertInPlace(array &$schema, OpenApiVersion $version, SchemaContext $context): void
@@ -70,6 +103,8 @@ final class OpenApiSchemaConverter
             self::handleNullable($schema);
         } else {
             self::handlePrefixItems($schema);
+            self::lowerConstToEnum($schema);
+            self::warnIfUsesUnsupportedKeywords($schema);
             self::removeKeys($schema, self::DRAFT_2020_12_KEYS);
         }
 
@@ -194,6 +229,10 @@ final class OpenApiSchemaConverter
     /**
      * Convert OpenAPI 3.0 nullable to JSON Schema compatible type.
      *
+     * When `enum` is present alongside `nullable: true`, append `null` to the
+     * enum so opis accepts null values — this matches the OAS 3.0 convention
+     * (most spec authors don't list null inside `enum` even when nullable is on).
+     *
      * @param array<string, mixed> $schema
      */
     private static function handleNullable(array &$schema): void
@@ -203,6 +242,10 @@ final class OpenApiSchemaConverter
         }
 
         unset($schema['nullable']);
+
+        if (isset($schema['enum']) && is_array($schema['enum']) && !in_array(null, $schema['enum'], true)) {
+            $schema['enum'][] = null;
+        }
 
         if (isset($schema['type']) && is_string($schema['type'])) {
             $schema['type'] = [$schema['type'], 'null'];
@@ -225,6 +268,59 @@ final class OpenApiSchemaConverter
                 ['allOf' => $allOf],
                 ['type' => 'null'],
             ];
+        }
+    }
+
+    /**
+     * OAS 3.1 / Draft 2019-09 introduced `const`. Draft 07 (the schema dialect
+     * we delegate to via opis) does not understand it, so a `const: "fixed"`
+     * schema would silently accept any value of the correct type. Lower to
+     * `enum: [value]` so the constraint is actually enforced.
+     *
+     * If `enum` already exists, defer to it — `enum` is the wider constraint
+     * and a spec carrying both is malformed.
+     *
+     * @param array<string, mixed> $schema
+     */
+    private static function lowerConstToEnum(array &$schema): void
+    {
+        if (!array_key_exists('const', $schema)) {
+            return;
+        }
+
+        if (!isset($schema['enum'])) {
+            $schema['enum'] = [$schema['const']];
+        }
+
+        unset($schema['const']);
+    }
+
+    /**
+     * Issue a one-shot E_USER_WARNING for each Draft 2019-09 / 2020-12 keyword
+     * we cannot honour through opis Draft 07. Without this, specs relying on
+     * `patternProperties` / `unevaluatedProperties` / `contentMediaType` would
+     * silently pass — a contract test that does not actually enforce the
+     * contract is the worst possible failure mode.
+     *
+     * Warns once per keyword per process to avoid log spam in long test runs.
+     *
+     * @param array<string, mixed> $schema
+     */
+    private static function warnIfUsesUnsupportedKeywords(array $schema): void
+    {
+        foreach (self::DRAFT_2020_12_UNSUPPORTED_KEYS as $keyword) {
+            if (!array_key_exists($keyword, $schema) || isset(self::$warnedKeywords[$keyword])) {
+                continue;
+            }
+
+            self::$warnedKeywords[$keyword] = true;
+            trigger_error(
+                sprintf(
+                    "[OpenAPI Schema] '%s' is not supported by the JSON Schema Draft 07 validator opis uses internally. The keyword will be ignored — your spec's constraint is NOT being enforced. Consider rewriting using Draft 07 equivalents (additionalProperties, required, etc.).",
+                    $keyword,
+                ),
+                E_USER_WARNING,
+            );
         }
     }
 

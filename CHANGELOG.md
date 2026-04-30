@@ -6,6 +6,63 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project is **pre-1.0**, so breaking changes may land in any minor release
 until 1.0.0 ships. Each entry below tags whether it is breaking.
 
+## Unreleased
+
+The "v1.0.0 hardening" pass: a competitive review against Spectator,
+league/openapi-psr7-validator, osteel, and kirschbaum surfaced six
+silent-pass bugs in the OAS-to-Draft-07 conversion plus a content-type
+range matching gap. All six are fixed below; the API surface picks up
+`@internal` markers on test/serialisation helpers so v1.0.0 can freeze
+the public API without those leaking into the SemVer contract.
+
+### Fixed
+
+- **Schema converter — `nullable: true` next to `enum`** now appends `null` to
+  the enum so opis Draft 07 actually accepts null values. Previously only
+  `type` was rewritten, causing `enum: ["a", "b"]` + `nullable: true` to
+  reject `null` against the enum constraint even though OAS 3.0 considers
+  null a valid value.
+- **Schema converter — `examples` (Draft 2020-12 array form)** is now
+  stripped from OAS 3.0 schemas as well as 3.1. Singular `example` was
+  already removed for both versions; `examples` was inconsistently kept on
+  3.0, leaving an unrecognised Draft 07 keyword in the output.
+- **Schema converter — OAS 3.1 `const`** is now lowered to `enum: [value]`.
+  Draft 07 has no native `const`, so the keyword silently passed before —
+  a `const: "fixed"` schema would accept any value of the right type.
+- **Schema converter — unsupported 2019-09 / 2020-12 keywords** now emit a
+  one-shot `E_USER_WARNING` when first encountered: `patternProperties`,
+  `unevaluatedProperties`, `unevaluatedItems`, `contentMediaType`,
+  `contentEncoding`. Pre-fix, opis ignored these silently and the
+  contract test would report a spurious pass.
+- **Content-type matcher — wildcard ranges**. `findContentTypeKey()` now
+  resolves with most-specific-first priority: exact match → `<type>/*` →
+  `*/*`. `findJsonContentType()` likewise considers `application/*` and
+  `*/*` as JSON-acceptable when no literal `application/json` /
+  `+json` key is declared. Specs using OpenAPI 3.x §4.7.10 media-type
+  ranges previously skipped JSON schema validation silently because the
+  matcher only compared literally.
+
+### Changed
+
+- **Public-API hygiene** — `OpenApiSpecLoader::clearCache()` / `evict()` /
+  `reset()`, `OpenApiCoverageTracker::reset()` / `exportState()` /
+  `importState()`, and `ValidatesOpenApiSchema::resetValidatorCache()` are
+  now annotated `@internal`. They remain `public` for the PHPUnit extension
+  / paratest sidecar protocol but are no longer part of the user-facing
+  surface that v1.0.0 will freeze.
+
+### Documentation
+
+- README gains a "Supported features and known limitations" section that
+  pins down body-validation media types, parameter style support,
+  security-scheme coverage, schema feature handling, HTTP-method coverage,
+  and spec features that are not consulted (webhooks, callbacks, links,
+  server URL templates, etc.). Important for v1.0.0 expectation-setting:
+  the library favours loud failures or explicit `Skipped` outcomes over
+  silent passes, but where features are out of scope it now says so
+  explicitly rather than leaving users to discover it through silently
+  green tests.
+
 ## v0.15.0 — 2026-04-30
 
 The "v1.0 prep" release: namespaces reorganised so the public surface

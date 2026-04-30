@@ -927,10 +927,11 @@ The package auto-detects the OAS version from the `openapi` field and handles sc
 
 | Feature | 3.0 handling | 3.1 handling |
 |---|---|---|
-| `nullable: true` | Converted to type array `["string", "null"]` | Not applicable (uses type arrays natively) |
+| `nullable: true` | Converted to type array `["string", "null"]`; `null` appended to `enum` if present | Not applicable (uses type arrays natively) |
 | `prefixItems` | N/A | Converted to `items` array (Draft 07 tuple) |
 | `$dynamicRef` / `$dynamicAnchor` | N/A | Removed (not in Draft 07) |
-| `examples` (array) | N/A | Removed (OAS extension) |
+| `examples` (array) | Removed (Draft 2020-12 keyword, not Draft 07) | Removed (Draft 2020-12 keyword, not Draft 07) |
+| `const` | N/A | Lowered to `enum: [value]` so opis Draft 07 enforces it |
 | `readOnly` / `writeOnly` | Semantic enforcement (see below). Forbidden properties become boolean `false` subschemas; the keyword is dropped as OAS-only on surviving properties | Semantic enforcement (see below). Forbidden properties become boolean `false` subschemas; the keyword is preserved on surviving properties (valid in Draft 07) |
 
 ### `readOnly` / `writeOnly` enforcement
@@ -941,6 +942,41 @@ Both validators apply OpenAPI's asymmetric semantics instead of letting the keyw
 - **Request validation** (`OpenApiRequestValidator`): any property marked `readOnly: true` must **not** appear in the request body. `readOnly + required` is treated as absent on the request side, so a compliant request that omits the property still validates.
 
 Detection looks at each property schema's own top-level `readOnly` / `writeOnly`; markers nested inside the property's `allOf` / `oneOf` / `anyOf` children are not enforced in the current release.
+
+## Supported features and known limitations
+
+This is a contract-testing tool: where we can't enforce a constraint precisely, we prefer a loud failure or an explicit "skipped" outcome over silently accepting non-compliant data. The list below pins down what does and does not get checked so you can decide whether the gaps matter for your spec.
+
+### Body validation
+- **Validated**: `application/json` and any `+json` structured-syntax suffix (RFC 6838), and content keys using ranges (`application/*`, `*/*`) — the matcher tries exact match first, then `<type>/*`, then `*/*`.
+- **Presence-only** (no schema validation): every other media type, including `application/xml`, `multipart/form-data`, `application/x-www-form-urlencoded`, `text/plain`, and `application/octet-stream`. The validator confirms the spec declares the content type but does not check the body. The orchestrator marks these responses as `Skipped` for coverage reporting.
+- **Multipart `encoding` object**: per-part `contentType` / `headers` / `style` / `explode` are not consulted.
+
+### Parameter styles
+- **Query**: only `style: form` + `explode: true` (the OAS default). Specs declaring `pipeDelimited`, `spaceDelimited`, `deepObject`, or `form` + `explode: false` are not parsed; type-mismatch errors will surface but they will point at the wrong cause.
+- **Header / Path**: only `style: simple` for scalar values. `type: array` and `type: object` parameters are not parsed (the raw string is fed to the schema, which then mismatches). `style: matrix` and `style: label` for path parameters are not handled — the prefix is not stripped before validation.
+- **Cookie parameters** (`apiKey` security scheme aside): not validated.
+- **`parameters[].content`**: only `parameters[].schema` is read.
+
+### Security schemes
+- **Validated**: `apiKey` (in `header` / `query` / `cookie`) and `http` + `bearer` — presence checks for the named header/query/cookie / RFC 6750 `Bearer` token.
+- **Silently passed through**: `oauth2`, `openIdConnect`, `mutualTLS`, and `http` schemes other than `bearer` (`basic`, `digest`). When every scheme in a security requirement is unsupported, the requirement passes — your test will not detect a missing or invalid token.
+
+### Schema features
+- **Validated** (delegated to opis Draft 07): `type`, `enum`, `multipleOf`, `minimum`/`maximum`/`exclusiveMinimum`/`exclusiveMaximum`, `minLength`/`maxLength`/`pattern`, `minItems`/`maxItems`/`uniqueItems`, `minProperties`/`maxProperties`/`required`, `additionalProperties` (`true` / `false` / schema), `allOf` / `oneOf` / `anyOf` / `not`, plus `format` for opis's built-in formats (`uuid`, `email`, `date`, `date-time`, `uri`, `ipv4`, `ipv6`, `hostname`).
+- **Lowered**: `const` → `enum: [value]` (3.1).
+- **Stripped**: `discriminator` (including `mapping`), `xml`, `externalDocs`, `example` / `examples`, `deprecated`, OAS-only `nullable`/`readOnly`/`writeOnly` after enforcement (3.0), and Draft 2020-12 keys `$dynamicRef` / `$dynamicAnchor` / `contentSchema` (3.1).
+- **Not supported (loud E_USER_WARNING when first encountered)**: `patternProperties`, `unevaluatedProperties`, `unevaluatedItems`, `contentMediaType`, `contentEncoding`. opis Draft 07 has no native handling, so the constraint is dropped — the warning surfaces this loudly so you can rewrite using Draft 07 equivalents.
+- **`discriminator`**: the keyword is dropped; the underlying `oneOf` / `anyOf` is still validated as a union, but `discriminator.mapping` does not steer validation toward a single branch.
+- **`readOnly` / `writeOnly`**: enforced at the property's own top level only (see [readOnly / writeOnly enforcement](#readonly--writeonly-enforcement)).
+- **Numeric formats** (`int32`, `int64`, `float`, `double`): not range-checked — treated as advisory.
+- **`binary` / `byte` formats**: not specifically handled; bodies are validated as plain strings when not skipped.
+
+### HTTP methods
+The PHPUnit coverage report counts `GET`, `POST`, `PUT`, `PATCH`, `DELETE`. Operations under `HEAD`, `OPTIONS`, or `TRACE` will be validated by `OpenApiResponseValidator` if you call it directly, but they do not appear in the coverage report.
+
+### Spec features not consulted
+Webhooks (3.1), Callbacks, Response `Links`, Server URL templating (`servers` with `variables`), Examples (`examples` blocks at parameter / requestBody / response level — not used for fuzzing or validation), `tags`, `externalDocs`, vendor extensions (`x-*` keys, ignored harmlessly).
 
 ## API Reference
 
