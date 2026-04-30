@@ -10,6 +10,30 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 
 ### Added
 
+- **#136 — Schema-driven request fuzzing (`ExploresOpenApiEndpoint` trait)**.
+  Generates N happy-path request inputs for a single (method, path) operation
+  directly from the OpenAPI spec — the first PHP library to ship Schemathesis
+  / property-based contract testing as a built-in primitive. Spec-name
+  resolution mirrors `ValidatesOpenApiSchema` (method/class `#[OpenApiSpec]`
+  attribute → `openApiSpec()` override → `default_spec` config). Each generated
+  case is wrapped in an `ExploredCase` DTO (body / query / headers / pathParams)
+  and the returned `ExplorationCases` collection exposes both `foreach` and a
+  fluent `each(callable)` helper:
+  ```php
+  $this->exploreEndpoint('POST', '/v1/pets', cases: 50)
+      ->each(fn ($input) => $this->postJson('/api/v1/pets', $input->body)
+          ->assertSuccessful());
+  ```
+  The HTTP path through Laravel keeps using the existing `ValidatesOpenApiSchema`
+  auto-assert hook, so response validation and coverage tracking are unchanged.
+  When `fakerphp/faker` is installed (already transitive via
+  `orchestra/testbench`), generation produces realistic strings (email, uuid,
+  URLs) and a `seed:` argument locks output for deterministic CI; without
+  faker, the generator falls back to deterministic primitives that still pass
+  the schema. Out-of-scope for this slice (tracked separately): boundary
+  values, negative-case generation, `oneOf`/`anyOf`/`allOf` composition, regex
+  `pattern`, and full-spec auto-exploration.
+
 - **#135 — `min_coverage` threshold gate for CI**. New PHPUnit extension
   parameters `min_endpoint_coverage` / `min_response_coverage` (percent,
   optional) and `min_coverage_strict` (default `false` → warn-only, set to
