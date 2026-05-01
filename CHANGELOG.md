@@ -3,10 +3,44 @@
 All notable changes to this project will be documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-This project is **pre-1.0**, so breaking changes may land in any minor release
-until 1.0.0 ships. Each entry below tags whether it is breaking.
+This project follows [Semantic Versioning 2.0](https://semver.org/). Anything
+not marked `@internal` is covered by SemVer for the entire v1.x line; see the
+[Versioning and support policy](README.md#versioning-and-support-policy) in
+the README for the full surface contract.
 
 ## Unreleased
+
+## v1.0.0 — 2026-05-01
+
+API stability commitment release.
+
+There is no behaviour change vs v0.19.0 — v1.0.0 is a stability promotion,
+not a feature release. Every fix from the dogfood cycle
+(v0.17.0 → v0.18.0 → v0.19.0) is in v1.0.0 unchanged. The internal-product
+suite that surfaced #159 (root cascade dedup) and #161 (array-boundary
+cascade dedup) now passes against v0.19.0 with no remaining noise; v1.0.0
+freezes that surface.
+
+What v1.0.0 commits to:
+
+- Anything not marked `@internal` is covered by SemVer for the entire v1.x
+  line. The public surface was audited end-to-end (#157), and PHPStan's
+  bleedingEdge `*.internalClass` rules enforce the boundary in CI (#158)
+  against the root namespace `Studio\`. Any code outside that namespace
+  that constructs / calls / type-hints against / accesses constants on an
+  `@internal` symbol fails the build. Downstream consumers who enable
+  bleedingEdge in their own PHPStan setup get the same enforcement.
+- Supported runtimes: PHP 8.2–8.4 (CI matrix), PHPUnit 11–13,
+  `opis/json-schema ^2.6`, Laravel via `orchestra/testbench`
+  `^9 || ^10 || ^11`. The full matrix and the policies for adding / dropping
+  versions are in the README's "Versioning and support policy" section.
+- Bug fixes and security updates land on the latest minor of v1.x. There is
+  no LTS branch for older minors — upgrade to the latest minor to receive
+  fixes.
+
+See [UPGRADING.md](UPGRADING.md) for v0.x → v1.0.0 migration notes (in
+practice: only relevant if you were calling `@internal` symbols; all
+documented public surface is unchanged).
 
 ## v0.19.0 — 2026-05-01
 
