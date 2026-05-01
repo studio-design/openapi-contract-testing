@@ -76,7 +76,10 @@ If `composer cs-check` fails, run `composer cs` and commit the result.
 ## Releases
 
 Releases are automated by [release-please](https://github.com/googleapis/release-please).
-Maintainers do **not** edit `CHANGELOG.md` or push tags by hand.
+Maintainers do **not** edit `CHANGELOG.md` or push tags by hand. The
+contract for what each version bump promises is in the README's
+[Versioning and support policy](README.md#versioning-and-support-policy);
+this section covers the mechanical flow.
 
 How it works:
 
@@ -92,24 +95,56 @@ How it works:
 4. When a maintainer merges the release PR, the bot creates the git tag and
    publishes the GitHub Release with notes generated from the changelog
    entry. Packagist syncs automatically from the tag webhook.
+5. The release PR is **kept fresh by the bot** — every push to `main` after
+   the initial release PR opens rebases its branch and rewrites the
+   CHANGELOG diff in place. There is never more than one open release PR.
+
+The manifest file `.release-please-manifest.json` records the last released
+version per package path; this repo is single-package so it stays
+`{ ".": "X.Y.Z" }`. The `.` key is the bot's package-root identifier; do
+not rename or duplicate it.
 
 ### Discipline
 
 - **Never push a `v*` tag manually.** The release-please manifest tracks
-  the last released SHA; a hand-tag desyncs it and the next release PR
-  proposes a wrong version. If you need a hotfix release, land the fix
-  via a regular `fix:` PR and let the bot's release PR ship it.
-- **Never edit `CHANGELOG.md` manually** in feature/fix PRs. The release
+  the last released version; a hand-tag desyncs it and the next release PR
+  proposes a wrong version. The `tag-guard` workflow will fail-loud on any
+  non-bot tag push. If you need a hotfix release, land the fix via a
+  regular `fix:` PR and let the bot's release PR ship it.
+- **Never edit `CHANGELOG.md` manually** in feature / fix PRs. The release
   PR is the only place CHANGELOG should change. If a release entry is
   worded poorly, edit the release PR before merging it.
-- **Squash-merge release PRs as-is.** Do not edit the squash subject —
-  the bot uses it to detect that the merged commit is a release.
+- **Squash-merge the release PR as-is.** Do not edit the squash subject —
+  the bot uses it to detect that the merged commit is a release. Other
+  merge strategies (rebase / merge commit) work, but squash matches the
+  rest of this repo's history.
+- **Squash-merging a `feat!:` PR: confirm the bang survives.** GitHub's
+  squash dialog defaults the subject to the PR title but lets the
+  maintainer edit it before merging. If the `!` is dropped at squash
+  time, release-please reads the squashed subject (no `!`) and proposes
+  a minor instead of a major. The PR-title check (`pr-title.yml`) only
+  validates the title at PR-time; it cannot catch an edit at merge-time.
+
+### `BREAKING CHANGE:` footer placement
+
+Conventional Commits accepts `BREAKING CHANGE: <text>` as a commit-message
+footer to flag a breaking change. release-please reads it from the **squash
+commit message body**, which is built from the source-branch commit
+messages — **not** from the PR description textbox. So:
+
+- ✅ Put `BREAKING CHANGE: <text>` in an actual commit message body before
+  pushing. It will land in the squash body and the bot will see it.
+- ❌ Writing it only in the PR description loses it at squash time and
+  the bot proposes a wrong (minor) version.
+
+Prefer the `feat!:` prefix when possible — it's harder to lose accidentally
+than a body footer.
 
 ### Forcing a specific bump
 
 If a `fix:`-only batch should ship as a minor release (e.g., the fix is
-behaviourally significant), use a `Release-As: X.Y.Z` footer in any commit
-on `main`:
+behaviourally significant), use a `Release-As: X.Y.Z` footer in a commit
+message body on `main`:
 
 ```
 fix(validator): rewire something important
@@ -117,7 +152,29 @@ fix(validator): rewire something important
 Release-As: 1.1.0
 ```
 
-The release PR will adopt that version on its next refresh.
+The release PR will adopt that version on its next refresh. The footer
+must live in a **commit message body** for the same reason as
+`BREAKING CHANGE:` above — PR descriptions are not visible to the bot.
+
+### Recovery scenarios
+
+- **Bad release published.** Revert the release commit on `main` via a
+  fresh `revert:` PR. The released tag and Packagist version cannot be
+  unpublished; treat the next release as a bugfix. If the next release PR
+  proposes a version that you want to skip, add `Release-As: X.Y.Z` to
+  the next non-revert commit on `main` to force the bot's hand.
+- **Manifest drift suspected** (e.g., someone bypassed `tag-guard` with
+  admin rights and pushed a manual tag). Edit `.release-please-manifest.json`
+  via a `chore:` PR to set the `"."` value to the actual latest released
+  version, then merge. The next release PR will re-derive the proposed
+  version from that point.
+- **Bot-authored commits do not trigger downstream Actions** by default
+  (GitHub's loop-prevention). The current pipeline is fine because tag
+  publication and Packagist sync are both handled by the bot's own action
+  invocation and an external webhook respectively. If you ever add a
+  workflow that fires on `push: tags: ['v*']` and want it to run for
+  bot-published tags, switch the bot's `token:` from `GITHUB_TOKEN` to a
+  PAT or GitHub App token.
 
 ## Reporting bugs
 

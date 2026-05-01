@@ -1,0 +1,33 @@
+name: tag-guard
+
+# Loud-fail backstop for the release-please discipline. Any v* tag pushed
+# by an actor other than github-actions[bot] is a manifest-drift surface:
+# release-please's manifest will read the new tag as "last released",
+# desync with .release-please-manifest.json, and silently propose a wrong
+# version on the next release PR. Failing CI here turns that silent fail
+# into an email + a red X on the tag's commit, prompting a maintainer to
+# investigate before any further release work.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  guard:
+    name: Reject non-bot v* tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify tagger
+        env:
+          ACTOR: ${{ github.actor }}
+          REF: ${{ github.ref }}
+        run: |
+          if [ "${ACTOR}" = "github-actions[bot]" ]; then
+            echo "Tag ${REF} pushed by release-please bot — ok."
+            exit 0
+          fi
+          echo "::error::Tag ${REF} was pushed by ${ACTOR}, not github-actions[bot]."
+          echo "::error::Releases are managed by release-please. Manual v* tags desync"
+          echo "::error::the manifest. See CONTRIBUTING.md > Releases > Discipline."
+          exit 1
