@@ -8,6 +8,23 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 
 ## Unreleased
 
+### Fixed
+
+- **Schema validator — `additionalProperties: false` cascade dedup now
+  applies across array boundaries**. v0.18.0's dedup walked the schema
+  only via `properties.<name>`, so a data path that crossed an `items`
+  boundary (`{ data: [Item] }`-shaped envelopes) bailed at the array
+  index and the cascade message at `[/data/0]` / `[/data/0/<inner>]`
+  re-inflated the failure surface back up to the root. The walker now
+  descends through `items` for int segments — both the single-schema
+  form (`items: <schema>`) and the Draft 07 tuple form (`items: [...]`,
+  also the shape `OpenApiSchemaConverter` lowers OAS 3.1 `prefixItems`
+  to). Composition keywords, `additionalProperties: <schema>`,
+  `patternProperties`, `additionalItems`, boolean schemas at item level,
+  and out-of-range tuple indices still bail safely so a real
+  additional-property violation is never silently swallowed.
+  Closes #161.
+
 ## v0.18.0 — 2026-05-01
 
 Dogfood-driven UX fix release. The internal-product run of v0.17.0

@@ -22,6 +22,7 @@ use function get_object_vars;
 use function implode;
 use function in_array;
 use function is_array;
+use function is_int;
 use function is_string;
 use function preg_match;
 use function property_exists;
@@ -238,13 +239,32 @@ final class SchemaValidatorRunner
     /**
      * Walk `$schema` via raw data-path segments and return the keys of the
      * `properties` keyword at that location, or null when the path doesn't
-     * resolve through plain property nesting (e.g. composition keywords,
-     * `additionalProperties: <schema>`, missing keyword).
+     * resolve through plain property nesting / array-element nesting.
      *
-     * Conservative: only steps through `properties.<name>`. Segments are
-     * compared as raw strings — opis already gives us decoded segments via
-     * `DataInfo::fullPath()`, so a property declared as `a/b` matches without
-     * any JSON-Pointer escape handling on our side.
+     * The walker recognises exactly two transitions and treats every other
+     * shape as unresolvable (returns null). The two recognised forms:
+     * - `properties.<name>` for string segments (object property access)
+     * - `items` for int segments (array element access). Both single-schema
+     *   form (`items: <stdClass>`) and Draft 07 tuple form
+     *   (`items: [<stdClass>, <stdClass>, ...]`) are supported. The tuple
+     *   form is also the lowered shape that `OpenApiSchemaConverter` produces
+     *   for OAS 3.1 `prefixItems`, so #161 dedup applies through that
+     *   conversion path as well.
+     *
+     * Anything that does not match those two transitions falls through to
+     * `null` — the dedup never silently rewrites a path it cannot prove. In
+     * practice this catches (non-exhaustive list, illustrative only):
+     * composition keywords (`oneOf` / `anyOf` / `allOf`),
+     * `additionalProperties: <schema>`, `patternProperties`, `additionalItems`,
+     * boolean schemas at item level (`items: true | false`), tuple-form
+     * indices out of range, and digit-only object property names — these
+     * arrive as int segments via PHP's automatic key cast in opis's data
+     * path, take the array branch, and bail when no `items` keyword exists
+     * (a no-op, not a regression).
+     *
+     * Segments are compared as raw values (opis hands us decoded segments
+     * via `DataInfo::fullPath()`), so a property declared as `a/b` matches
+     * without any JSON-Pointer escape handling on our side.
      *
      * @param array<int, mixed> $segments
      *
@@ -255,6 +275,27 @@ final class SchemaValidatorRunner
         $current = $schema;
 
         foreach ($segments as $segment) {
+            // int segment → array element (descend through `items`)
+            if (is_int($segment)) {
+                if (!property_exists($current, 'items')) {
+                    return null;
+                }
+                $items = $current->items;
+                if ($items instanceof stdClass) {
+                    $current = $items;
+
+                    continue;
+                }
+                if (is_array($items) && array_key_exists($segment, $items) && $items[$segment] instanceof stdClass) {
+                    $current = $items[$segment];
+
+                    continue;
+                }
+
+                return null;
+            }
+
+            // string segment → object property (descend through `properties.<name>`)
             if (!property_exists($current, 'properties') || !$current->properties instanceof stdClass) {
                 return null;
             }
