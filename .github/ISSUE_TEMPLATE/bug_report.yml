@@ -43,7 +43,7 @@ body:
     attributes:
       label: Library version
       description: Output of `composer show studio-design/openapi-contract-testing | grep versions`
-      placeholder: e.g. v0.15.0
+      placeholder: e.g. v1.0.0
     validations:
       required: true
   - type: input

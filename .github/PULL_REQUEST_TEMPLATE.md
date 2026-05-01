@@ -18,7 +18,13 @@ Subject must start lowercase. A CI check enforces this.
 - [ ] `composer test` passes
 - [ ] `composer stan` passes
 - [ ] `composer cs-check` passes
-- [ ] CHANGELOG.md updated under `## Unreleased` (skip for refactor/docs-only PRs)
+
+<!--
+CHANGELOG.md is managed by release-please and must NOT be edited in
+feature / fix PRs. The release PR updates it automatically based on
+Conventional Commits. See CONTRIBUTING.md → "Releases".
+-->
+
 
 ## Notes for reviewers
 

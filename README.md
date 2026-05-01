@@ -318,7 +318,7 @@ $validator = new OpenApiResponseValidator(maxErrors: 5);
 // Report all errors (unlimited)
 $validator = new OpenApiResponseValidator(maxErrors: 0);
 
-// Stop at first error (pre-v0.x default)
+// Stop at first error
 $validator = new OpenApiResponseValidator(maxErrors: 1);
 ```
 
@@ -1112,6 +1112,8 @@ OpenApiSpecLoader::reset(); // For testing
 Tracks which endpoints have been exercised, at `(method, path, statusCode, contentType)` granularity. The Laravel trait records via the tracker automatically; framework-agnostic adapters call it directly.
 
 ```php
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
+
 // Request-side: an endpoint was reached without a response assertion
 OpenApiCoverageTracker::recordRequest('front', 'GET', '/v1/pets');
 
