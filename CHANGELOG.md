@@ -8,6 +8,18 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 
 ## Unreleased
 
+## v0.18.0 — 2026-05-01
+
+Dogfood-driven UX fix release. The internal-product run of v0.17.0
+surfaced a single but high-impact issue: opis's `additionalProperties:
+false` keyword cascaded a pseudo-error naming declared properties as
+"not allowed" whenever any sub-property failed its schema, doubling
+the failure count in a 1280-test suite and routinely misdirecting
+contributors to the wrong fix. v0.18.0 ships the structural dedup
+along with regression coverage for edge cases discovered during the
+review (property names with commas, empty-string keys, leading
+whitespace, JSON-Pointer-escape characters).
+
 ### Fixed
 
 - **Schema validator — `additionalProperties: false` cascading pseudo-error
