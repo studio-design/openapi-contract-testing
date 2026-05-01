@@ -8,6 +8,24 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 
 ## Unreleased
 
+### Fixed
+
+- **Schema converter — `discriminator.mapping` silent-strip** now emits a
+  one-shot `E_USER_WARNING` when first encountered. The keyword is OAS-only
+  and was already stripped before handing the schema to opis, but the
+  silent strip meant a polymorphic body with the wrong `discriminator`
+  value would pass as long as it satisfied any branch — masking serialiser
+  bugs. The warning surfaces this so users notice the unenforced mapping.
+  The strip behaviour itself is unchanged. Closes #147.
+- **Schema converter — unknown `format` keywords now warn**. opis silently
+  accepts any string for unrecognised `format` values, so a typo like
+  `format: emial` (instead of `email`) was passing every string. The
+  converter now emits a one-shot `E_USER_WARNING` per unknown format value
+  on conversion. Allowlist covers all 19 opis Draft 06+ formats plus the
+  7 OAS advisory hints (`int32`, `int64`, `float`, `double`, `byte`,
+  `binary`, `password`) which are deliberately not enforced and do not
+  warn. Closes #151.
+
 ## v0.16.0 — 2026-05-01
 
 The "v1.0.0 hardening" release: a competitive review against Spectator,
