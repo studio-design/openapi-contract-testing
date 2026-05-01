@@ -985,6 +985,35 @@ The PHPUnit coverage report counts `GET`, `POST`, `PUT`, `PATCH`, `DELETE`. Oper
 ### Spec features not consulted
 Webhooks (3.1), Callbacks, Response `Links`, Server URL templating (`servers` with `variables`), Examples (`examples` blocks at parameter / requestBody / response level — not used for fuzzing or validation), `tags`, `externalDocs`, vendor extensions (`x-*` keys, ignored harmlessly).
 
+### Warning channel (`E_USER_WARNING` contract)
+
+The library uses PHP's native `trigger_error(..., E_USER_WARNING)` as the loud-signal channel for silent-pass conditions the validator cannot enforce. **This is the v1.0 official API**: warnings are dedup'd per-process and prefixed with a category tag so callers can route or filter them mechanically.
+
+| Category prefix | Source | Dedup key |
+|---|---|---|
+| `[security]` | `SecurityValidator` (`oauth2`, `openIdConnect`, `mutualTLS`, `http-basic`, `http-digest`) | scheme name |
+| `[OpenAPI Schema]` | `OpenApiSchemaConverter` (`unevaluatedProperties` / `unevaluatedItems`, `discriminator.mapping`, unknown / malformed `format`) | per-keyword / per-format-value |
+
+**How to consume:**
+
+- **Default** (PHPUnit `failOnWarning="true"`): the first warning fails the test. Recommended for contract-testing pipelines, since silent-pass on auth or unknown formats is the worst-class failure mode.
+- **Stay green, surface warnings in output**: omit `failOnWarning` (PHPUnit 10+ default is `false`). Warnings show in the test report but do not fail.
+- **Capture programmatically** (e.g. for a custom report):
+  ```php
+  set_error_handler(static function (int $errno, string $errstr): bool {
+      if ($errno === E_USER_WARNING && str_starts_with($errstr, '[security]')) {
+          MyReport::record($errstr);
+          return true; // suppress
+      }
+      return false; // bubble
+  });
+  ```
+- **Suppress one category** (e.g. acknowledged limitation): match on the category prefix in your error handler. Do not blanket-suppress all `E_USER_WARNING`s — unrelated warnings would silently disappear.
+
+**Why not exceptions / PSR-3 logger / structured payload on `OpenApiValidationResult`?** The simple channel is zero-dep, integrates with every PHP framework's existing error handler, and stays out of the v1.0 SemVer surface. A structured channel (`WarningCollector`, PSR-3 sink, or `result->warnings()`) can be added in v1.x as additive without breaking — we are deliberately deferring until real-world usage demands it. See [issue #149](https://github.com/studio-design/openapi-contract-testing/issues/149) for the design discussion.
+
+**Per-process dedup vs per-test:** the dedup state is process-global. PHPUnit runs all tests in one process by default, so a warning fired in test A is not fired again in test B even if both schemas exhibit the issue. The `*::resetWarningStateForTesting()` helpers (annotated `@internal`) exist as test seams for the converter / security validator's own tests; downstream tests rarely need them.
+
 ## API Reference
 
 ### `OpenApiResponseValidator`

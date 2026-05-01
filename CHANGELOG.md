@@ -8,6 +8,20 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 
 ## Unreleased
 
+### Documentation
+
+- **Warning channel contract** is now documented in README under
+  "Supported features and known limitations". Pins
+  `trigger_error(..., E_USER_WARNING)` with category-tagged messages
+  (`[security]`, `[OpenAPI Schema]`) as the v1.0 official API surface
+  for silent-pass signals. Includes consumption recipes (PHPUnit
+  `failOnWarning`, programmatic capture via `set_error_handler`,
+  per-category suppression) and an explicit deferral note for the
+  structured-channel alternatives (typed exceptions, PSR-3 logger,
+  `OpenApiValidationResult` warnings array) — those can be added in
+  v1.x as additive enhancements without breaking the v1.0 contract.
+  Closes #149.
+
 ### Fixed
 
 - **Schema converter — `discriminator.mapping` silent-strip** now emits a
