@@ -578,6 +578,212 @@
                     "200": { "description": "OK" }
                 }
             }
+        },
+        "/v1/v31/version": {
+            "get": {
+                "summary": "3.1 const lowering — response carries const-locked apiVersion",
+                "operationId": "getVersion31",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["apiVersion"],
+                                    "properties": {
+                                        "apiVersion": {"const": "1.0"}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/v31/users/{id}": {
+            "get": {
+                "summary": "3.1 internal $ref — pin that ref resolution works in 3.1 too",
+                "operationId": "getUser31",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {"type": "string", "format": "uuid"}
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {"schema": {"$ref": "#/components/schemas/V31User"}}
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/v31/users": {
+            "post": {
+                "summary": "3.1 readOnly + writeOnly — request must NOT include readOnly id; response must NOT include writeOnly password",
+                "operationId": "createUser31",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {"schema": {"$ref": "#/components/schemas/V31User"}}
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "content": {
+                            "application/json": {"schema": {"$ref": "#/components/schemas/V31User"}}
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/v31/wildcard-app": {
+            "get": {
+                "summary": "application/* content type (range, not literal application/json)",
+                "operationId": "wildcardApp31",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["ok"],
+                                    "properties": {"ok": {"type": "boolean"}}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/v31/wildcard-any": {
+            "get": {
+                "summary": "*/* content type (full wildcard — non-JSON paths skip schema validation)",
+                "operationId": "wildcardAny31",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {"meta": {"type": "string"}}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/v31/multi-content": {
+            "get": {
+                "summary": "Single status with multiple content types",
+                "operationId": "multiContent31",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["data"],
+                                    "properties": {"data": {"type": "string"}}
+                                }
+                            },
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["title"],
+                                    "properties": {"title": {"type": "string"}}
+                                }
+                            },
+                            "text/plain": {
+                                "schema": {"type": "string"}
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/v31/range-keys": {
+            "get": {
+                "summary": "Status code range (5XX) and default — pin 3.1 path through resolveResponseKey",
+                "operationId": "rangeKeys31",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {"ok": {"type": "boolean"}}
+                                }
+                            }
+                        }
+                    },
+                    "5XX": {
+                        "description": "Any server error",
+                        "content": {
+                            "application/problem+json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["status"],
+                                    "properties": {"status": {"type": "integer"}}
+                                }
+                            }
+                        }
+                    },
+                    "default": {
+                        "description": "Anything else",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {"message": {"type": "string"}}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/v31/coords": {
+            "post": {
+                "summary": "prefixItems with actual data — verify tuple constraint reaches the validator",
+                "operationId": "coords31",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["point"],
+                                "properties": {
+                                    "point": {
+                                        "type": "array",
+                                        "prefixItems": [
+                                            {"type": "string"},
+                                            {"type": "number"}
+                                        ],
+                                        "minItems": 2,
+                                        "maxItems": 2
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {"description": "Created"}
+                }
+            }
         }
     },
     "components": {
@@ -610,6 +816,24 @@
                         "scopes": {
                             "read": "Read access"
                         }
+                    }
+                }
+            }
+        },
+        "schemas": {
+            "V31User": {
+                "type": "object",
+                "required": ["id", "name"],
+                "properties": {
+                    "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "name": {"type": "string"},
+                    "password": {
+                        "type": ["string", "null"],
+                        "writeOnly": true
                     }
                 }
             }

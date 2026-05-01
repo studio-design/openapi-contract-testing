@@ -1,0 +1,203 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Composition coverage fixture",
+        "version": "1.0.0",
+        "description": "Composition keywords + additionalProperties coverage."
+    },
+    "paths": {
+        "/v1/pets/oneOf": {
+            "post": {
+                "summary": "oneOf [Cat, Dog] — discriminator.mapping is silently stripped per README; included as a regression sentinel for the strip behaviour",
+                "operationId": "createPetOneOf",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "oneOf": [
+                                    {"$ref": "#/components/schemas/Cat"},
+                                    {"$ref": "#/components/schemas/Dog"}
+                                ],
+                                "discriminator": {
+                                    "propertyName": "kind",
+                                    "mapping": {
+                                        "cat": "#/components/schemas/Cat",
+                                        "dog": "#/components/schemas/Dog"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "oneOf": [
+                                        {"$ref": "#/components/schemas/Cat"},
+                                        {"$ref": "#/components/schemas/Dog"}
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/search/anyOf": {
+            "post": {
+                "summary": "anyOf [byName, byId]",
+                "operationId": "searchAnyOf",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "anyOf": [
+                                    {
+                                        "type": "object",
+                                        "required": ["name"],
+                                        "properties": {"name": {"type": "string", "minLength": 1}}
+                                    },
+                                    {
+                                        "type": "object",
+                                        "required": ["id"],
+                                        "properties": {"id": {"type": "integer", "minimum": 1}}
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["matched"],
+                                    "properties": {"matched": {"type": "boolean"}}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/items/not": {
+            "post": {
+                "summary": "Body must NOT have a `forbidden` key (uses `not`)",
+                "operationId": "createItemNot",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["name"],
+                                "properties": {"name": {"type": "string"}},
+                                "not": {
+                                    "type": "object",
+                                    "required": ["forbidden"]
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {"description": "Created"}
+                }
+            }
+        },
+        "/v1/strict": {
+            "get": {
+                "summary": "additionalProperties: false (strict — extras reject)",
+                "operationId": "getStrict",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["id", "name"],
+                                    "properties": {
+                                        "id": {"type": "integer"},
+                                        "name": {"type": "string"}
+                                    },
+                                    "additionalProperties": false
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/loose": {
+            "get": {
+                "summary": "additionalProperties: true (extras pass)",
+                "operationId": "getLoose",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["id"],
+                                    "properties": {"id": {"type": "integer"}},
+                                    "additionalProperties": true
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/typed-extras": {
+            "get": {
+                "summary": "additionalProperties as a typed schema (extras must be integers)",
+                "operationId": "getTypedExtras",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "required": ["id"],
+                                    "properties": {"id": {"type": "string"}},
+                                    "additionalProperties": {"type": "integer", "minimum": 0}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Cat": {
+                "type": "object",
+                "required": ["kind", "meow"],
+                "properties": {
+                    "kind": {"type": "string", "enum": ["cat"]},
+                    "meow": {"type": "boolean"}
+                }
+            },
+            "Dog": {
+                "type": "object",
+                "required": ["kind", "bark"],
+                "properties": {
+                    "kind": {"type": "string", "enum": ["dog"]},
+                    "bark": {"type": "boolean"}
+                }
+            }
+        }
+    }
+}

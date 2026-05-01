@@ -1,0 +1,98 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Formats and numeric constraints fixture",
+        "version": "1.0.0",
+        "description": "Format keywords and numeric constraints coverage."
+    },
+    "paths": {
+        "/v1/profile": {
+            "post": {
+                "summary": "Create profile — exercises every format keyword the README claims to support",
+                "operationId": "createProfile",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Profile"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/Profile"}
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/orders": {
+            "post": {
+                "summary": "Create order — exercises numeric constraints (multipleOf, uniqueItems, minProperties, maxProperties)",
+                "operationId": "createOrder",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Order"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created"
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Profile": {
+                "type": "object",
+                "required": ["email", "homepage", "ip4", "ip6", "host", "birthday", "lastSeen", "userId"],
+                "properties": {
+                    "email":    {"type": "string", "format": "email"},
+                    "homepage": {"type": "string", "format": "uri"},
+                    "ip4":      {"type": "string", "format": "ipv4"},
+                    "ip6":      {"type": "string", "format": "ipv6"},
+                    "host":     {"type": "string", "format": "hostname"},
+                    "birthday": {"type": "string", "format": "date"},
+                    "lastSeen": {"type": "string", "format": "date-time"},
+                    "userId":   {"type": "string", "format": "uuid"}
+                }
+            },
+            "Order": {
+                "type": "object",
+                "required": ["price", "tags"],
+                "properties": {
+                    "price": {
+                        "type": "integer",
+                        "multipleOf": 5,
+                        "minimum": 0
+                    },
+                    "tags": {
+                        "type": "array",
+                        "uniqueItems": true,
+                        "minItems": 1,
+                        "items": {"type": "string"}
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "minProperties": 1,
+                        "maxProperties": 5,
+                        "additionalProperties": {"type": "string"}
+                    }
+                }
+            }
+        }
+    }
+}

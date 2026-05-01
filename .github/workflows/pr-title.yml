@@ -28,8 +28,10 @@ jobs:
             ci
             style
           requireScope: false
-          subjectPattern: ^(?!.*[A-Z]).+$
+          subjectPattern: ^[a-z].*$
           subjectPatternError: |
-            The PR title subject must start lowercase to match the existing
-            repo convention (e.g. "feat(coverage): add foo" not "feat(coverage): Add foo").
+            The PR title subject must start with a lowercase letter to match
+            the existing repo convention (e.g. "feat(coverage): add foo" not
+            "feat(coverage): Add foo"). Uppercase letters elsewhere in the
+            subject (proper nouns like Draft, OpenAPI, JSON) are allowed.
             Allowed prefixes: feat, fix, docs, refactor, test, chore, perf, build, ci, style.

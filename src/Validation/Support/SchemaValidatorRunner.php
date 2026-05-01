@@ -30,6 +30,13 @@ final class SchemaValidatorRunner
             max_errors: $resolvedMaxErrors,
             stop_at_first_error: $resolvedMaxErrors === 1,
         );
+        // opis defaults to draft 2020-12 when a schema doesn't declare `$schema`.
+        // OpenApiSchemaConverter targets Draft 07 (e.g. it lowers `prefixItems`
+        // to the array-form `items`, which is valid Draft 07 tuple validation
+        // but rejected by 2020-12). Forcing Draft 07 here keeps the converter
+        // and the validator in agreement and unblocks tuple validation for
+        // OAS 3.1 `prefixItems`.
+        $this->opisValidator->parser()->setDefaultDraftVersion('07');
         $this->errorFormatter = new ErrorFormatter();
     }
 
