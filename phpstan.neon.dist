@@ -1,10 +1,13 @@
 includes:
-    # Enables PHPStan's @internal enforcement (new.internalClass /
-    # method.internalClass / staticMethod.internalClass / return.internalClass).
-    # The bleedingEdge ruleset is required because @internal enforcement is not
-    # part of the standard levels yet (PHPStan 2.x); it is expected to graduate
-    # in PHPStan 3.0. Pinned to the vendored .neon so the rule set tracks
-    # whichever phpstan version composer resolves.
+    # Enables PHPStan's @internal enforcement rules (new.internalClass /
+    # method.internalClass / staticMethod.internalClass / return.internalClass /
+    # parameter.internalClass / classConstant.internalClass / catch.internalClass).
+    # These ship under bleedingEdge because they are not part of the standard
+    # levels yet (PHPStan 2.x); they may graduate in a future major. composer
+    # require-dev pins phpstan/phpstan to ^2.1.13 — the floor where these rules
+    # are actually present, so a lockfile downgrade cannot silently disable
+    # enforcement. Pinned to the vendored .neon so the rule set tracks whichever
+    # phpstan version composer resolves.
     - vendor/phpstan/phpstan/conf/bleedingEdge.neon
 
 parameters:
@@ -20,7 +23,7 @@ parameters:
         # legitimately catches and asserts against them (the auto-injection test
         # boundary, response-validator failure surfaces). PHPUnit's @internal is
         # about THEIR API contract, not ours — our enforcement target is calls
-        # that cross the Studio\OpenApiContractTesting\* boundary.
+        # that cross our root namespace boundary (Studio).
         - '#internal class PHPUnit\\Framework\\(AssertionFailedError|Exception)#'
         # `TestCase::name()` is PHPUnit's de-facto API for in-test introspection
         # (Symfony's TestContainer, Mockery, Pest, and the SpecPriorityOverride

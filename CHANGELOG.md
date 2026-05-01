@@ -49,15 +49,24 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
   `bleedingEdge.neon` so `new.internalClass` / `method.internalClass` /
   `staticMethod.internalClass` / `return.internalClass` /
   `parameter.internalClass` / `classConstant.internalClass` /
-  `catch.internalClass` violations fail the build. Downstream consumers
-  who run PHPStan with bleedingEdge will surface the same errors when
-  any code outside `Studio\OpenApiContractTesting\*` instantiates,
-  calls, type-hints, or extends an `@internal` symbol. Two third-party
-  `@internal` exemptions are configured (PHPUnit `AssertionFailedError`
-  / `Exception` and `TestCase::name()`) — those are PHPUnit's own
-  contract concerns, not ours, and removing them would block our test
-  code from doing perfectly normal exception-boundary assertions.
-  Closes #148.
+  `catch.internalClass` violations fail the build. The boundary is the
+  **root namespace** (`Studio`) — any code outside it that instantiates,
+  calls, type-hints against, or accesses constants on an `@internal`
+  symbol surfaces as a PHPStan error. Downstream consumers who enable
+  bleedingEdge in their own PHPStan setup get the same enforcement
+  automatically. Two third-party `@internal` exemptions are configured
+  (PHPUnit `AssertionFailedError` / `Exception` and `TestCase::name()`)
+  — those are PHPUnit's own contract concerns, not ours, and removing
+  them would block our test code from doing perfectly normal
+  exception-boundary assertions. The `phpstan/phpstan` `require-dev`
+  constraint was bumped from `^2.0` to `^2.1.13` (the floor where
+  these rules ship) so a lockfile downgrade cannot silently disable
+  the enforcement. A regression probe at
+  `tests/Fixtures/Phpstan/InternalEnforcementProbe.php` lives in the
+  `Acme\PhpstanProbe` namespace with deliberate boundary crossings +
+  inline `@phpstan-ignore` directives; if the rules ever stop firing,
+  bleedingEdge's `reportUnmatchedIgnoredErrors` flips the suppressions
+  into hard CI failures. Closes #148.
 - **API surface audit for v1.0**: 28 implementation-detail classes
   picked up class-level `@internal` docblock markers so the v1.0.0
   SemVer contract excludes them. Covers the per-validator helpers
