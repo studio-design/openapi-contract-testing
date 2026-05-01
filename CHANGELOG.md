@@ -45,6 +45,19 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 
 ### Internal
 
+- **`@internal` is now enforced statically**. The CI PHPStan run includes
+  `bleedingEdge.neon` so `new.internalClass` / `method.internalClass` /
+  `staticMethod.internalClass` / `return.internalClass` /
+  `parameter.internalClass` / `classConstant.internalClass` /
+  `catch.internalClass` violations fail the build. Downstream consumers
+  who run PHPStan with bleedingEdge will surface the same errors when
+  any code outside `Studio\OpenApiContractTesting\*` instantiates,
+  calls, type-hints, or extends an `@internal` symbol. Two third-party
+  `@internal` exemptions are configured (PHPUnit `AssertionFailedError`
+  / `Exception` and `TestCase::name()`) — those are PHPUnit's own
+  contract concerns, not ours, and removing them would block our test
+  code from doing perfectly normal exception-boundary assertions.
+  Closes #148.
 - **API surface audit for v1.0**: 28 implementation-detail classes
   picked up class-level `@internal` docblock markers so the v1.0.0
   SemVer contract excludes them. Covers the per-validator helpers

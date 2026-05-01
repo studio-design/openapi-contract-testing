@@ -1038,6 +1038,8 @@ This library follows [Semantic Versioning 2.0](https://semver.org/). v1.0.0 is t
 - The set of `format` keywords delegated to opis — we follow opis upstream, so a new format is added when opis adds it.
 - Behaviour of bug-fix releases that close a documented silent-pass case. A test that passed only because of the silent pass may start failing — that's the fix doing its job, not a SemVer break.
 
+`@internal` is enforced statically. Our CI runs PHPStan with the `bleedingEdge` ruleset enabled (PHPStan 2.1.13+) so that `new.internalClass` / `method.internalClass` / `staticMethod.internalClass` / `return.internalClass` / `parameter.internalClass` violations fail the build. The same enforcement applies to downstream consumers who run PHPStan with bleedingEdge: any code outside the `Studio\OpenApiContractTesting\*` namespace that instantiates, calls, type-hints, or extends an `@internal` symbol will surface as a PHPStan error.
+
 See [UPGRADING.md](UPGRADING.md) for migration notes between versions.
 
 ### Support policy

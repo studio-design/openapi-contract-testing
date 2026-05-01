@@ -1,3 +1,12 @@
+includes:
+    # Enables PHPStan's @internal enforcement (new.internalClass /
+    # method.internalClass / staticMethod.internalClass / return.internalClass).
+    # The bleedingEdge ruleset is required because @internal enforcement is not
+    # part of the standard levels yet (PHPStan 2.x); it is expected to graduate
+    # in PHPStan 3.0. Pinned to the vendored .neon so the rule set tracks
+    # whichever phpstan version composer resolves.
+    - vendor/phpstan/phpstan/conf/bleedingEdge.neon
+
 parameters:
     level: 6
     paths:
@@ -6,3 +15,16 @@ parameters:
     excludePaths:
         - src/Laravel
     tmpDir: .phpstan.cache
+    ignoreErrors:
+        # PHPUnit marks AssertionFailedError + Exception @internal, but test code
+        # legitimately catches and asserts against them (the auto-injection test
+        # boundary, response-validator failure surfaces). PHPUnit's @internal is
+        # about THEIR API contract, not ours — our enforcement target is calls
+        # that cross the Studio\OpenApiContractTesting\* boundary.
+        - '#internal class PHPUnit\\Framework\\(AssertionFailedError|Exception)#'
+        # `TestCase::name()` is PHPUnit's de-facto API for in-test introspection
+        # (Symfony's TestContainer, Mockery, Pest, and the SpecPriorityOverride
+        # design all rely on it). Marked @internal upstream but no replacement.
+        # SkipOpenApiResolver and OpenApiSpecResolver call it to resolve the
+        # current test method name for attribute lookup.
+        - '#Call to internal method PHPUnit\\Framework\\TestCase::name\(\)#'
