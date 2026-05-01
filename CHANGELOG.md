@@ -8,6 +8,18 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 
 ## Unreleased
 
+## v0.17.0 — 2026-05-01
+
+The dogfood-driven v1.0.0 release candidate. Internal-product testing of
+v0.16.0 surfaced one behavioural gap (multi-JSON content-type per-status
+schema selection — `application/problem+json` bodies were silently judged
+against the success-shape `application/json` schema) plus three v1.0
+contract items (warning channel pinning, API surface audit, `@internal`
+static enforcement) that were already on the prep list. This release
+lands all four. The shipped public API is now byte-equivalent to the
+planned v1.0.0 contract — the only remaining v1.0.0 work is the tag bump
+and the README Stability badge swap.
+
 ### Changed
 
 - **Response validator — per-content-type schema selection for multi-JSON
