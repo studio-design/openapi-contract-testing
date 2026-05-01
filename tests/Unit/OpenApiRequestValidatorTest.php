@@ -21,6 +21,7 @@ use function implode;
 use function restore_error_handler;
 use function set_error_handler;
 use function str_contains;
+use function str_starts_with;
 use function strtolower;
 
 class OpenApiRequestValidatorTest extends TestCase
@@ -3007,17 +3008,22 @@ class OpenApiRequestValidatorTest extends TestCase
     }
 
     /**
-     * Run a callable while suppressing E_USER_WARNING. Used by tests that
-     * exercise oauth2 / openIdConnect / mutualTLS / http-basic / http-digest
-     * endpoints — these now fire a one-shot per-scheme silent-pass warning
-     * (issue #146). The warning *contents* are covered by SecurityValidatorTest;
-     * the integration tests here only verify the {@see OpenApiRequestValidator}
-     * return value, so the warning is captured-and-discarded.
+     * Run a callable while suppressing the silent-pass `[security]`
+     * `E_USER_WARNING` emitted for oauth2 / openIdConnect / mutualTLS /
+     * http-basic / http-digest endpoints. Warning *contents* are covered by
+     * `SecurityValidatorTest`; the integration tests here only verify the
+     * {@see OpenApiRequestValidator} return value, so the warning is
+     * captured-and-discarded.
+     *
+     * Filter is intent-driven: only warnings starting with `[security]` are
+     * absorbed. Unrelated `E_USER_WARNING`s (e.g. a future deprecation in
+     * the validator pipeline) bubble up so they cannot silently pass — the
+     * exact pattern this PR was created to prevent.
      */
     private function suppressSilentPassWarning(callable $fn): mixed
     {
-        set_error_handler(static function (int $errno): bool {
-            return $errno === E_USER_WARNING;
+        set_error_handler(static function (int $errno, string $errstr): bool {
+            return $errno === E_USER_WARNING && str_starts_with($errstr, '[security]');
         });
 
         try {

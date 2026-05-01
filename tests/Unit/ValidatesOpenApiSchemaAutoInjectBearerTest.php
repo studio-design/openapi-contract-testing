@@ -19,6 +19,7 @@ use Symfony\Component\HttpFoundation\Request;
 
 use function restore_error_handler;
 use function set_error_handler;
+use function str_starts_with;
 
 // Load namespace-level config() mock before the trait resolves the function call.
 require_once __DIR__ . '/../Helpers/LaravelConfigMock.php';
@@ -140,16 +141,19 @@ class ValidatesOpenApiSchemaAutoInjectBearerTest extends TestCase
     #[Test]
     public function inject_is_noop_on_oauth2_only_endpoint(): void
     {
-        // oauth2-only endpoints are classified as Unsupported by the
-        // validator (phase 1), so the requirement entry is skipped; injecting
-        // bearer would be a lie. Validation must pass on its own (skipped).
-        // Issue #146: the silent-pass now also fires a one-shot E_USER_WARNING;
-        // suppress here because SecurityValidatorTest covers warning contents.
+        // oauth2-only endpoints are classified as Unsupported, so the
+        // requirement entry is skipped; injecting bearer would be a lie.
+        // Validation must pass on its own (skipped). The silent-pass now
+        // also fires a one-shot E_USER_WARNING; suppress locally because
+        // SecurityValidatorTest covers warning contents.
         $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_inject_dummy_bearer'] = true;
 
         $request = Request::create('/v1/secure/oauth2-only', 'GET');
 
-        set_error_handler(static fn(int $errno): bool => $errno === E_USER_WARNING);
+        set_error_handler(
+            static fn(int $errno, string $errstr): bool => $errno === E_USER_WARNING &&
+                str_starts_with($errstr, '[security]'),
+        );
 
         try {
             $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::GET, '/v1/secure/oauth2-only');

@@ -535,7 +535,7 @@ class SecureEndpointTest extends TestCase
 Notes:
 
 - **View-only rewrite**: the Symfony `Request` itself is not modified; Laravel has already dispatched by the time the trait runs. The inject exists purely to prevent the security check from false-failing.
-- **Bearer only**: `apiKey` and `oauth2` endpoints are not affected (the header name for `apiKey` is arbitrary per spec; `oauth2` is classified as unsupported in phase 1 anyway).
+- **Bearer only**: `apiKey` and `oauth2` endpoints are not affected (the header name for `apiKey` is arbitrary per spec; `oauth2` is classified as unsupported anyway).
 - **Never overrides user values**: if the test already set an `Authorization` header (in any case), the user's value wins.
 - **Requires `auto_validate_request=true`** — the inject is a sub-feature of request validation. Setting the inject flag alone has no effect.
 
@@ -960,14 +960,10 @@ This is a contract-testing tool: where we can't enforce a constraint precisely, 
 
 ### Security schemes
 - **Validated**: `apiKey` (in `header` / `query` / `cookie`) and `http` + `bearer` — presence checks for the named header/query/cookie / RFC 6750 `Bearer` token.
-- **Loud `E_USER_WARNING` on first encounter**: `oauth2`, `openIdConnect`, `mutualTLS`, and `http` schemes other than `bearer` (`basic`, `digest`). When every scheme in a security requirement is unsupported the requirement still passes (false-negative avoidance — blocking the test for a spec we cannot evaluate is worse than letting it through), but the validator fires a one-shot per-scheme-name warning so the silent pass does not stay invisible:
+- **Loud `E_USER_WARNING` on first encounter**: `oauth2`, `openIdConnect`, `mutualTLS`, and `http` schemes other than `bearer` (`basic`, `digest`). When every scheme in a security requirement is unsupported the requirement still passes (false-negative avoidance — blocking the test for a spec we cannot evaluate is worse than letting it through), but the validator fires a one-shot per-scheme-name warning so the silent pass does not stay invisible. The warning is emitted as a single line (shown wrapped here for readability):
 
   ```
-  [security] OAuth2 scheme 'oauth2_user' is silently passed (no token check) — POST /v1/users.
-  The opis/json-schema-based validator cannot verify oauth2 / openIdConnect / mutualTLS /
-  http-basic / http-digest credentials. Your test will not detect a missing or invalid token.
-  Workaround: split the bearer-token surface into a separate test, or assert the
-  Authorization header presence manually.
+  [security] OAuth2 scheme 'oauth2_user' is silently passed (no token check) — POST /v1/users. The opis/json-schema-based validator cannot verify oauth2 / openIdConnect / mutualTLS / http-basic / http-digest credentials. Your test will not detect a missing or invalid token. Workaround: split the bearer-token surface into a separate test, or assert the Authorization header presence manually.
   ```
 
   Under `phpunit.xml` `failOnWarning="true"` this surfaces as a test failure on first encounter — the recommended setting if your spec contains any of these scheme types, since green tests against unauthenticated requests are the worst-class silent failure for a contract-testing tool.

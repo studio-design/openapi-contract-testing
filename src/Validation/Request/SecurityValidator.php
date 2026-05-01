@@ -19,6 +19,7 @@ use function preg_match;
 use function sprintf;
 use function strtolower;
 use function trigger_error;
+use function trim;
 
 final class SecurityValidator
 {
@@ -40,28 +41,21 @@ final class SecurityValidator
 
     /**
      * Validate the endpoint's `security` requirement against the incoming
-     * request. Supports `http` + `bearer` and `apiKey` (in: header|query|cookie)
-     * schemes. OAuth2 / OpenID Connect / mutualTLS / `http` + `basic` /
-     * `http` + `digest` are out of scope: any requirement entry containing one
-     * of these is skipped entirely (contributes neither pass nor fail) AND
-     * triggers a one-shot {@see E_USER_WARNING} per scheme name to surface the
-     * silent-pass to users — a green test against an unauthenticated request
-     * is the worst-class failure mode for a contract-testing tool.
+     * request. The supported / unsupported / malformed scheme partition is
+     * defined by {@see classifyScheme()}; entries containing an unsupported
+     * scheme are skipped (contributes neither pass nor fail) and emit a
+     * one-shot per-scheme-name {@see E_USER_WARNING} so the silent pass does
+     * not stay invisible. Malformed entries are always surfaced as hard
+     * errors so the spec author is pushed to fix the broken declaration.
      *
      * Resolution: operation-level `security` takes precedence; otherwise the
-     * root-level `security` is inherited. `security: []` (empty array) explicitly
-     * opts out of all authentication, so it returns `[]` immediately regardless
-     * of root-level definitions. Missing `security` on both levels also returns
-     * `[]` (no authentication required).
+     * root-level `security` is inherited. `security: []` (empty array)
+     * explicitly opts out of all authentication. Missing `security` on both
+     * levels also returns `[]` (no authentication required).
      *
-     * OR / AND semantics (per OpenAPI):
+     * OR / AND semantics (per OpenAPI 3.x):
      * - Multiple entries in the `security` array → OR (any one satisfied is enough)
      * - Multiple schemes within a single entry object → AND (all must be satisfied)
-     *
-     * Malformed spec elements (undefined scheme references, scalar entries,
-     * missing `type` / `scheme` / `name` / `in` fields) are always surfaced as
-     * hard errors, even if another requirement entry is satisfied — a broken
-     * security declaration is something the spec author must fix.
      *
      * @param array<string, mixed> $spec full spec root (for `components.securitySchemes` + root-level `security`)
      * @param array<string, mixed> $operation operation spec (for operation-level `security`)
@@ -185,12 +179,9 @@ final class SecurityValidator
                 }
 
                 if ($classification->kind === SchemeKind::Unsupported) {
-                    self::warnIfFirstEncounter(
-                        $schemeName,
-                        $classification->unsupportedTypeLabel ?? 'unknown',
-                        $method,
-                        $matchedPath,
-                    );
+                    /** @var string $typeLabel */
+                    $typeLabel = $classification->unsupportedTypeLabel;
+                    self::warnIfFirstEncounter($schemeName, $typeLabel, $method, $matchedPath);
                     $entryHasUnsupported = true;
 
                     continue;
@@ -302,53 +293,54 @@ final class SecurityValidator
     {
         $type = $schemeDef['type'] ?? null;
         if (!is_string($type) || $type === '') {
-            return new SchemeClassification(SchemeKind::Malformed, "missing required 'type' field.");
+            return SchemeClassification::malformed("missing required 'type' field.");
         }
 
         if ($type === 'apiKey') {
             $in = $schemeDef['in'] ?? null;
             $name = $schemeDef['name'] ?? null;
             if (!is_string($in) || !is_string($name)) {
-                return new SchemeClassification(SchemeKind::Malformed, "apiKey scheme requires string 'in' and 'name' fields.");
+                return SchemeClassification::malformed("apiKey scheme requires string 'in' and 'name' fields.");
             }
             if (!in_array($in, ['header', 'query', 'cookie'], true)) {
-                return new SchemeClassification(SchemeKind::Malformed, "apiKey scheme 'in' must be one of header|query|cookie, got '{$in}'.");
+                return SchemeClassification::malformed("apiKey scheme 'in' must be one of header|query|cookie, got '{$in}'.");
             }
 
-            return new SchemeClassification(SchemeKind::ApiKey);
+            return SchemeClassification::apiKey();
         }
 
         if ($type === 'http') {
             $scheme = $schemeDef['scheme'] ?? null;
-            if (!is_string($scheme)) {
-                return new SchemeClassification(SchemeKind::Malformed, "http scheme requires a string 'scheme' field (e.g. 'bearer', 'basic').");
+            if (!is_string($scheme) || trim($scheme) === '') {
+                // Reject empty / whitespace-only `scheme` as malformed: the
+                // OAS spec requires the field to name an HTTP authentication
+                // scheme (e.g. "bearer", "basic"), and an empty value would
+                // otherwise fall through to Unsupported with a meaningless
+                // label like "http-".
+                return SchemeClassification::malformed("http scheme requires a non-empty string 'scheme' field (e.g. 'bearer', 'basic').");
             }
 
             if (strtolower($scheme) === 'bearer') {
-                return new SchemeClassification(SchemeKind::Bearer);
+                return SchemeClassification::bearer();
             }
 
             // http + basic / digest / etc. are well-formed but the validator
             // cannot verify them. Label normalises arbitrary scheme names to
             // `http-<lowercased>` (RFC 7235 schemes are case-insensitive).
-            return new SchemeClassification(
-                SchemeKind::Unsupported,
-                unsupportedTypeLabel: 'http-' . strtolower($scheme),
-            );
+            return SchemeClassification::unsupported('http-' . strtolower($scheme));
         }
 
         if ($type === 'oauth2') {
-            return new SchemeClassification(SchemeKind::Unsupported, unsupportedTypeLabel: 'OAuth2');
+            return SchemeClassification::unsupported('OAuth2');
         }
         if ($type === 'openIdConnect') {
-            return new SchemeClassification(SchemeKind::Unsupported, unsupportedTypeLabel: 'OpenID Connect');
+            return SchemeClassification::unsupported('OpenID Connect');
         }
         if ($type === 'mutualTLS') {
-            return new SchemeClassification(SchemeKind::Unsupported, unsupportedTypeLabel: 'Mutual TLS');
+            return SchemeClassification::unsupported('Mutual TLS');
         }
 
-        return new SchemeClassification(
-            SchemeKind::Malformed,
+        return SchemeClassification::malformed(
             "unknown type '{$type}' — OpenAPI 3.x enumerates apiKey|http|oauth2|openIdConnect|mutualTLS.",
         );
     }

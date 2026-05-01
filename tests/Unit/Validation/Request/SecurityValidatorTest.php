@@ -12,6 +12,7 @@ use Studio\OpenApiContractTesting\Validation\Request\SecurityValidator;
 
 use function restore_error_handler;
 use function set_error_handler;
+use function str_starts_with;
 
 class SecurityValidatorTest extends TestCase
 {
@@ -160,13 +161,7 @@ class SecurityValidatorTest extends TestCase
     }
 
     // ========================================
-    // Loud-warning behaviour for unsupported security schemes (issue #146).
-    //
-    // The validator silent-passes oauth2 / openIdConnect / mutualTLS / http
-    // (non-bearer) requirement entries (false-negative avoidance), but it
-    // also fires a one-shot E_USER_WARNING per scheme name so users notice
-    // the silent pass — green tests against an unauthenticated request are
-    // the worst-class failure mode for a contract-testing tool.
+    // Loud-warning behaviour for unsupported security schemes.
     // ========================================
 
     #[Test]
@@ -311,8 +306,8 @@ class SecurityValidatorTest extends TestCase
         $operation = ['security' => [['OAuth' => []]]];
 
         $count = 0;
-        set_error_handler(static function (int $errno) use (&$count): bool {
-            if ($errno === E_USER_WARNING) {
+        set_error_handler(static function (int $errno, string $errstr) use (&$count): bool {
+            if ($errno === E_USER_WARNING && str_starts_with($errstr, '[security]')) {
                 $count++;
 
                 return true;
@@ -348,7 +343,7 @@ class SecurityValidatorTest extends TestCase
 
         $captured = [];
         set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
-            if ($errno === E_USER_WARNING) {
+            if ($errno === E_USER_WARNING && str_starts_with($errstr, '[security]')) {
                 $captured[] = $errstr;
 
                 return true;
@@ -401,7 +396,7 @@ class SecurityValidatorTest extends TestCase
 
         $captured = null;
         set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
-            if ($errno === E_USER_WARNING) {
+            if ($errno === E_USER_WARNING && str_starts_with($errstr, '[security]')) {
                 $captured = $errstr;
 
                 return true;
@@ -440,8 +435,8 @@ class SecurityValidatorTest extends TestCase
     public function warning_does_not_change_validation_outcome(): void
     {
         // OAuth2 is silently passed (false-negative avoidance) — the warning
-        // is purely a side-channel. The actual return value must remain `[]`
-        // even when the warning fires, otherwise the issue #146 fix would
+        // is purely a side-channel. The return value must remain `[]` even
+        // when the warning fires, otherwise the warning emission would
         // accidentally regress the false-negative-avoidance behaviour.
         $spec = [
             'components' => [
@@ -491,6 +486,179 @@ class SecurityValidatorTest extends TestCase
         $this->assertStringContainsString("'oauth2_user'", $warnings[0]);
     }
 
+    #[Test]
+    public function http_with_missing_scheme_field_is_hard_error_not_warning(): void
+    {
+        // `type: http` with no `scheme` key is malformed per OAS 3.x. It must
+        // surface as a hard error rather than fall through to Unsupported
+        // (which would emit the silent-pass warning). Without the malformed
+        // guard the next code path would `strtolower(null)` and fatal — so
+        // this also pins that the malformed branch fires before label
+        // construction.
+        $spec = [
+            'components' => [
+                'securitySchemes' => [
+                    'Broken' => ['type' => 'http'],
+                ],
+            ],
+        ];
+        $operation = ['security' => [['Broken' => []]]];
+
+        [$errors, $warnings] = $this->validateCapturingWarnings(
+            'GET',
+            '/v1/x',
+            $spec,
+            $operation,
+        );
+
+        $this->assertCount(1, $errors);
+        $this->assertStringContainsString('is malformed', $errors[0]);
+        $this->assertStringContainsString("'scheme' field", $errors[0]);
+        $this->assertSame([], $warnings, 'malformed must take precedence over Unsupported warning');
+    }
+
+    #[Test]
+    public function http_with_empty_scheme_value_is_hard_error_not_warning(): void
+    {
+        // Empty / whitespace-only `scheme` is the same defect class as a
+        // missing field — it would otherwise fall through to Unsupported with
+        // a meaningless `http-` label. Pin the rejection at the malformed
+        // boundary so users are pushed to fix the spec.
+        $spec = [
+            'components' => [
+                'securitySchemes' => [
+                    'Broken' => ['type' => 'http', 'scheme' => '   '],
+                ],
+            ],
+        ];
+        $operation = ['security' => [['Broken' => []]]];
+
+        [$errors, $warnings] = $this->validateCapturingWarnings(
+            'GET',
+            '/v1/x',
+            $spec,
+            $operation,
+        );
+
+        $this->assertCount(1, $errors);
+        $this->assertStringContainsString('is malformed', $errors[0]);
+        $this->assertSame([], $warnings, 'empty `scheme` is malformed, not silent-pass');
+    }
+
+    #[Test]
+    public function two_unsupported_types_in_same_entry_each_warn(): void
+    {
+        // An AND-entry combining two distinct unsupported types
+        // (oauth2 + openIdConnect) must produce two warnings — one per
+        // scheme name. Guards against an early-break refactor that would
+        // silently drop the second warning.
+        $spec = [
+            'components' => [
+                'securitySchemes' => [
+                    'oauth2_user' => ['type' => 'oauth2', 'flows' => []],
+                    'OIDC' => ['type' => 'openIdConnect', 'openIdConnectUrl' => 'https://idp.example/.well-known/openid-configuration'],
+                ],
+            ],
+        ];
+        $operation = [
+            'security' => [
+                ['oauth2_user' => [], 'OIDC' => []],
+            ],
+        ];
+
+        [$errors, $warnings] = $this->validateCapturingWarnings(
+            'GET',
+            '/v1/x',
+            $spec,
+            $operation,
+        );
+
+        $this->assertSame([], $errors);
+        $this->assertCount(2, $warnings);
+        $this->assertStringContainsString("'oauth2_user'", $warnings[0]);
+        $this->assertStringContainsString("'OIDC'", $warnings[1]);
+    }
+
+    #[Test]
+    public function malformed_and_unsupported_in_same_entry_emits_both_signals(): void
+    {
+        // The validator iterates every scheme in the entry independently:
+        // a malformed sibling produces a hard error, AND the unsupported
+        // sibling fires its silent-pass warning. Pinning this prevents an
+        // accidental refactor that would short-circuit on the first
+        // malformed and lose the warning (or vice-versa).
+        $spec = [
+            'components' => [
+                'securitySchemes' => [
+                    'Broken' => ['type' => 'htpp'],
+                    'OAuth' => ['type' => 'oauth2', 'flows' => []],
+                ],
+            ],
+        ];
+        $operation = ['security' => [['Broken' => [], 'OAuth' => []]]];
+
+        [$errors, $warnings] = $this->validateCapturingWarnings(
+            'GET',
+            '/v1/x',
+            $spec,
+            $operation,
+        );
+
+        $this->assertCount(1, $errors);
+        $this->assertStringContainsString('is malformed', $errors[0]);
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString("'OAuth'", $warnings[0]);
+    }
+
+    #[Test]
+    public function root_level_security_with_oauth2_warns(): void
+    {
+        // Operation-level `security` is absent → root-level inherited.
+        // Warning must fire identically to the operation-level path.
+        $spec = [
+            'security' => [['OAuth' => []]],
+            'components' => [
+                'securitySchemes' => [
+                    'OAuth' => ['type' => 'oauth2', 'flows' => []],
+                ],
+            ],
+        ];
+
+        [$errors, $warnings] = $this->validateCapturingWarnings(
+            'GET',
+            '/v1/inherited',
+            $spec,
+            [],
+        );
+
+        $this->assertSame([], $errors);
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString("'OAuth'", $warnings[0]);
+    }
+
+    #[Test]
+    public function warning_includes_actionable_workaround_text(): void
+    {
+        // The warning's value to users is the actionable closing line that
+        // tells them how to verify the bearer-token surface manually. If a
+        // future refactor trims the message, this assertion fires before the
+        // user-facing payload silently disappears.
+        $spec = [
+            'components' => [
+                'securitySchemes' => [
+                    'OAuth' => ['type' => 'oauth2', 'flows' => []],
+                ],
+            ],
+        ];
+        $operation = ['security' => [['OAuth' => []]]];
+
+        [, $warnings] = $this->validateCapturingWarnings('GET', '/v1/x', $spec, $operation);
+
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString('Workaround:', $warnings[0]);
+        $this->assertStringContainsString('split the bearer-token surface', $warnings[0]);
+    }
+
     /**
      * @param array<string, mixed> $spec
      * @param array<string, mixed> $operation
@@ -507,7 +675,7 @@ class SecurityValidatorTest extends TestCase
     ): array {
         $captured = [];
         set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
-            if ($errno === E_USER_WARNING) {
+            if ($errno === E_USER_WARNING && str_starts_with($errstr, '[security]')) {
                 $captured[] = $errstr;
 
                 return true;
