@@ -949,6 +949,7 @@ This is a contract-testing tool: where we can't enforce a constraint precisely, 
 
 ### Body validation
 - **Validated**: `application/json` and any `+json` structured-syntax suffix (RFC 6838), and content keys using ranges (`application/*`, `*/*`) — the matcher tries exact match first, then `<type>/*`, then `*/*`.
+- **Multi-JSON-per-status specs** (e.g. `application/json` + `application/problem+json` for the same status): when the actual response Content-Type is supplied, schema validation prefers the spec key that exactly matches the response Content-Type before falling back to the first JSON key. A problem-details body served as `application/problem+json` is judged against its own schema, not the success-shape `application/json` schema. Vendor `+json` suffixes the spec doesn't enumerate (e.g. `application/vnd.example.v1+json`) still fall through to the first JSON key, preserving the legacy interchangeable-JSON behaviour for that case.
 - **Presence-only** (no schema validation): every other media type, including `application/xml`, `multipart/form-data`, `application/x-www-form-urlencoded`, `text/plain`, and `application/octet-stream`. The validator confirms the spec declares the content type but does not check the body. The orchestrator marks these responses as `Skipped` for coverage reporting.
 - **Multipart `encoding` object**: per-part `contentType` / `headers` / `style` / `explode` are not consulted.
 

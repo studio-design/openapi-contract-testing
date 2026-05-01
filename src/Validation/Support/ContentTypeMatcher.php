@@ -53,6 +53,46 @@ final class ContentTypeMatcher
     }
 
     /**
+     * Find the JSON-compatible content type key that best matches a given
+     * actual response Content-Type. Behaves like {@see findJsonContentType()}
+     * but prefers an exact spec key match before falling back to the first
+     * JSON key in the spec.
+     *
+     * Resolution priority (most-specific first):
+     *   1. Exact case-insensitive match between the response Content-Type
+     *      and a JSON-flavoured spec key (e.g. response
+     *      `application/problem+json` → spec key `application/problem+json`)
+     *   2. {@see findJsonContentType()} fallback (first JSON key, then
+     *      `application/*`)
+     *
+     * The exact-match-first preference is what allows multi-JSON specs
+     * (e.g. `application/json` AND `application/problem+json` for the same
+     * status) to validate each Content-Type against its own schema. Without
+     * it, a problem-details body would be wrongly judged against the first
+     * key's success-shape schema.
+     *
+     * `$normalizedResponseType` must be the response Content-Type stripped
+     * of parameters and lower-cased, as produced by
+     * {@see normalizeMediaType()}. Callers that pass non-JSON types should
+     * route to {@see findContentTypeKey()} instead — this method is only
+     * useful when the actual Content-Type is JSON-flavoured.
+     *
+     * @param array<string, mixed> $content
+     */
+    public static function findJsonContentTypeForResponse(
+        string $normalizedResponseType,
+        array $content,
+    ): ?string {
+        foreach ($content as $contentType => $_mediaType) {
+            if (strtolower((string) $contentType) === $normalizedResponseType) {
+                return (string) $contentType;
+            }
+        }
+
+        return self::findJsonContentType($content);
+    }
+
+    /**
      * Extract the media type portion before any parameters (e.g. charset),
      * and return it lower-cased.
      *

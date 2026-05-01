@@ -58,7 +58,12 @@ final class ResponseBodyValidator
     ): ResponseBodyValidationResult {
         // When the actual response Content-Type is provided, handle content negotiation:
         // non-JSON types are checked for spec presence only, while JSON-compatible types
-        // fall through to schema validation against the first JSON media type in the spec.
+        // fall through to schema validation. For JSON-flavoured response Content-Types
+        // we prefer the spec key that exactly matches the response Content-Type before
+        // falling back to the first JSON key — this lets multi-JSON specs (e.g.
+        // `application/json` + `application/problem+json` for the same status) validate
+        // each Content-Type against its own schema.
+        $jsonContentType = null;
         if ($responseContentType !== null) {
             $normalizedType = ContentTypeMatcher::normalizeMediaType($responseContentType);
 
@@ -79,13 +84,13 @@ final class ResponseBodyValidator
                 );
             }
 
-            // JSON-compatible response: continue to JSON schema validation below.
-            // JSON types are treated as interchangeable (e.g. application/vnd.api+json
-            // validates against an application/json spec entry) because the schema is
-            // the same regardless of the specific JSON media type.
+            // JSON-compatible response: prefer exact match, then fall back to the first JSON key.
+            $jsonContentType = ContentTypeMatcher::findJsonContentTypeForResponse($normalizedType, $content);
         }
 
-        $jsonContentType = ContentTypeMatcher::findJsonContentType($content);
+        if ($jsonContentType === null) {
+            $jsonContentType = ContentTypeMatcher::findJsonContentType($content);
+        }
 
         // If no JSON-compatible content type is defined, skip body validation.
         // This validator only handles JSON schemas; non-JSON types (e.g. text/html,
