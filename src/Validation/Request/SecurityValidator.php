@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Validation\Request;
 
+use const E_USER_WARNING;
+
 use Studio\OpenApiContractTesting\Validation\Support\HeaderNormalizer;
 
 use function array_key_exists;
@@ -16,15 +18,35 @@ use function is_string;
 use function preg_match;
 use function sprintf;
 use function strtolower;
+use function trigger_error;
 
 final class SecurityValidator
 {
+    /** @var array<string, true> */
+    private static array $warnedSchemeNames = [];
+
+    /**
+     * Reset the per-process "already-warned" set used by
+     * {@see warnIfFirstEncounter()}. Test seam — production code never needs
+     * this. The convention mirrors {@see OpenApiSchemaConverter}'s same-named
+     * method so test setUp/tearDown patterns stay symmetric across the codebase.
+     *
+     * @internal
+     */
+    public static function resetWarningStateForTesting(): void
+    {
+        self::$warnedSchemeNames = [];
+    }
+
     /**
      * Validate the endpoint's `security` requirement against the incoming
      * request. Supports `http` + `bearer` and `apiKey` (in: header|query|cookie)
-     * schemes. OAuth2 / OpenID Connect are out of scope for phase 1 and are
-     * treated as unsupported: any requirement entry containing an unsupported
-     * scheme is skipped entirely (contributes neither pass nor fail).
+     * schemes. OAuth2 / OpenID Connect / mutualTLS / `http` + `basic` /
+     * `http` + `digest` are out of scope: any requirement entry containing one
+     * of these is skipped entirely (contributes neither pass nor fail) AND
+     * triggers a one-shot {@see E_USER_WARNING} per scheme name to surface the
+     * silent-pass to users — a green test against an unauthenticated request
+     * is the worst-class failure mode for a contract-testing tool.
      *
      * Resolution: operation-level `security` takes precedence; otherwise the
      * root-level `security` is inherited. `security: []` (empty array) explicitly
@@ -163,6 +185,12 @@ final class SecurityValidator
                 }
 
                 if ($classification->kind === SchemeKind::Unsupported) {
+                    self::warnIfFirstEncounter(
+                        $schemeName,
+                        $classification->unsupportedTypeLabel ?? 'unknown',
+                        $method,
+                        $matchedPath,
+                    );
                     $entryHasUnsupported = true;
 
                     continue;
@@ -225,6 +253,45 @@ final class SecurityValidator
     }
 
     /**
+     * Issue a one-shot E_USER_WARNING for security schemes the validator
+     * cannot enforce (`oauth2`, `openIdConnect`, `mutualTLS`,
+     * `http` + non-`bearer`). Without this, requirement entries containing
+     * only unsupported schemes silently pass — a green test against an
+     * unauthenticated request misleads users into thinking the endpoint is
+     * actually verified.
+     *
+     * Dedup is per `components.securitySchemes` key, not per type: a spec
+     * that defines both `oauth2_user` and `oauth2_admin` will warn twice (once
+     * each), so users can see how many silent-pass schemes exist in their spec.
+     */
+    private static function warnIfFirstEncounter(
+        string $schemeName,
+        string $typeLabel,
+        string $method,
+        string $matchedPath,
+    ): void {
+        if (isset(self::$warnedSchemeNames[$schemeName])) {
+            return;
+        }
+
+        self::$warnedSchemeNames[$schemeName] = true;
+        trigger_error(
+            sprintf(
+                "[security] %s scheme '%s' is silently passed (no token check) — %s %s. "
+                    . 'The opis/json-schema-based validator cannot verify oauth2 / openIdConnect / '
+                    . 'mutualTLS / http-basic / http-digest credentials. Your test will not detect '
+                    . 'a missing or invalid token. Workaround: split the bearer-token surface into '
+                    . 'a separate test, or assert the Authorization header presence manually.',
+                $typeLabel,
+                $schemeName,
+                $method,
+                $matchedPath,
+            ),
+            E_USER_WARNING,
+        );
+    }
+
+    /**
      * Classify a security scheme definition. {@see SchemeKind} documents the
      * four outcomes; the `$reason` field of the returned classification is
      * populated only for `Malformed` to explain which spec field is broken.
@@ -261,12 +328,23 @@ final class SecurityValidator
                 return new SchemeClassification(SchemeKind::Bearer);
             }
 
-            // http + basic / digest / etc. are well-formed but phase 1 cannot validate them.
-            return new SchemeClassification(SchemeKind::Unsupported);
+            // http + basic / digest / etc. are well-formed but the validator
+            // cannot verify them. Label normalises arbitrary scheme names to
+            // `http-<lowercased>` (RFC 7235 schemes are case-insensitive).
+            return new SchemeClassification(
+                SchemeKind::Unsupported,
+                unsupportedTypeLabel: 'http-' . strtolower($scheme),
+            );
         }
 
-        if ($type === 'oauth2' || $type === 'openIdConnect' || $type === 'mutualTLS') {
-            return new SchemeClassification(SchemeKind::Unsupported);
+        if ($type === 'oauth2') {
+            return new SchemeClassification(SchemeKind::Unsupported, unsupportedTypeLabel: 'OAuth2');
+        }
+        if ($type === 'openIdConnect') {
+            return new SchemeClassification(SchemeKind::Unsupported, unsupportedTypeLabel: 'OpenID Connect');
+        }
+        if ($type === 'mutualTLS') {
+            return new SchemeClassification(SchemeKind::Unsupported, unsupportedTypeLabel: 'Mutual TLS');
         }
 
         return new SchemeClassification(
