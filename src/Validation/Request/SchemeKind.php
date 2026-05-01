@@ -8,10 +8,12 @@ namespace Studio\OpenApiContractTesting\Validation\Request;
  * Classification result produced by {@see SecurityValidator::classifyScheme()}.
  *
  * - `Bearer` / `ApiKey` — well-formed schemes that this library can validate.
- * - `Unsupported`       — well-formed but intentionally deferred for phase 1
+ * - `Unsupported`       — well-formed but the validator cannot enforce them
  *                         (oauth2, openIdConnect, mutualTLS, http+non-bearer).
  *                         A requirement entry containing any `Unsupported`
- *                         scheme is skipped entirely to avoid false negatives.
+ *                         scheme is skipped entirely to avoid false negatives,
+ *                         but a loud one-shot warning is emitted so the
+ *                         silent pass does not stay invisible.
  * - `Malformed`         — the spec declaration is broken (missing fields or
  *                         an unknown `type`). Always surfaced as a hard error
  *                         so the spec author is pushed to fix it, even if a

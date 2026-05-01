@@ -64,6 +64,16 @@ the public API without those leaking into the SemVer contract.
   Specs using OpenAPI 3.x §4.7.10 media-type ranges previously skipped
   JSON schema validation silently because the matcher only compared
   literally.
+- **Security validator — `oauth2` / `openIdConnect` / `mutualTLS` / `http`
+  (non-`bearer`) silent-pass** now emits a one-shot `E_USER_WARNING` per
+  scheme name on first encounter. The validator continues to silently pass
+  requirements containing only these schemes (false-negative avoidance —
+  blocking a test for a spec we cannot evaluate is worse than letting it
+  through), but the warning surfaces the limitation so a green test against
+  an unauthenticated request does not stay invisible. This is the
+  worst-class silent failure for a contract-testing tool, and matches the
+  schema-converter precedent of warning loudly when a constraint is not
+  being enforced. Closes #146.
 
 ### Changed
 

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit;
 
+use const E_USER_WARNING;
+
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -12,7 +14,12 @@ use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Validation\Request\SecurityValidator;
 use Symfony\Component\HttpFoundation\Request;
+
+use function restore_error_handler;
+use function set_error_handler;
+use function str_starts_with;
 
 // Load namespace-level config() mock before the trait resolves the function call.
 require_once __DIR__ . '/../Helpers/LaravelConfigMock.php';
@@ -34,6 +41,7 @@ class ValidatesOpenApiSchemaAutoInjectBearerTest extends TestCase
         OpenApiSpecLoader::reset();
         OpenApiSpecLoader::configure(__DIR__ . '/../fixtures/specs');
         OpenApiCoverageTracker::reset();
+        SecurityValidator::resetWarningStateForTesting();
         $GLOBALS['__openapi_testing_config'] = [
             'openapi-contract-testing.default_spec' => 'petstore-3.0',
             'openapi-contract-testing.auto_validate_request' => true,
@@ -46,6 +54,7 @@ class ValidatesOpenApiSchemaAutoInjectBearerTest extends TestCase
         unset($GLOBALS['__openapi_testing_config']);
         OpenApiSpecLoader::reset();
         OpenApiCoverageTracker::reset();
+        SecurityValidator::resetWarningStateForTesting();
         parent::tearDown();
     }
 
@@ -132,14 +141,25 @@ class ValidatesOpenApiSchemaAutoInjectBearerTest extends TestCase
     #[Test]
     public function inject_is_noop_on_oauth2_only_endpoint(): void
     {
-        // oauth2-only endpoints are classified as Unsupported by the
-        // validator (phase 1), so the requirement entry is skipped; injecting
-        // bearer would be a lie. Validation must pass on its own (skipped).
+        // oauth2-only endpoints are classified as Unsupported, so the
+        // requirement entry is skipped; injecting bearer would be a lie.
+        // Validation must pass on its own (skipped). The silent-pass now
+        // also fires a one-shot E_USER_WARNING; suppress locally because
+        // SecurityValidatorTest covers warning contents.
         $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_inject_dummy_bearer'] = true;
 
         $request = Request::create('/v1/secure/oauth2-only', 'GET');
 
-        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::GET, '/v1/secure/oauth2-only');
+        set_error_handler(
+            static fn(int $errno, string $errstr): bool => $errno === E_USER_WARNING &&
+                str_starts_with($errstr, '[security]'),
+        );
+
+        try {
+            $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::GET, '/v1/secure/oauth2-only');
+        } finally {
+            restore_error_handler();
+        }
 
         $this->assertArrayHasKey(
             'GET /v1/secure/oauth2-only',

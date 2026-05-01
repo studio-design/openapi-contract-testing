@@ -4,18 +4,24 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit;
 
+use const E_USER_WARNING;
+
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Validation\Request\SecurityValidator;
 
 use function array_filter;
 use function fclose;
 use function fopen;
 use function implode;
+use function restore_error_handler;
+use function set_error_handler;
 use function str_contains;
+use function str_starts_with;
 use function strtolower;
 
 class OpenApiRequestValidatorTest extends TestCase
@@ -28,11 +34,19 @@ class OpenApiRequestValidatorTest extends TestCase
         OpenApiSpecLoader::reset();
         OpenApiSpecLoader::configure(__DIR__ . '/../fixtures/specs');
         $this->validator = new OpenApiRequestValidator();
+        // Several integration-style tests below exercise oauth2 / openIdConnect
+        // endpoints that now fire a one-shot E_USER_WARNING per scheme name.
+        // Reset so each test starts with a clean warning ledger and run order
+        // does not affect outcomes. SecurityValidatorTest covers the warning
+        // contents; the tests here only check the silent-pass return value,
+        // so warnings are captured-and-discarded per test where necessary.
+        SecurityValidator::resetWarningStateForTesting();
     }
 
     protected function tearDown(): void
     {
         OpenApiSpecLoader::reset();
+        SecurityValidator::resetWarningStateForTesting();
         parent::tearDown();
     }
 
@@ -2457,7 +2471,7 @@ class OpenApiRequestValidatorTest extends TestCase
         // When every requirement entry contains only unsupported schemes
         // (oauth2 / openIdConnect) we have nothing we can validate — pass
         // rather than block the test (false-negative avoidance).
-        $result = $this->validator->validate(
+        $result = $this->suppressSilentPassWarning(fn() => $this->validator->validate(
             'petstore-3.0',
             'GET',
             '/v1/secure/oauth2-only',
@@ -2465,7 +2479,7 @@ class OpenApiRequestValidatorTest extends TestCase
             [],
             null,
             null,
-        );
+        ));
 
         $this->assertTrue($result->isValid(), $result->errorMessage());
     }
@@ -2492,7 +2506,7 @@ class OpenApiRequestValidatorTest extends TestCase
         // Bearer entry is validatable and fails; OAuth2 entry is skipped.
         // Since the only validatable entry failed and no other entry passed,
         // overall result is fail.
-        $result = $this->validator->validate(
+        $result = $this->suppressSilentPassWarning(fn() => $this->validator->validate(
             'petstore-3.0',
             'GET',
             '/v1/secure/bearer-or-oauth2',
@@ -2500,7 +2514,7 @@ class OpenApiRequestValidatorTest extends TestCase
             [],
             null,
             null,
-        );
+        ));
 
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString('[security]', $result->errorMessage());
@@ -2756,7 +2770,7 @@ class OpenApiRequestValidatorTest extends TestCase
     #[Test]
     public function v31_security_oauth2_only_silent_skips(): void
     {
-        $result = $this->validator->validate(
+        $result = $this->suppressSilentPassWarning(fn() => $this->validator->validate(
             'petstore-3.1',
             'GET',
             '/v1/secure/oauth2-only',
@@ -2764,7 +2778,7 @@ class OpenApiRequestValidatorTest extends TestCase
             [],
             null,
             null,
-        );
+        ));
 
         $this->assertTrue($result->isValid(), $result->errorMessage());
     }
@@ -2871,7 +2885,7 @@ class OpenApiRequestValidatorTest extends TestCase
         // Two entries (oauth2 + oidc) are both unsupported. With no validatable
         // entries remaining, overall result must be pass — prevents a regression
         // where "no satisfied entry" is conflated with "no evaluable entry".
-        $result = $this->validator->validate(
+        $result = $this->suppressSilentPassWarning(fn() => $this->validator->validate(
             'security-edge-cases',
             'GET',
             '/two-unsupported-entries',
@@ -2879,7 +2893,7 @@ class OpenApiRequestValidatorTest extends TestCase
             [],
             null,
             null,
-        );
+        ));
 
         $this->assertTrue($result->isValid(), $result->errorMessage());
     }
@@ -2892,7 +2906,7 @@ class OpenApiRequestValidatorTest extends TestCase
         // as unevaluable (we cannot check oauth2, so we cannot confirm AND).
         // Overall result: pass. Pins the documented tradeoff so a future policy
         // change is an explicit decision, not an accidental regression.
-        $result = $this->validator->validate(
+        $result = $this->suppressSilentPassWarning(fn() => $this->validator->validate(
             'security-edge-cases',
             'GET',
             '/and-with-unsupported',
@@ -2900,7 +2914,7 @@ class OpenApiRequestValidatorTest extends TestCase
             [],
             null,
             null,
-        );
+        ));
 
         $this->assertTrue($result->isValid(), $result->errorMessage());
     }
@@ -2991,5 +3005,31 @@ class OpenApiRequestValidatorTest extends TestCase
         $this->assertStringContainsString('[path.id]', $joined, 'path-param error must survive body throw');
         $this->assertStringContainsString('[request-body]', $joined, 'body throw must surface as boundary error');
         $this->assertStringContainsString('InvalidKeywordException', $joined, 'exception class name preserved for diagnostics');
+    }
+
+    /**
+     * Run a callable while suppressing the silent-pass `[security]`
+     * `E_USER_WARNING` emitted for oauth2 / openIdConnect / mutualTLS /
+     * http-basic / http-digest endpoints. Warning *contents* are covered by
+     * `SecurityValidatorTest`; the integration tests here only verify the
+     * {@see OpenApiRequestValidator} return value, so the warning is
+     * captured-and-discarded.
+     *
+     * Filter is intent-driven: only warnings starting with `[security]` are
+     * absorbed. Unrelated `E_USER_WARNING`s (e.g. a future deprecation in
+     * the validator pipeline) bubble up so they cannot silently pass — the
+     * exact pattern this PR was created to prevent.
+     */
+    private function suppressSilentPassWarning(callable $fn): mixed
+    {
+        set_error_handler(static function (int $errno, string $errstr): bool {
+            return $errno === E_USER_WARNING && str_starts_with($errstr, '[security]');
+        });
+
+        try {
+            return $fn();
+        } finally {
+            restore_error_handler();
+        }
     }
 }
