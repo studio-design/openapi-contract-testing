@@ -72,7 +72,52 @@ If `composer cs-check` fails, run `composer cs` and commit the result.
    sidecar protocol must carry an `@internal` annotation in the docblock
    with a one-line explanation of why they cannot be `private`
 4. Document the behaviour in README before merging
-5. Add an entry to `CHANGELOG.md` under `## Unreleased`
+
+## Releases
+
+Releases are automated by [release-please](https://github.com/googleapis/release-please).
+Maintainers do **not** edit `CHANGELOG.md` or push tags by hand.
+
+How it works:
+
+1. Every push to `main` runs the `release-please` workflow.
+2. The bot scans the Conventional Commits since the last release tag and
+   either opens or updates a "release PR" titled `chore(main): release X.Y.Z`.
+   The PR diff bumps `CHANGELOG.md` and `.release-please-manifest.json`.
+3. The proposed version is derived from the commit prefixes:
+   - `fix:` → patch bump (`X.Y.Z` → `X.Y.(Z+1)`)
+   - `feat:` → minor bump (`X.Y.Z` → `X.(Y+1).0`)
+   - `feat!:` or `BREAKING CHANGE:` footer → major bump (`X.Y.Z` → `(X+1).0.0`)
+   - `docs:` / `chore:` / `refactor:` / `test:` / etc. → no bump on their own
+4. When a maintainer merges the release PR, the bot creates the git tag and
+   publishes the GitHub Release with notes generated from the changelog
+   entry. Packagist syncs automatically from the tag webhook.
+
+### Discipline
+
+- **Never push a `v*` tag manually.** The release-please manifest tracks
+  the last released SHA; a hand-tag desyncs it and the next release PR
+  proposes a wrong version. If you need a hotfix release, land the fix
+  via a regular `fix:` PR and let the bot's release PR ship it.
+- **Never edit `CHANGELOG.md` manually** in feature/fix PRs. The release
+  PR is the only place CHANGELOG should change. If a release entry is
+  worded poorly, edit the release PR before merging it.
+- **Squash-merge release PRs as-is.** Do not edit the squash subject —
+  the bot uses it to detect that the merged commit is a release.
+
+### Forcing a specific bump
+
+If a `fix:`-only batch should ship as a minor release (e.g., the fix is
+behaviourally significant), use a `Release-As: X.Y.Z` footer in any commit
+on `main`:
+
+```
+fix(validator): rewire something important
+
+Release-As: 1.1.0
+```
+
+The release PR will adopt that version on its next refresh.
 
 ## Reporting bugs
 
