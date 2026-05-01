@@ -22,6 +22,7 @@ use function get_object_vars;
 use function implode;
 use function in_array;
 use function is_array;
+use function is_int;
 use function is_string;
 use function preg_match;
 use function property_exists;
@@ -238,13 +239,27 @@ final class SchemaValidatorRunner
     /**
      * Walk `$schema` via raw data-path segments and return the keys of the
      * `properties` keyword at that location, or null when the path doesn't
-     * resolve through plain property nesting (e.g. composition keywords,
-     * `additionalProperties: <schema>`, missing keyword).
+     * resolve through plain property nesting / array-element nesting.
      *
-     * Conservative: only steps through `properties.<name>`. Segments are
-     * compared as raw strings — opis already gives us decoded segments via
-     * `DataInfo::fullPath()`, so a property declared as `a/b` matches without
-     * any JSON-Pointer escape handling on our side.
+     * Steps through:
+     * - `properties.<name>` for string segments (object property access)
+     * - `items` for int segments (array element access). Both single-schema
+     *   form (`items: <stdClass>`) and Draft 07 tuple form
+     *   (`items: [<stdClass>, <stdClass>, ...]`) are supported. The tuple
+     *   form is also the lowered shape that `OpenApiSchemaConverter` produces
+     *   for OAS 3.1 `prefixItems`, so #161 dedup applies through that
+     *   conversion path as well.
+     *
+     * Stays conservative on shapes the dedup must NOT silently rewrite:
+     * composition keywords (`oneOf` / `anyOf` / `allOf`),
+     * `additionalProperties: <schema>`, `patternProperties`,
+     * `additionalItems`, boolean schemas at item level (`items: true|false`),
+     * tuple-form indices out of range, and any segment whose key/index
+     * doesn't resolve through these forms — all return null and the cascade
+     * message is left untouched. Segments are compared as raw values
+     * (opis hands us decoded segments via `DataInfo::fullPath()`), so a
+     * property declared as `a/b` matches without any JSON-Pointer escape
+     * handling on our side.
      *
      * @param array<int, mixed> $segments
      *
@@ -255,6 +270,25 @@ final class SchemaValidatorRunner
         $current = $schema;
 
         foreach ($segments as $segment) {
+            if (is_int($segment)) {
+                if (!property_exists($current, 'items')) {
+                    return null;
+                }
+                $items = $current->items;
+                if ($items instanceof stdClass) {
+                    $current = $items;
+
+                    continue;
+                }
+                if (is_array($items) && isset($items[$segment]) && $items[$segment] instanceof stdClass) {
+                    $current = $items[$segment];
+
+                    continue;
+                }
+
+                return null;
+            }
+
             if (!property_exists($current, 'properties') || !$current->properties instanceof stdClass) {
                 return null;
             }
