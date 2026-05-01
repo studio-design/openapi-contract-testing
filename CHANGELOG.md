@@ -8,6 +8,23 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 
 ## Unreleased
 
+## v0.19.0 — 2026-05-01
+
+Second dogfood-driven UX fix release. The internal-product run of v0.18.0
+confirmed that the original cascade dedup landed cleanly at the document
+root, but the same suite surfaced a follow-up: any `{ data: [Item] }`-shaped
+envelope still produced a tower of `additionalProperties` cascade lines
+because the walker bailed at the first array index. v0.19.0 extends the
+walker to descend through `items` (single-schema form and Draft 07 tuple
+form, including the shape `OpenApiSchemaConverter` lowers OAS 3.1
+`prefixItems` to) and adds six regression tests covering tuple
+out-of-range, composition above an array, mixed `properties` + `items`,
+digit-only property names, empty array data, and mixed-boolean tuples.
+The conservative bail-out contract is unchanged: composition keywords,
+`additionalProperties: <schema>`, `patternProperties`, `additionalItems`,
+and boolean schemas at item level still preserve the original message,
+so a real additional-property violation is never silently swallowed.
+
 ### Fixed
 
 - **Schema validator — `additionalProperties: false` cascade dedup now
