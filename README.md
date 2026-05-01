@@ -1015,6 +1015,42 @@ The library uses PHP's native `trigger_error(..., E_USER_WARNING)` as the loud-s
 
 **Per-process dedup vs per-test:** the dedup state is process-global. PHPUnit runs all tests in one process by default, so a warning fired in test A is not fired again in test B even if both schemas exhibit the issue. The `*::resetWarningStateForTesting()` helpers (annotated `@internal`) exist as test seams for the converter / security validator's own tests; downstream tests rarely need them.
 
+## Versioning and support policy
+
+This library follows [Semantic Versioning 2.0](https://semver.org/). v1.0.0 is the API stability commitment: anything not marked `@internal` in v1.0.0 is covered by SemVer for the entire v1.x line.
+
+### What's covered by SemVer in v1.x
+
+- Public class names and namespaces (anything not marked `@internal`)
+- Public method signatures (parameters, return types, visibility)
+- Public constants and their values
+- Enum cases (additions are minor; removals or renames are major)
+- The `OpenApiValidationResult` shape (`outcome()`, `errors()`, `matchedPath()`, `skipReason()`, `isValid()`, `isSkipped()`)
+- The CLI surface of `bin/openapi-coverage-merge` (flags, exit codes, sidecar JSON wire format via `STATE_FORMAT_VERSION`)
+- The `OpenApiCoverageExtension` PHPUnit configuration parameters (`spec_base_path`, `strip_prefixes`, `specs`, `output_file`, `console_output`, …)
+- The Laravel `ValidatesOpenApiSchema` trait's public methods
+- The category prefixes used in `E_USER_WARNING` messages (`[security]`, `[OpenAPI Schema]`)
+
+### What's NOT covered by SemVer
+
+- Anything marked `@internal` — including the `Internal\` and `Validation\Support\` namespaces, the per-validator helpers under `Validation\Request\` / `Validation\Response\`, `Spec\OpenApiSchemaConverter` / `Spec\OpenApiPathMatcher` / `Spec\OpenApiRefResolver` / `Spec\OpenApiPathSuggester`, the PHPUnit `CoverageReportSubscriber`, and test seams (`*::resetWarningStateForTesting()`, `OpenApiSpecLoader::reset()`, `OpenApiCoverageTracker::reset()` / `exportState()` / `importState()`).
+- Validator error message wording (we may improve them; assert on presence/category, not on exact strings).
+- The set of `format` keywords delegated to opis — we follow opis upstream, so a new format is added when opis adds it.
+- Behaviour of bug-fix releases that close a documented silent-pass case. A test that passed only because of the silent pass may start failing — that's the fix doing its job, not a SemVer break.
+
+See [UPGRADING.md](UPGRADING.md) for migration notes between versions.
+
+### Support policy
+
+| Component | Supported |
+| --- | --- |
+| PHP runtime | 8.2, 8.3, 8.4 (CI matrix). PHP 8.2 is supported until its security-EOL (2026-12); a SemVer-major bump may drop it after that. |
+| PHPUnit | 11.x, 12.x, 13.x (CI matrix). New stable PHPUnit majors are added to the matrix; older majors are dropped in a SemVer-major bump. |
+| `opis/json-schema` | `^2.6` for v1.x. A jump to `^3` would be a SemVer-major. |
+| Laravel (optional adapter) | Whatever `orchestra/testbench` `^9 || ^10 || ^11` supports. |
+
+Bug fixes and security updates land on the latest minor of v1.x. There is no LTS branch for older minors — upgrade to the latest minor to receive fixes.
+
 ## API Reference
 
 ### `OpenApiResponseValidator`

@@ -20,6 +20,9 @@ use function is_scalar;
 use function sprintf;
 use function strtolower;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class HeaderParameterValidator
 {
     public function __construct(

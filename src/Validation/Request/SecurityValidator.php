@@ -21,6 +21,9 @@ use function strtolower;
 use function trigger_error;
 use function trim;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class SecurityValidator
 {
     /** @var array<string, true> */

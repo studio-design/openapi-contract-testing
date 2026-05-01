@@ -28,6 +28,8 @@ use function trim;
 
 /**
  * @phpstan-import-type CoverageResult from OpenApiCoverageTracker
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscriber
 {

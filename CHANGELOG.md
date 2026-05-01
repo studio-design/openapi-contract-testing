@@ -26,6 +26,11 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 
 ### Documentation
 
+- **Versioning and support policy** documented in README. New section
+  pins SemVer commitments for v1.x: which classes/methods/configs are
+  frozen, which are explicitly `@internal` (and therefore not covered),
+  and the support matrix for PHP / PHPUnit / `opis/json-schema`. Refs
+  #113.
 - **Warning channel contract** is now documented in README under
   "Supported features and known limitations". Pins
   `trigger_error(..., E_USER_WARNING)` with category-tagged messages
@@ -37,6 +42,21 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
   `OpenApiValidationResult` warnings array) — those can be added in
   v1.x as additive enhancements without breaking the v1.0 contract.
   Closes #149.
+
+### Internal
+
+- **API surface audit for v1.0**: 28 implementation-detail classes
+  picked up class-level `@internal` docblock markers so the v1.0.0
+  SemVer contract excludes them. Covers the per-validator helpers
+  under `Validation\Request\` / `Validation\Response\` / `Validation\Support\`,
+  the `Spec\` machinery (`OpenApiSchemaConverter`, `OpenApiPathMatcher`,
+  `OpenApiPathSuggester`, `OpenApiRefResolver`, `RefResolutionContext`),
+  the PHPUnit `CoverageReportSubscriber` / `ConsoleOutput` enum, and
+  `Fuzz\SchemaDataGenerator`. No behavioural change — the public
+  entry points (`OpenApiResponseValidator`, `OpenApiRequestValidator`,
+  `OpenApiCoverageTracker`, `Coverage\*` renderers, `Fuzz\OpenApiEndpointExplorer`,
+  `Laravel\*`, attributes, exceptions, enums, `OpenApiSpecLoader`)
+  remain user-callable. Refs #113.
 
 ### Fixed
 

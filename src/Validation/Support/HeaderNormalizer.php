@@ -7,6 +7,9 @@ namespace Studio\OpenApiContractTesting\Validation\Support;
 use function is_string;
 use function strtolower;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class HeaderNormalizer
 {
     /**

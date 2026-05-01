@@ -9,6 +9,9 @@ use stdClass;
 use function array_is_list;
 use function is_array;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class ObjectConverter
 {
     /**

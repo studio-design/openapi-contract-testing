@@ -19,6 +19,8 @@ namespace Studio\OpenApiContractTesting\Validation\Request;
  *   warning (e.g. `OAuth2`, `OpenID Connect`, `Mutual TLS`, `http-basic`,
  *   `http-digest`).
  * - `Bearer` / `ApiKey` → both fields null.
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final readonly class SchemeClassification
 {

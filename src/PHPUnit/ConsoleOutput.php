@@ -11,6 +11,9 @@ use function getenv;
 use function mb_strtolower;
 use function trim;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 enum ConsoleOutput: string
 {
     case DEFAULT = 'default';

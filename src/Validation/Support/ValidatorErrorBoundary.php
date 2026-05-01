@@ -35,6 +35,8 @@ use function sprintf;
  * wraps lower-level errors), the previous class + message is appended so the
  * synthetic error line retains the root cause that would otherwise be lost
  * when the stack trace is discarded.
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final class ValidatorErrorBoundary
 {

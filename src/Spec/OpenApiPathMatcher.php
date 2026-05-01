@@ -20,6 +20,9 @@ use function substr;
 use function trim;
 use function usort;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class OpenApiPathMatcher
 {
     /** @var array{pattern: string, path: string, paramNames: string[], literalSegments: int}[] */

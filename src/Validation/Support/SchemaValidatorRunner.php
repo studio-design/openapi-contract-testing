@@ -12,6 +12,9 @@ use Opis\JsonSchema\Validator;
 
 use function sprintf;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class SchemaValidatorRunner
 {
     private readonly Validator $opisValidator;

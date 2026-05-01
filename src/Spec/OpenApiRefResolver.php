@@ -28,6 +28,9 @@ use function strpos;
 use function strrpos;
 use function substr;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class OpenApiRefResolver
 {
     /**

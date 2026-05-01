@@ -16,6 +16,9 @@ use function is_string;
 use function preg_match;
 use function strtolower;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class TypeCoercer
 {
     /**

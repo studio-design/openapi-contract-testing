@@ -50,6 +50,8 @@ use function trim;
  *
  * @phpstan-type HeaderObject array{required?: bool, schema?: array<string, mixed>}
  * @phpstan-type HeadersSpec array<string, HeaderObject|mixed>
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final class ResponseHeaderValidator
 {

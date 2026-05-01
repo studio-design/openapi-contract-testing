@@ -16,6 +16,9 @@ use function array_keys;
 use function implode;
 use function is_array;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class RequestBodyValidator
 {
     public function __construct(

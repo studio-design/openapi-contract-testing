@@ -11,6 +11,9 @@ use function strstr;
 use function strtolower;
 use function trim;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class ContentTypeMatcher
 {
     /**

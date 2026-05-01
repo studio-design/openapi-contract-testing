@@ -15,6 +15,8 @@ namespace Studio\OpenApiContractTesting\Validation\Response;
  *
  * Coverage tracking uses `matchedContentType` to record per-(status, media-type)
  * granularity instead of treating the whole endpoint as a single bucket.
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final readonly class ResponseBodyValidationResult
 {

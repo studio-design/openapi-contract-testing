@@ -31,6 +31,8 @@ use function strtoupper;
  *   route to this helper because the requested method is missing AND every
  *   other method is too. Rendering an explicit `(none)` keeps that case
  *   visible instead of producing "Defined methods: .".
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final class PathDiagnosticsFormatter
 {

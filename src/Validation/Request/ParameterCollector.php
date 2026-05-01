@@ -11,6 +11,9 @@ use function is_string;
 use function sprintf;
 use function strtolower;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class ParameterCollector
 {
     /**

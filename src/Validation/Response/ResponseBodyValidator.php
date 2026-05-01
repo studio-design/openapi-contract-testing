@@ -20,6 +20,9 @@ use function in_array;
 use function is_array;
 use function is_string;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class ResponseBodyValidator
 {
     public function __construct(
