@@ -8,12 +8,19 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 
 ## Unreleased
 
-The "v1.0.0 hardening" pass: a competitive review against Spectator,
+## v0.16.0 — 2026-05-01
+
+The "v1.0.0 hardening" release: a competitive review against Spectator,
 league/openapi-psr7-validator, osteel, and kirschbaum surfaced six
 silent-pass bugs in the OAS-to-Draft-07 conversion plus a content-type
-range matching gap. All six are fixed below; the API surface picks up
+range matching gap. All six are fixed below, and the security validator
+now warns loudly when oauth2 / openIdConnect / mutualTLS / http-basic /
+http-digest schemes are encountered (previously silent — the worst-class
+failure mode for a contract-testing tool). The API surface picks up
 `@internal` markers on test/serialisation helpers so v1.0.0 can freeze
-the public API without those leaking into the SemVer contract.
+the public API without those leaking into the SemVer contract. The
+release also lands tag-driven release automation, CI hardening, and
+end-to-end fixture coverage for every README-claimed schema feature.
 
 ### Fixed
 
