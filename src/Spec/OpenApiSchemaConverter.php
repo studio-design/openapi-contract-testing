@@ -19,7 +19,17 @@ use function trigger_error;
 
 final class OpenApiSchemaConverter
 {
-    /** OAS keys to remove for both 3.0 and 3.1 */
+    /**
+     * OAS keys to remove for both 3.0 and 3.1.
+     *
+     * `$schema` is stripped because the converter's output targets Draft 07
+     * (the SchemaValidatorRunner pins opis's default to 07). A spec author
+     * who inlines `$schema: ".../2020-12/schema"` (legitimate per OAS 3.1
+     * `jsonSchemaDialect`) would otherwise force opis to interpret the
+     * already-lowered schema under 2020-12, where the array-form `items`
+     * we emit for `prefixItems` is invalid. Stripping keeps the validator
+     * draft consistent with what the converter actually produces.
+     */
     private const OPENAPI_COMMON_KEYS = [
         'discriminator',
         'xml',
@@ -27,6 +37,7 @@ final class OpenApiSchemaConverter
         'example',
         'examples',
         'deprecated',
+        '$schema',
     ];
 
     /** OAS 3.0 specific keys (not in JSON Schema Draft 07) */
@@ -44,16 +55,17 @@ final class OpenApiSchemaConverter
     ];
 
     /**
-     * Draft 2019-09 / 2020-12 keywords that opis (Draft 07) silently ignores.
-     * Loud warning surfaces specs that rely on them — silent passes here mean
-     * tests pass even when the contract is not actually being enforced.
+     * 2019-09 / 2020-12 keywords opis Draft 07 truly does not implement.
+     * Pre-fix, this set wrongly included `patternProperties`,
+     * `contentMediaType`, and `contentEncoding` — opis Draft 06+ DOES
+     * implement those (see vendor/opis/json-schema/src/Parsers/Drafts/Draft06.php),
+     * so warning that "the contract is NOT being enforced" was misinformation.
+     * Only `unevaluatedProperties` and `unevaluatedItems` are genuinely
+     * dropped silently by Draft 07 — those keep the warning so users notice.
      */
     private const DRAFT_2020_12_UNSUPPORTED_KEYS = [
-        'patternProperties',
         'unevaluatedProperties',
         'unevaluatedItems',
-        'contentMediaType',
-        'contentEncoding',
     ];
 
     /** @var array<string, true> */

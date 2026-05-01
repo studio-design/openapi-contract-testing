@@ -3,12 +3,12 @@
     "info": {
         "title": "Composition coverage fixture",
         "version": "1.0.0",
-        "description": "Exercises oneOf / anyOf / not / discriminator and the three forms of additionalProperties end-to-end through the validator pipeline. Each endpoint pins one composition keyword so a regression in the schema converter or the opis Draft 07 delegation is caught at the integration level, not just by OpenApiSchemaConverterTest's inline-schema unit tests."
+        "description": "Composition keywords + additionalProperties coverage."
     },
     "paths": {
         "/v1/pets/oneOf": {
             "post": {
-                "summary": "oneOf [Cat, Dog] with discriminator (without mapping support enforced)",
+                "summary": "oneOf [Cat, Dog] — discriminator.mapping is silently stripped per README; included as a regression sentinel for the strip behaviour",
                 "operationId": "createPetOneOf",
                 "requestBody": {
                     "required": true,

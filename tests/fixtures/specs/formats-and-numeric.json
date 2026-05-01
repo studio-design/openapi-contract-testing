@@ -3,7 +3,7 @@
     "info": {
         "title": "Formats and numeric constraints fixture",
         "version": "1.0.0",
-        "description": "Pins the README claim that opis Draft 07 built-in formats (email, uri, ipv4, ipv6, hostname, date, date-time, uuid) and numeric constraints (multipleOf, uniqueItems, minProperties, maxProperties) reach the validator intact end-to-end."
+        "description": "Format keywords and numeric constraints coverage."
     },
     "paths": {
         "/v1/profile": {

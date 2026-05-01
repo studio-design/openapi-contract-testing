@@ -776,40 +776,12 @@ class OpenApiSchemaConverterTest extends TestCase
 
     // ========================================
     // OAS 3.1 unsupported keywords (loud warning, not silent pass)
+    //
+    // Only `unevaluatedProperties` and `unevaluatedItems` are warned about:
+    // opis Draft 06+ implements `patternProperties`, `contentMediaType`,
+    // and `contentEncoding`, so warning that those are NOT enforced would
+    // be misinformation.
     // ========================================
-
-    #[Test]
-    public function v31_pattern_properties_emits_warning(): void
-    {
-        // Draft 07 + opis ignore `patternProperties`, so a strict spec would
-        // silently pass any property keys. Surface this loudly via E_USER_WARNING.
-        $schema = [
-            'type' => 'object',
-            'patternProperties' => [
-                '^x-' => ['type' => 'string'],
-            ],
-        ];
-
-        $captured = null;
-        set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
-            if ($errno === E_USER_WARNING) {
-                $captured = $errstr;
-
-                return true;
-            }
-
-            return false;
-        });
-
-        try {
-            OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
-        } finally {
-            restore_error_handler();
-        }
-
-        $this->assertNotNull($captured);
-        $this->assertStringContainsString('patternProperties', (string) $captured);
-    }
 
     #[Test]
     public function v31_unevaluated_properties_emits_warning(): void
@@ -841,6 +813,98 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
+    public function v31_unevaluated_items_emits_warning(): void
+    {
+        $schema = [
+            'type' => 'array',
+            'unevaluatedItems' => false,
+        ];
+
+        $captured = null;
+        set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
+            if ($errno === E_USER_WARNING) {
+                $captured = $errstr;
+
+                return true;
+            }
+
+            return false;
+        });
+
+        try {
+            OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertNotNull($captured);
+        $this->assertStringContainsString('unevaluatedItems', (string) $captured);
+    }
+
+    #[Test]
+    public function pattern_properties_does_not_warn_because_opis_supports_it(): void
+    {
+        // Regression guard: a previous version of this converter wrongly
+        // listed `patternProperties` as unsupported. opis Draft 06+ does
+        // implement it (see vendor/opis/json-schema/src/Parsers/Drafts/Draft06.php),
+        // so warning about it would mislead users into thinking their
+        // constraint isn't enforced when it actually is.
+        $schema = [
+            'type' => 'object',
+            'patternProperties' => ['^x-' => ['type' => 'string']],
+        ];
+
+        $captured = null;
+        set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
+            if ($errno === E_USER_WARNING) {
+                $captured = $errstr;
+
+                return true;
+            }
+
+            return false;
+        });
+
+        try {
+            OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertNull($captured, 'patternProperties is supported by opis — must not warn');
+    }
+
+    #[Test]
+    public function content_media_type_and_encoding_do_not_warn(): void
+    {
+        // Same as above: opis Draft 06+ implements both keywords.
+        $schema = [
+            'type' => 'string',
+            'contentMediaType' => 'application/json',
+            'contentEncoding' => 'base64',
+        ];
+
+        $captured = null;
+        set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
+            if ($errno === E_USER_WARNING) {
+                $captured = $errstr;
+
+                return true;
+            }
+
+            return false;
+        });
+
+        try {
+            OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertNull($captured, 'contentMediaType / contentEncoding are supported — must not warn');
+    }
+
+    #[Test]
     public function repeated_calls_with_same_keyword_warn_only_once(): void
     {
         // Avoid log spam: warn once per process for a given keyword, not per
@@ -848,7 +912,7 @@ class OpenApiSchemaConverterTest extends TestCase
         // (setUp() already reset the state.)
         $schema = [
             'type' => 'object',
-            'patternProperties' => ['^x-' => ['type' => 'string']],
+            'unevaluatedProperties' => false,
         ];
 
         $count = 0;
@@ -876,15 +940,12 @@ class OpenApiSchemaConverterTest extends TestCase
     #[Test]
     public function multiple_unsupported_keywords_on_same_schema_warn_independently(): void
     {
-        // The dedup is per-keyword, not per-call. A schema declaring three
-        // unsupported keywords at once must surface three warnings, not one.
-        // Otherwise a future loop-with-break refactor would silently drop the
-        // 2nd/3rd warnings.
+        // The dedup is per-keyword, not per-call. A schema declaring two
+        // unsupported keywords at once must surface two distinct warnings.
         $schema = [
             'type' => 'object',
-            'patternProperties' => ['^x-' => ['type' => 'string']],
             'unevaluatedProperties' => false,
-            'contentMediaType' => 'application/json',
+            'unevaluatedItems' => false,
         ];
 
         $captured = [];
@@ -904,18 +965,18 @@ class OpenApiSchemaConverterTest extends TestCase
             restore_error_handler();
         }
 
-        $this->assertCount(3, $captured);
+        $this->assertCount(2, $captured);
     }
 
     #[Test]
-    public function pattern_properties_emits_warning_for_oas_3_0_too(): void
+    public function unevaluated_properties_emits_warning_for_oas_3_0_too(): void
     {
-        // patternProperties has been a JSON Schema keyword since draft-3 and
-        // appears in OAS 3.0 specs in the wild. The fix must run for both
-        // versions — a 3.0-only silent pass is just as bad as the 3.1 case.
+        // unevaluatedProperties is a 2019-09 keyword that doesn't normally
+        // appear in 3.0 specs but can in hand-rolled or generated specs that
+        // mix dialects. The fix must run for both versions.
         $schema = [
             'type' => 'object',
-            'patternProperties' => ['^x-' => ['type' => 'string']],
+            'unevaluatedProperties' => false,
         ];
 
         $captured = null;
@@ -936,7 +997,67 @@ class OpenApiSchemaConverterTest extends TestCase
         }
 
         $this->assertNotNull($captured);
-        $this->assertStringContainsString('patternProperties', (string) $captured);
+        $this->assertStringContainsString('unevaluatedProperties', (string) $captured);
+    }
+
+    // ========================================
+    // $schema stripped from converter output (Draft 07 alignment)
+    // ========================================
+
+    #[Test]
+    public function v31_schema_keyword_stripped(): void
+    {
+        // OAS 3.1 lets a spec author override the JSON Schema dialect via
+        // `$schema` on an inline schema. If we keep that declaration, opis
+        // will re-interpret our (already-lowered-to-Draft-07) schema under
+        // 2020-12 and reject the array-form `items` we emit for prefixItems.
+        // Strip `$schema` so the SchemaValidatorRunner's Draft 07 default
+        // is the dialect that actually applies.
+        $schema = [
+            '$schema' => 'https://json-schema.org/draft/2020-12/schema',
+            'type' => 'object',
+            'properties' => ['name' => ['type' => 'string']],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertArrayNotHasKey('$schema', $result);
+    }
+
+    #[Test]
+    public function v30_schema_keyword_stripped(): void
+    {
+        // 3.0 specs rarely declare `$schema`, but if they do, the same
+        // alignment concern applies — strip it.
+        $schema = [
+            '$schema' => 'https://json-schema.org/draft/2020-12/schema',
+            'type' => 'string',
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
+
+        $this->assertArrayNotHasKey('$schema', $result);
+    }
+
+    #[Test]
+    public function nested_schema_keyword_also_stripped(): void
+    {
+        // Recursion guard: $schema declared on an inner subschema must
+        // also be stripped, not just the root.
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'nested' => [
+                    '$schema' => 'https://json-schema.org/draft/2020-12/schema',
+                    'type' => 'array',
+                    'prefixItems' => [['type' => 'string']],
+                ],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertArrayNotHasKey('$schema', $result['properties']['nested']);
     }
 
     // ========================================

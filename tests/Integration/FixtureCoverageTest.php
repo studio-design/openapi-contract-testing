@@ -16,20 +16,21 @@ use function implode;
 
 /**
  * End-to-end integration tests for the fixture-coverage gaps the v1.0
- * pre-release audit (#145) flagged: composition keywords (oneOf / anyOf
- * / not), three forms of additionalProperties, six format keywords plus
- * numeric constraints (multipleOf, uniqueItems, minProperties,
- * maxProperties), OAS 3.1 const lowering, OAS 3.1 internal $ref, OAS 3.1
+ * pre-release audit flagged: composition keywords (oneOf / anyOf / not),
+ * three forms of `additionalProperties`, eight format keywords (email,
+ * uri, ipv4, ipv6, hostname, date, date-time, uuid) plus numeric
+ * constraints (multipleOf, uniqueItems, minProperties, maxProperties),
+ * OAS 3.1 const lowering, OAS 3.1 internal `$ref`, OAS 3.1
  * readOnly/writeOnly enforcement, wildcard content-type ranges,
  * multi-content-type per status, status-code range keys (5XX / default)
- * on 3.1, and prefixItems with actual data.
+ * on 3.1, and `prefixItems` with actual data.
  *
  * Each pair "valid passes, invalid fails" pins the entire pipeline:
  * spec loader → ref resolver → schema converter → opis validator.
- * Pre-fix, every one of these features had unit-level coverage in
- * OpenApiSchemaConverterTest with inline schemas, but no fixture-loaded
- * end-to-end test — meaning a regression at any layer between the
- * loader and the converter would not be caught.
+ * Before this file, every one of these features had unit-level coverage
+ * in OpenApiSchemaConverterTest with inline schemas only — a regression
+ * at any layer between the loader and the converter would not have
+ * surfaced.
  */
 class FixtureCoverageTest extends TestCase
 {
@@ -101,6 +102,32 @@ class FixtureCoverageTest extends TestCase
 
         $this->assertFalse($result->isValid());
         $this->assertNotEmpty($result->errors());
+    }
+
+    #[Test]
+    public function composition_discriminator_mapping_is_silently_stripped(): void
+    {
+        // README explicitly documents: `discriminator.mapping` is dropped, the
+        // underlying oneOf still validates as a plain union. Pin this so a
+        // future change that wires up real mapping support surfaces here as
+        // a behaviour change. A body whose `kind` would route to the WRONG
+        // branch (Cat) by mapping but matches the OTHER branch's shape (Dog)
+        // would FAIL with mapping enforced — but PASS today because mapping
+        // is stripped and the body is judged against the oneOf union.
+        $result = $this->requestValidator->validate(
+            'composition',
+            'POST',
+            '/v1/pets/oneOf',
+            [],
+            [],
+            // kind=dog routes to Dog by mapping; body is a valid Dog.
+            // If mapping were enforced and kind said "cat", we would route
+            // to Cat and fail. As-is, the body passes the union because
+            // it satisfies Dog's branch.
+            ['kind' => 'dog', 'bark' => true],
+            'application/json',
+        );
+        $this->assertTrue($result->isValid(), implode(' | ', $result->errors()));
     }
 
     #[Test]
@@ -313,6 +340,36 @@ class FixtureCoverageTest extends TestCase
     }
 
     #[Test]
+    public function formats_rejects_malformed_date(): void
+    {
+        $result = $this->requestValidator->validate(
+            'formats-and-numeric',
+            'POST',
+            '/v1/profile',
+            [],
+            [],
+            $this->validProfile(['birthday' => '1990-13-99']),
+            'application/json',
+        );
+        $this->assertFalse($result->isValid());
+    }
+
+    #[Test]
+    public function formats_rejects_malformed_ipv6(): void
+    {
+        $result = $this->requestValidator->validate(
+            'formats-and-numeric',
+            'POST',
+            '/v1/profile',
+            [],
+            [],
+            $this->validProfile(['ip6' => 'gggg::1']),
+            'application/json',
+        );
+        $this->assertFalse($result->isValid());
+    }
+
+    #[Test]
     public function numeric_multiple_of_enforced(): void
     {
         $rejected = $this->requestValidator->validate(
@@ -348,6 +405,24 @@ class FixtureCoverageTest extends TestCase
             [],
             [],
             ['price' => 25, 'tags' => ['a', 'a']],
+            'application/json',
+        );
+        $this->assertFalse($rejected->isValid());
+    }
+
+    #[Test]
+    public function numeric_minimum_enforced(): void
+    {
+        // Order schema declares `price: { type: integer, minimum: 0 }`. A
+        // negative value must be rejected — pin the integer/minimum reaches
+        // the validator pipeline (no equivalent integration test elsewhere).
+        $rejected = $this->requestValidator->validate(
+            'formats-and-numeric',
+            'POST',
+            '/v1/orders',
+            [],
+            [],
+            ['price' => -5, 'tags' => ['a']],
             'application/json',
         );
         $this->assertFalse($rejected->isValid());
@@ -459,6 +534,28 @@ class FixtureCoverageTest extends TestCase
         );
 
         $this->assertFalse($result->isValid(), 'readOnly property in request body must fail');
+    }
+
+    #[Test]
+    public function v31_request_with_writeonly_property_accepted(): void
+    {
+        // V31User.password is writeOnly — it MUST be allowed in a request
+        // body (writeOnly is the dual of readOnly). The asymmetric
+        // enforcement should permit this, not reject it.
+        $result = $this->requestValidator->validate(
+            'petstore-3.1',
+            'POST',
+            '/v1/v31/users',
+            [],
+            [],
+            [
+                'name' => 'jane',
+                'password' => 's3cret',
+            ],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid(), implode(' | ', $result->errors()));
     }
 
     #[Test]
@@ -582,8 +679,45 @@ class FixtureCoverageTest extends TestCase
     }
 
     #[Test]
+    public function v31_prefix_items_min_max_items_enforced(): void
+    {
+        // Spec declares `minItems: 2, maxItems: 2` on the tuple. Verify
+        // both bounds are enforced — without these, a regression that
+        // dropped them from the converter would be invisible (the
+        // type-mismatch test already passes for tuples of any length).
+        $tooShort = $this->requestValidator->validate(
+            'petstore-3.1',
+            'POST',
+            '/v1/v31/coords',
+            [],
+            [],
+            ['point' => ['origin']],
+            'application/json',
+        );
+        $this->assertFalse($tooShort->isValid(), 'minItems: 2 must reject 1-element tuple');
+
+        $tooLong = $this->requestValidator->validate(
+            'petstore-3.1',
+            'POST',
+            '/v1/v31/coords',
+            [],
+            [],
+            ['point' => ['origin', 42.5, 'extra']],
+            'application/json',
+        );
+        $this->assertFalse($tooLong->isValid(), 'maxItems: 2 must reject 3-element tuple');
+    }
+
+    #[Test]
     public function v31_prefix_items_constraint_reaches_validator(): void
     {
+        // Regression canary for the Draft 07 default in SchemaValidatorRunner.
+        // The converter lowers OAS 3.1 `prefixItems` to Draft 07 array-form
+        // `items` (valid Draft 07 tuple validation). opis defaults to
+        // 2020-12 where array-form items is invalid, so this test fails with
+        // `InvalidKeywordException: items must contain a valid json schema`
+        // if anyone reverts SchemaValidatorRunner::__construct's
+        // `parser()->setDefaultDraftVersion('07')` call.
         $accepted = $this->requestValidator->validate(
             'petstore-3.1',
             'POST',
@@ -618,6 +752,11 @@ class FixtureCoverageTest extends TestCase
      */
     private function validProfile(array $overrides = []): array
     {
+        // PHP's `+` operator is left-biased: keys present on the LEFT side
+        // win over duplicates on the right. Using `$overrides + $defaults`
+        // (NOT array_merge) so the caller's overrides take precedence
+        // over the default value for the same key. Inverting the order
+        // would silently break every override-based test.
         return $overrides + [
             'email' => 'jane@example.com',
             'homepage' => 'https://example.com',

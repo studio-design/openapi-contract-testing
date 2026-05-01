@@ -29,11 +29,31 @@ the public API without those leaking into the SemVer contract.
 - **Schema converter — OAS 3.1 `const`** is now lowered to `enum: [value]`.
   Draft 07 has no native `const`, so the keyword silently passed before —
   a `const: "fixed"` schema would accept any value of the right type.
-- **Schema converter — unsupported 2019-09 / 2020-12 keywords** now emit a
-  one-shot `E_USER_WARNING` when first encountered: `patternProperties`,
-  `unevaluatedProperties`, `unevaluatedItems`, `contentMediaType`,
-  `contentEncoding`. Pre-fix, opis ignored these silently and the
-  contract test would report a spurious pass.
+- **Schema converter — `unevaluatedProperties` / `unevaluatedItems`** now
+  emit a one-shot `E_USER_WARNING` when first encountered. opis Draft 07
+  has no implementation for these 2019-09 keywords, so the constraint
+  silently dropped before — a contract test relying on `unevaluatedProperties:
+  false` for object closure would always pass. Earlier work in this cycle
+  also wrongly listed `patternProperties`, `contentMediaType`, and
+  `contentEncoding` as unsupported; opis Draft 06+ implements all three
+  natively, so warning about them was misinformation. The warning set is
+  now trimmed to the two keywords genuinely dropped.
+- **Schema converter — `$schema` is now stripped** from converter output.
+  An OAS 3.1 author who declared `$schema: ".../draft/2020-12/schema"` on
+  an inline schema would force opis to interpret our already-Draft-07-
+  lowered schema under 2020-12, where the array-form `items` we emit for
+  `prefixItems` is invalid. Stripping keeps the validator draft consistent
+  with what the converter actually produces.
+- **Validator was running against opis Draft 2020-12 instead of Draft 07**.
+  `OpenApiSchemaConverter` lowers OAS 3.1 keywords to Draft 07 (e.g.
+  `prefixItems` → array-form `items`, valid Draft 07 tuple validation but
+  rejected by 2020-12). The runner did not pin opis to a draft version,
+  so opis used its 2020-12 default and rejected populated `prefixItems`
+  shapes with `InvalidKeywordException`. Surface only because no fixture
+  posted real data through a tuple shape — `OpenApiSchemaConverterTest`
+  unit tests verified the conversion result but not that opis could
+  validate against it. Now the runner explicitly calls
+  `parser()->setDefaultDraftVersion('07')`.
 - **Content-type matcher — wildcard ranges**. `findContentTypeKey()` now
   resolves with most-specific-first priority: exact match → `<type>/*` →
   `*/*`. `findJsonContentType()` resolves with literal `application/json`
@@ -44,11 +64,6 @@ the public API without those leaking into the SemVer contract.
   Specs using OpenAPI 3.x §4.7.10 media-type ranges previously skipped
   JSON schema validation silently because the matcher only compared
   literally.
-
-- **Schema converter — unsupported keyword warning now fires for both
-  3.0 and 3.1**. `patternProperties` and friends are valid Draft 04 / 07
-  keywords used in 3.0 specs in the wild, so version-gating the warning
-  would have left a 3.0 silent pass while closing the 3.1 case.
 
 ### Changed
 
@@ -97,42 +112,23 @@ the public API without those leaking into the SemVer contract.
   updates as well as the existing dev minor/patch group. Runtime *minor*
   stays manual because `opis/json-schema` semantics may shift.
 
-### Fixed (additional)
+### Internal
 
-- **Validator was running against opis Draft 2020-12 instead of Draft 07**.
-  `OpenApiSchemaConverter` lowers OAS 3.1 keywords down to Draft 07 (e.g.
-  `prefixItems` → `items` array form, valid Draft 07 tuple validation but
-  rejected by 2020-12). The runner did not pin opis to Draft 07, so opis
-  defaulted to 2020-12 and rejected the converter output with
-  `InvalidKeywordException: items must contain a valid json schema`.
-  Surface only because no fixture posted real data into a `prefixItems`
-  shape — the OpenApiSchemaConverterTest unit tests verified the
-  conversion shape but not that opis could validate it. Now the runner
-  explicitly calls `setDefaultDraftVersion('07')`. No README change
-  needed — Draft 07 was always the documented contract.
-
-### Test fixture coverage
-
-- **New `composition.json` fixture** — pins `oneOf`, `anyOf`, `not`,
-  `discriminator`, and the three forms of `additionalProperties`
-  (`true` / `false` / typed schema) end-to-end through the validator
-  pipeline. Pre-fix, all five had unit-only coverage in
-  `OpenApiSchemaConverterTest` with inline schemas; a regression
-  between the spec loader and the converter would have escaped.
-- **New `formats-and-numeric.json` fixture** — pins `format: email`,
-  `uri`, `ipv4`, `ipv6`, `hostname`, `date`, `date-time`, `uuid` plus
-  `multipleOf`, `uniqueItems`, `minProperties`, `maxProperties`. README
-  claims all of these reach opis Draft 07 intact; this fixture confirms
-  they do.
-- **`petstore-3.1.json` extended** with 8 new endpoints exercising
-  3.1-specific surface that was previously declared but never posted
-  real data through: `const` lowering, internal `$ref` chain, 3.1
-  `readOnly` / `writeOnly` enforcement, `application/*` and `*/*`
-  wildcard content types, multi-content-type per status, status range
-  keys (`5XX` / `default`), and `prefixItems` with actual tuple data.
-- **27 new integration tests** (`FixtureCoverageTest.php`) round-trip
-  each new fixture through the validator and assert the documented
-  behaviour at every layer. Test count: 1052 → 1079.
+- **End-to-end fixture coverage filled in for every README-claimed
+  schema feature.** Three new fixtures (`composition.json` covering
+  `oneOf` / `anyOf` / `not` / three forms of `additionalProperties`;
+  `formats-and-numeric.json` covering eight format keywords plus
+  numeric constraints; `petstore-3.1.json` extended with eight new
+  endpoints for OAS 3.1-specific surface) plus `FixtureCoverageTest`,
+  a new integration test file that round-trips each new fixture
+  through the validator pipeline. Before this work, every covered
+  feature had unit-only coverage in `OpenApiSchemaConverterTest`
+  with inline schemas — a regression at the spec-loader / ref-resolver
+  / converter / opis-runner boundary would have escaped. Test count
+  in this release line moved from 1052 to over 1080. `discriminator`
+  is included in the fixture for documentation purposes only — the
+  README already states it is silently stripped, and the new tests
+  pin that the underlying `oneOf` union still validates correctly.
 
 ## v0.15.0 — 2026-04-30
 
