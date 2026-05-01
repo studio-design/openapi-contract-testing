@@ -28,6 +28,8 @@ use function usort;
  *
  * Kept separate from OpenApiPathMatcher so the matcher's hot-path API stays
  * focused on matching. Suggestion is only invoked from error paths.
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final class OpenApiPathSuggester
 {

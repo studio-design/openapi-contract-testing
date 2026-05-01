@@ -39,7 +39,7 @@ use function strtolower;
  * bypass the source-file-relative resolution rules and would surprise
  * a reader scanning paths visually.
  *
- * @internal Not part of the package's public API. Do not call from user code.
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final class ExternalRefLoader
 {

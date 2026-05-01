@@ -29,7 +29,7 @@ use function sprintf;
  * the caller can pinpoint which ref / file / URL produced the failure
  * without the decoder having to know the source.
  *
- * @internal Not part of the package's public API. Do not call from user code.
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final class SpecDocumentDecoder
 {

@@ -40,7 +40,7 @@ use function trim;
  * `OpenApiRefResolver::resolve()` call (no global / cross-call cache —
  * each test gets a fresh fetch).
  *
- * @internal Not part of the package's public API. Do not call from user code.
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final class HttpRefLoader
 {

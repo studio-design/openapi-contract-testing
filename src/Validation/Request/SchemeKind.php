@@ -18,6 +18,8 @@ namespace Studio\OpenApiContractTesting\Validation\Request;
  *                         an unknown `type`). Always surfaced as a hard error
  *                         so the spec author is pushed to fix it, even if a
  *                         sibling requirement entry is satisfied.
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 enum SchemeKind
 {

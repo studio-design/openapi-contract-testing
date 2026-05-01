@@ -47,6 +47,8 @@ use function trigger_error;
  * output across runs. Without faker, the generator falls back to deterministic
  * values keyed off the per-case iteration index — repeated calls still produce
  * identical output for the same `count`.
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final class SchemaDataGenerator
 {

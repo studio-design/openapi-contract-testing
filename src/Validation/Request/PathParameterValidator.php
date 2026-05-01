@@ -15,6 +15,9 @@ use function array_key_exists;
 use function is_array;
 use function rawurldecode;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class PathParameterValidator
 {
     public function __construct(

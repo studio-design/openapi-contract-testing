@@ -15,7 +15,7 @@ use function class_exists;
  * has to carry a test-only setter on its public API surface. The override
  * state, the real check, and the reset helper all live here instead.
  *
- * @internal Not part of the package's public API. Do not call from user code.
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final class YamlAvailability
 {

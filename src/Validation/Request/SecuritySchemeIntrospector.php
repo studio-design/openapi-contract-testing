@@ -23,6 +23,8 @@ use function strtolower;
  * SecurityValidator's hard-error surface: the validator is still the
  * source of truth for "is this spec broken" and we do not want two layers
  * producing redundant errors.
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final class SecuritySchemeIntrospector
 {

@@ -17,6 +17,8 @@ use Psr\Http\Message\RequestFactoryInterface;
  * The per-resolution document cache is intentionally NOT held here — it
  * is mutated as files/URLs are loaded, so the resolver still passes it
  * by reference alongside the (immutable) context.
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final class RefResolutionContext
 {

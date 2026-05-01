@@ -13,6 +13,8 @@ namespace Studio\OpenApiContractTesting\Validation\Request;
  * were dropped during collection — these are surfaced to callers alongside
  * any per-request validation errors so a single test run reports every
  * contract drift at once.
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final readonly class CollectionResult
 {

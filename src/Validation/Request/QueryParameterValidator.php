@@ -14,6 +14,9 @@ use Studio\OpenApiContractTesting\Validation\Support\TypeCoercer;
 use function array_key_exists;
 use function is_array;
 
+/**
+ * @internal Not part of the package's public API. Do not use from user code.
+ */
 final class QueryParameterValidator
 {
     public function __construct(
