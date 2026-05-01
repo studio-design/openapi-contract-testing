@@ -2,14 +2,15 @@
 
 ## Supported Versions
 
-The most recent minor release line on the v1.x and v0.x branches receive
-security fixes. Pre-1.0 versions are best-effort.
+Only the latest minor of v1.x receives security fixes. There is no LTS
+branch for older minors — upgrade to the latest minor of v1.x to receive
+fixes. v0.x is no longer supported now that v1.0 has shipped.
 
 | Version  | Supported |
 | -------- | --------- |
-| 1.x      | ✓         |
-| 0.15.x   | ✓ (until 1.0 ships) |
-| < 0.15   | ✗         |
+| 1.x (latest minor) | ✓ |
+| 1.x (older minors) | ✗ — upgrade to the latest minor |
+| 0.x      | ✗ — upgrade to v1.x |
 
 ## Reporting a Vulnerability
 
