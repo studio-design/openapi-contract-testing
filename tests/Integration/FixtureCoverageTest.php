@@ -635,14 +635,18 @@ class FixtureCoverageTest extends TestCase
     }
 
     #[Test]
-    public function v31_multi_content_type_routes_json_through_first_json_schema(): void
+    public function v31_multi_content_type_validates_each_json_against_its_own_schema(): void
     {
-        // The validator's documented behaviour: for a JSON-flavoured response
-        // Content-Type, schema validation runs against the FIRST JSON-compatible
-        // spec key, since JSON media types are treated as interchangeable
-        // (RFC 6838 +json suffix). This pins that behaviour for the multi-content
-        // case so a future change that switches to per-content-type schema
-        // selection will surface here.
+        // Per-content-type schema selection (#152): for a JSON-flavoured
+        // response Content-Type, schema validation prefers the spec key that
+        // exactly matches the response Content-Type before falling back to
+        // the first JSON key. The fixture defines DIFFERENT shapes for
+        // `application/json` (requires `data`) and `application/problem+json`
+        // (requires `title`), so we can prove each is judged against its own
+        // schema and not interchangeably as the legacy "first JSON wins"
+        // behaviour did.
+
+        // application/json body with `data` (the success shape).
         $jsonResp = $this->responseValidator->validate(
             'petstore-3.1',
             'GET',
@@ -653,10 +657,24 @@ class FixtureCoverageTest extends TestCase
         );
         $this->assertTrue($jsonResp->isValid(), implode(' | ', $jsonResp->errors()));
 
-        // Same body, served with the +json suffix: still validates against the
-        // first JSON schema (application/json `data` schema). This matches the
-        // documented "JSON types are interchangeable" semantics.
+        // application/problem+json body with `title` (the problem shape).
+        // Under the legacy first-JSON-wins behaviour this body would have
+        // failed against the application/json schema (missing `data`).
         $problemResp = $this->responseValidator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/v31/multi-content',
+            200,
+            ['title' => 'Not Found'],
+            'application/problem+json',
+        );
+        $this->assertTrue($problemResp->isValid(), implode(' | ', $problemResp->errors()));
+
+        // application/problem+json body that DOES NOT match the +json schema
+        // (it has `data`, which is the application/json shape). Under the
+        // legacy behaviour this would have silently passed; per-content-type
+        // selection correctly fails it for missing `title`.
+        $wrongShape = $this->responseValidator->validate(
             'petstore-3.1',
             'GET',
             '/v1/v31/multi-content',
@@ -664,7 +682,8 @@ class FixtureCoverageTest extends TestCase
             ['data' => 'hello'],
             'application/problem+json',
         );
-        $this->assertTrue($problemResp->isValid(), implode(' | ', $problemResp->errors()));
+        $this->assertFalse($wrongShape->isValid(), 'wrong shape under +json must fail');
+        $this->assertStringContainsString('title', $wrongShape->errorMessage());
 
         // Non-JSON branch: text/plain is presence-only, must pass without
         // schema validation against the JSON schemas.
@@ -677,6 +696,27 @@ class FixtureCoverageTest extends TestCase
             'text/plain',
         );
         $this->assertTrue($textResp->isValid(), 'text/plain is presence-only, must pass');
+    }
+
+    #[Test]
+    public function v31_multi_content_type_falls_back_to_first_json_when_no_exact_match(): void
+    {
+        // When the response Content-Type is JSON-flavoured but does NOT
+        // exactly match any spec key (e.g. `application/vnd.example.v1+json`
+        // when the spec only declares `application/json` and
+        // `application/problem+json`), fall back to the first JSON key. This
+        // preserves the legacy interchangeable-JSON behaviour for users that
+        // rely on it for vendor-specific +json suffixes.
+        $resp = $this->responseValidator->validate(
+            'petstore-3.1',
+            'GET',
+            '/v1/v31/multi-content',
+            200,
+            ['data' => 'hello'],
+            'application/vnd.example.v1+json',
+        );
+
+        $this->assertTrue($resp->isValid(), implode(' | ', $resp->errors()));
     }
 
     #[Test]

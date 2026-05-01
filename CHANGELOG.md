@@ -8,6 +8,22 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 
 ## Unreleased
 
+### Changed
+
+- **Response validator — per-content-type schema selection for multi-JSON
+  specs**. When a response carries a JSON-flavoured `Content-Type` and the
+  spec declares multiple JSON keys for the same status (e.g.
+  `application/json` AND `application/problem+json`), the validator now
+  prefers the spec key that exactly matches the actual `Content-Type` before
+  falling back to the first JSON key. Previously the first JSON key always
+  won, so a problem-details body served as `application/problem+json` would
+  be judged against the success-shape `application/json` schema — silently
+  passing if the body happened to satisfy the success shape, or wrongly
+  failing if it didn't. This is a behavioural change for users relying on
+  the legacy first-JSON-wins semantics with multi-JSON specs; single-JSON
+  specs and vendor `+json` suffixes the spec doesn't enumerate are
+  unaffected. Closes #152.
+
 ### Documentation
 
 - **Warning channel contract** is now documented in README under

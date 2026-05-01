@@ -169,4 +169,89 @@ class ContentTypeMatcherTest extends TestCase
 
         $this->assertSame('Application/*', ContentTypeMatcher::findJsonContentType($content));
     }
+
+    // ========================================
+    // findJsonContentTypeForResponse — exact-match-first (#152)
+    // ========================================
+
+    #[Test]
+    public function find_json_content_type_for_response_prefers_exact_match_over_first_key(): void
+    {
+        // Multi-JSON spec with `application/json` and `application/problem+json`
+        // for the same status. A `+json` response Content-Type must route to
+        // its own schema, not the first-declared `application/json`.
+        $content = [
+            'application/json' => ['schema' => ['type' => 'object', 'required' => ['data']]],
+            'application/problem+json' => ['schema' => ['type' => 'object', 'required' => ['title']]],
+        ];
+
+        $this->assertSame(
+            'application/problem+json',
+            ContentTypeMatcher::findJsonContentTypeForResponse('application/problem+json', $content),
+        );
+    }
+
+    #[Test]
+    public function find_json_content_type_for_response_falls_back_to_first_json_when_no_exact_match(): void
+    {
+        // Vendor +json suffix that the spec doesn't enumerate explicitly:
+        // fall back to the first JSON key (legacy interchangeable behaviour).
+        $content = [
+            'application/json' => ['schema' => ['type' => 'object']],
+            'application/problem+json' => ['schema' => ['type' => 'object']],
+        ];
+
+        $this->assertSame(
+            'application/json',
+            ContentTypeMatcher::findJsonContentTypeForResponse('application/vnd.example.v1+json', $content),
+        );
+    }
+
+    #[Test]
+    public function find_json_content_type_for_response_exact_match_is_case_insensitive(): void
+    {
+        // Spec mixes casing on a JSON key (some style guides allow it). The
+        // exact-match pass must hit it regardless of the response's casing.
+        $content = [
+            'application/json' => ['schema' => ['type' => 'object']],
+            'Application/Problem+JSON' => ['schema' => ['type' => 'object']],
+        ];
+
+        $this->assertSame(
+            'Application/Problem+JSON',
+            ContentTypeMatcher::findJsonContentTypeForResponse('application/problem+json', $content),
+        );
+    }
+
+    #[Test]
+    public function find_json_content_type_for_response_returns_null_when_no_json_defined(): void
+    {
+        // Spec has no JSON keys at all — even the fallback can't resolve.
+        // (Callers route this case to non-JSON handling upstream, but pin
+        // the contract here so a future caller change doesn't break it.)
+        $content = ['text/html' => ['schema' => ['type' => 'string']]];
+
+        $this->assertNull(
+            ContentTypeMatcher::findJsonContentTypeForResponse('application/json', $content),
+        );
+    }
+
+    #[Test]
+    public function find_json_content_type_for_response_single_json_case_unchanged(): void
+    {
+        // Backward-compat regression guard: when the spec has a single JSON
+        // key, the exact-match-first behaviour resolves to it identically to
+        // the legacy first-JSON-wins path. No silent regression for the
+        // dominant single-content-per-status spec shape.
+        $content = ['application/json' => ['schema' => ['type' => 'object']]];
+
+        $this->assertSame(
+            'application/json',
+            ContentTypeMatcher::findJsonContentTypeForResponse('application/json', $content),
+        );
+        $this->assertSame(
+            'application/json',
+            ContentTypeMatcher::findJsonContentTypeForResponse('application/vnd.foo+json', $content),
+        );
+    }
 }
