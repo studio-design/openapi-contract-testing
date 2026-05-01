@@ -11,20 +11,26 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
 ### Fixed
 
 - **Schema validator — `additionalProperties: false` cascading pseudo-error
-  is now stripped**. opis's `PropertiesKeyword::validate()` early-returns
-  whenever any sub-property fails its schema, leaving the validation
-  context without `$checked`. The follow-on `additionalProperties: false`
-  keyword then sees every property the data carries as "unchecked" and
-  reports declared properties as not-allowed — a single enum failure on
-  one property silently inflated into two errors, the second of which
-  read as "these declared properties are not allowed by the schema",
-  the opposite of what the schema actually said. The validator now
-  detects the cascade by introspecting the schema at the cascade's path:
-  names that ARE declared in the parent's `properties` keyword are
-  filtered out of the additionalProperties message, real additional
-  properties survive, and a wholly-cascade message is dropped entirely.
-  Mixed cases (declared failure + genuine extra) keep the real extra in
-  the rewritten message. Schemas the dedup can't resolve (composition
+  is now stripped**. opis's `PropertiesKeyword::validate()` skips its
+  `addCheckedProperties()` call whenever any sub-property fails its
+  schema, leaving the validation context without `$checked`. The
+  follow-on `additionalProperties: false` keyword then sees every
+  property the data carries as "unchecked" and reports declared
+  properties as not-allowed — a single enum failure on one property
+  silently inflated into two errors, the second of which read as
+  "these declared properties are not allowed by the schema", the
+  opposite of what the schema actually said. The validator now walks
+  opis's `ValidationError` tree, reads the raw list of "additional"
+  property names from `args()['properties']`, and filters out names
+  that ARE declared in the schema's `properties` keyword at that path.
+  Names that survive the filter are genuinely additional; if every
+  listed name was a cascade artifact the whole message is dropped.
+  Mixed cases (declared failure + genuine extra) keep the real extra
+  in the rewritten message. The property-name comparison is fully
+  structural — raw arrays from opis + raw path segments from
+  `DataInfo::fullPath()` — so property names containing commas,
+  whitespace, empty strings, or JSON-Pointer-escape-worthy characters
+  all compare correctly. Schemas the dedup can't resolve (composition
   keywords routing data through `oneOf` / `allOf`, missing `properties`
   keyword) keep the original message untouched. Closes #159.
 
