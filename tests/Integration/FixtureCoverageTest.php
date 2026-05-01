@@ -73,7 +73,7 @@ class FixtureCoverageTest extends TestCase
         // This test focuses on the union-validates-each-branch behaviour, so
         // the warning is suppressed locally — it's covered explicitly by
         // composition_discriminator_mapping_is_silently_stripped.
-        [$cat, $dog] = $this->suppressSchemaSilentPassWarnings(fn() => [
+        [$cat, $dog] = $this->suppressSchemaWarnings(['discriminator.mapping'], fn() => [
             $this->requestValidator->validate(
                 'composition',
                 'POST',
@@ -103,7 +103,7 @@ class FixtureCoverageTest extends TestCase
     {
         // Neither shape: no `kind`, no `meow` / `bark`. discriminator.mapping
         // warning suppressed — see composition_oneof_accepts_each_branch_independently.
-        $result = $this->suppressSchemaSilentPassWarnings(fn() => $this->requestValidator->validate(
+        $result = $this->suppressSchemaWarnings(['discriminator.mapping'], fn() => $this->requestValidator->validate(
             'composition',
             'POST',
             '/v1/pets/oneOf',
@@ -803,17 +803,37 @@ class FixtureCoverageTest extends TestCase
     }
 
     /**
-     * Run a callable while absorbing the converter's `[OpenAPI Schema]`
-     * silent-pass warnings (discriminator.mapping, unknown format). Tests
-     * that exercise fixtures with these features but focus on validation
-     * outcome use this; warning *contents* are pinned by
-     * `composition_discriminator_mapping_is_silently_stripped` and the
-     * unit-level `OpenApiSchemaConverterTest`.
+     * Run a callable while absorbing only the converter warnings whose
+     * messages match one of the explicitly-allowed substrings. Any other
+     * `E_USER_WARNING` falls through (returns `false` from the handler) so
+     * unrelated warnings still surface — preventing this helper from
+     * silently absorbing future converter warnings the test was not written
+     * to cover.
+     *
+     * Earlier revisions of this helper filtered by the broad `[OpenAPI
+     * Schema]` prefix and would have silently absorbed every converter
+     * warning emitted in the wrapped call. A code-review audit flagged
+     * that as a silent-failure trap; the explicit allowlist keeps the
+     * suppression intent-driven and self-documenting at the call site.
+     *
+     * @param string[] $allowedSubstrings non-empty list of substrings.
+     *                                    A warning is absorbed iff its
+     *                                    message contains at least one.
      */
-    private function suppressSchemaSilentPassWarnings(callable $fn): mixed
+    private function suppressSchemaWarnings(array $allowedSubstrings, callable $fn): mixed
     {
-        set_error_handler(static function (int $errno, string $errstr): bool {
-            return $errno === E_USER_WARNING && str_contains($errstr, '[OpenAPI Schema]');
+        set_error_handler(static function (int $errno, string $errstr) use ($allowedSubstrings): bool {
+            if ($errno !== E_USER_WARNING) {
+                return false;
+            }
+
+            foreach ($allowedSubstrings as $needle) {
+                if (str_contains($errstr, $needle)) {
+                    return true;
+                }
+            }
+
+            return false;
         });
 
         try {

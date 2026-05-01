@@ -11,6 +11,7 @@ use Studio\OpenApiContractTesting\SchemaContext;
 
 use function array_is_list;
 use function array_key_exists;
+use function get_debug_type;
 use function implode;
 use function in_array;
 use function is_array;
@@ -74,6 +75,13 @@ final class OpenApiSchemaConverter
      * this set are silently accepted by opis regardless of the data, so
      * `format: emial` (typo for `email`) would pass any string. Mirrors
      * `vendor/opis/json-schema/src/Resolvers/FormatResolver.php` registrations.
+     *
+     * Re-check this list whenever `opis/json-schema` is upgraded — a new
+     * format registered upstream that is not added here will warn as
+     * "unknown" and spam users for spec-correct usage. The
+     * `known_opis_formats_do_not_warn` regression test pins the current
+     * set, so a stale list will surface as a test failure when a newly
+     * supported format is asserted there.
      */
     private const KNOWN_OPIS_FORMATS = [
         'date',
@@ -170,10 +178,11 @@ final class OpenApiSchemaConverter
         // just as risky there.
         self::warnIfUsesUnsupportedKeywords($schema);
 
-        // Run the OAS-only warnings BEFORE the common-key removal below: once
-        // `discriminator` is stripped its `mapping` is gone, and `format` is
-        // not in OPENAPI_COMMON_KEYS but the order keeps the "warn before any
-        // mutation" reading consistent.
+        // Run discriminator warning BEFORE the common-key removal below —
+        // once `discriminator` is stripped its `mapping` is gone, and the
+        // "this constraint was silently lost" signal would be impossible to
+        // emit. `format` is not in OPENAPI_COMMON_KEYS so its order is
+        // independent.
         self::warnIfDiscriminatorMappingPresent($schema);
         self::warnIfUnknownFormat($schema);
 
@@ -439,26 +448,56 @@ final class OpenApiSchemaConverter
      * Issue a one-shot E_USER_WARNING per format value when a schema
      * declares a `format` opis cannot validate. Without this, a typo like
      * `format: emial` (instead of `email`) silently passes against any
-     * string — the user thinks they're enforcing email syntax but anything
+     * value — the user thinks they're enforcing email syntax but anything
      * goes.
      *
-     * The advisory-format allowlist (`int32`, `int64`, `float`, `double`,
-     * `byte`, `binary`, `password`) is intentional: these are OAS hint
-     * formats that the README documents as not enforced. They must not
-     * trigger the warning so users do not get spammed for spec-correct
-     * advisory usage.
+     * Three input shapes are distinguished:
+     *
+     * 1. `format` absent or empty string  → no warning (no constraint declared).
+     * 2. `format` non-string (int / null / array)  → one-shot
+     *    `format-malformed:<gettype>` warning. Per OAS 3.x §4.7 the value
+     *    must be a string; a non-string value is a spec defect that opis
+     *    would silently swallow without this guard.
+     * 3. `format` string in {@see KNOWN_OPIS_FORMATS} or
+     *    {@see ADVISORY_FORMATS} → no warning (validated, or advisory-by-
+     *    design respectively).
+     * 4. `format` string outside both lists → one-shot `format:<value>`
+     *    silent-pass warning.
      *
      * Custom formats registered against opis at runtime are NOT detected by
      * this static check — users who extend opis's format set will see false
-     * positives and must rename their format or suppress the warning. A
-     * future enhancement could expose an allowlist override.
+     * positives and must rename their format, suppress the warning, or
+     * filter their error handler.
      *
      * @param array<string, mixed> $schema
      */
     private static function warnIfUnknownFormat(array $schema): void
     {
-        $format = $schema['format'] ?? null;
-        if (!is_string($format) || $format === '') {
+        if (!array_key_exists('format', $schema)) {
+            return;
+        }
+
+        $format = $schema['format'];
+
+        if (!is_string($format)) {
+            $malformedKey = 'format-malformed:' . get_debug_type($format);
+            if (isset(self::$warnedKeywords[$malformedKey])) {
+                return;
+            }
+
+            self::$warnedKeywords[$malformedKey] = true;
+            trigger_error(
+                sprintf(
+                    "[OpenAPI Schema] 'format' must be a string per OAS 3.x §4.7, got %s. opis silently ignores non-string format values, so any constraint a non-string `format` was meant to express is NOT enforced. Fix the spec.",
+                    get_debug_type($format),
+                ),
+                E_USER_WARNING,
+            );
+
+            return;
+        }
+
+        if ($format === '') {
             return;
         }
 
@@ -478,7 +517,7 @@ final class OpenApiSchemaConverter
         self::$warnedKeywords[$dedupKey] = true;
         trigger_error(
             sprintf(
-                "[OpenAPI Schema] format '%s' is not in opis's known set; the validator will silently accept any string regardless of the value. Common cause: a typo (e.g. 'emial' instead of 'email'). Validated formats: %s. Advisory formats (not enforced by design, no warning): %s.",
+                "[OpenAPI Schema] format '%s' is not in opis's known set; the validator will silently accept any value regardless of its content (opis returns pass for unrecognised formats independent of the data type). Common cause: a typo (e.g. 'emial' instead of 'email'). Validated formats: %s. Advisory formats (not enforced by design, no warning): %s.",
                 $format,
                 implode(', ', self::KNOWN_OPIS_FORMATS),
                 implode(', ', self::ADVISORY_FORMATS),
