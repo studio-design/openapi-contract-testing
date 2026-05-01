@@ -241,7 +241,8 @@ final class SchemaValidatorRunner
      * `properties` keyword at that location, or null when the path doesn't
      * resolve through plain property nesting / array-element nesting.
      *
-     * Steps through:
+     * The walker recognises exactly two transitions and treats every other
+     * shape as unresolvable (returns null). The two recognised forms:
      * - `properties.<name>` for string segments (object property access)
      * - `items` for int segments (array element access). Both single-schema
      *   form (`items: <stdClass>`) and Draft 07 tuple form
@@ -250,16 +251,20 @@ final class SchemaValidatorRunner
      *   for OAS 3.1 `prefixItems`, so #161 dedup applies through that
      *   conversion path as well.
      *
-     * Stays conservative on shapes the dedup must NOT silently rewrite:
+     * Anything that does not match those two transitions falls through to
+     * `null` — the dedup never silently rewrites a path it cannot prove. In
+     * practice this catches (non-exhaustive list, illustrative only):
      * composition keywords (`oneOf` / `anyOf` / `allOf`),
-     * `additionalProperties: <schema>`, `patternProperties`,
-     * `additionalItems`, boolean schemas at item level (`items: true|false`),
-     * tuple-form indices out of range, and any segment whose key/index
-     * doesn't resolve through these forms — all return null and the cascade
-     * message is left untouched. Segments are compared as raw values
-     * (opis hands us decoded segments via `DataInfo::fullPath()`), so a
-     * property declared as `a/b` matches without any JSON-Pointer escape
-     * handling on our side.
+     * `additionalProperties: <schema>`, `patternProperties`, `additionalItems`,
+     * boolean schemas at item level (`items: true | false`), tuple-form
+     * indices out of range, and digit-only object property names — these
+     * arrive as int segments via PHP's automatic key cast in opis's data
+     * path, take the array branch, and bail when no `items` keyword exists
+     * (a no-op, not a regression).
+     *
+     * Segments are compared as raw values (opis hands us decoded segments
+     * via `DataInfo::fullPath()`), so a property declared as `a/b` matches
+     * without any JSON-Pointer escape handling on our side.
      *
      * @param array<int, mixed> $segments
      *
@@ -270,6 +275,7 @@ final class SchemaValidatorRunner
         $current = $schema;
 
         foreach ($segments as $segment) {
+            // int segment → array element (descend through `items`)
             if (is_int($segment)) {
                 if (!property_exists($current, 'items')) {
                     return null;
@@ -280,7 +286,7 @@ final class SchemaValidatorRunner
 
                     continue;
                 }
-                if (is_array($items) && isset($items[$segment]) && $items[$segment] instanceof stdClass) {
+                if (is_array($items) && array_key_exists($segment, $items) && $items[$segment] instanceof stdClass) {
                     $current = $items[$segment];
 
                     continue;
@@ -289,6 +295,7 @@ final class SchemaValidatorRunner
                 return null;
             }
 
+            // string segment → object property (descend through `properties.<name>`)
             if (!property_exists($current, 'properties') || !$current->properties instanceof stdClass) {
                 return null;
             }

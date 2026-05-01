@@ -466,30 +466,23 @@ class SchemaValidatorRunnerTest extends TestCase
     }
 
     // ============================================================
-    // Array-boundary cascade dedup (issue #161)
+    // Array-boundary cascade dedup
     //
-    // The original #159 dedup walked the schema only via
-    // `properties.<name>`. When a data path crossed an array
-    // boundary (segment is an int index), the walker bailed at
-    // `properties.0` and the cascade message at `[/data/0]` /
-    // `[/data/0/plan]` survived even though every name listed in
-    // those messages was declared in the corresponding `items`
-    // schema.
-    //
-    // The walker now also steps through `items` for int segments:
-    // `items` as stdClass (single-schema items, the OAS 3.0 / 3.1
-    // common case) and `items` as a list of stdClass (Draft 07
-    // tuple-form, also produced by OpenApiSchemaConverter when it
-    // lowers OAS 3.1 `prefixItems`).
+    // The walker steps through `items` for int segments — both single-
+    // schema form (`items: <stdClass>`, the OAS 3.0/3.1 common case)
+    // and Draft 07 tuple form (`items: [<stdClass>, ...]`, also the
+    // shape OpenApiSchemaConverter lowers OAS 3.1 prefixItems to). A
+    // cascade at `[/data/0]` whose listed names are all declared in
+    // the items schema must be dropped just like the property-only
+    // case.
     // ============================================================
 
     #[Test]
     public function additional_properties_cascade_is_dropped_through_array_items(): void
     {
-        // Issue #161 minimal repro at one array level. The cascade at
-        // `/data/0` lists `name, plan` — both declared in items'
-        // properties — so the whole message is a cascade artifact and
-        // must be dropped. Only the real `format` failure survives.
+        // Cascade at `/data/0` lists `name, plan` — both declared in items'
+        // properties — so the whole message is a cascade artifact and must
+        // be dropped. Only the real `format` failure survives.
         $schema = ObjectConverter::convert([
             'type' => 'object',
             'required' => ['data'],
@@ -528,11 +521,14 @@ class SchemaValidatorRunnerTest extends TestCase
     #[Test]
     public function additional_properties_cascade_is_dropped_through_nested_array_object_chain(): void
     {
-        // Full issue #161 repro: schema goes properties → items → properties
-        // → items-deep-property. A single deep `format` failure should NOT
-        // produce a tower of cascade lines at every intermediate object.
-        // All three levels of cascade (root, /data/0, /data/0/plan) must
-        // collapse to a single real error line at /data/0/plan/ts.
+        // Tower-of-cascades load-bearing assertion: schema goes
+        // properties → items → properties → deep-property. A single
+        // deep `format` failure must NOT produce a cascade line at
+        // every intermediate object. All three cascade paths (root,
+        // /data/0, /data/0/plan) must collapse to a single real error
+        // at /data/0/plan/ts. A partial fix that descended through one
+        // array boundary but not recursively would pass the simpler
+        // tests above and still fail here.
         $schema = ObjectConverter::convert([
             'type' => 'object',
             'required' => ['data'],
@@ -578,7 +574,7 @@ class SchemaValidatorRunnerTest extends TestCase
         // Draft 07 tuple-form items (also: the lowered shape of OAS 3.1
         // prefixItems via OpenApiSchemaConverter). Each numeric segment
         // must descend into items[<n>], not into a single shared schema.
-        // The `code` cascade at `/items/1` must be dropped because every
+        // The `code` cascade at `/1` must be dropped because every
         // listed name is declared in the per-index sub-schema.
         $schema = ObjectConverter::convert([
             'type' => 'array',
@@ -612,16 +608,17 @@ class SchemaValidatorRunnerTest extends TestCase
     #[Test]
     public function additional_properties_dedup_degrades_safely_when_items_is_boolean_schema(): void
     {
-        // Walker safe-degradation: when `items` is a boolean schema (opis
-        // accepts `items: true` / `items: false`, neither of which we can
-        // meaningfully introspect), the walker must bail at the array hop
-        // and leave any cascade message at `/data/<n>` untouched. This
-        // pins both halves of the contract: (a) the walker does not crash
-        // on the unsupported shape, and (b) it does not silently suppress
-        // an additionalProperties signal at the boundary it could not
-        // resolve. We use `items: false` so each item is rejected, and an
-        // additionalProperties error on a parallel object also fires —
-        // both must reach the user.
+        // `items: false` causes opis to short-circuit per-element — no
+        // cascade ever fires at `/data/<n>`, so this test does not exercise
+        // the walker's int-segment branch directly. What it pins is the
+        // sibling-path safety contract: a real undeclared property at the
+        // root (`extra`) MUST reach the user with the expected
+        // additionalProperties message intact, even when the same body has
+        // an array under a schema shape the walker cannot meaningfully
+        // introspect. A future refactor that broadened the dedup to
+        // suppress messages at `/` whenever any int-segmented sub-error
+        // appeared in the tree would silently break this — and no other
+        // test in the file would catch it.
         $schema = ObjectConverter::convert([
             'type' => 'object',
             'properties' => [
@@ -636,23 +633,18 @@ class SchemaValidatorRunnerTest extends TestCase
 
         $errors = (new SchemaValidatorRunner(0))->validate($schema, $data);
 
-        $foundExtra = false;
-        foreach ($errors as $messages) {
-            foreach ($messages as $message) {
-                if (str_contains($message, 'extra')) {
-                    $foundExtra = true;
-
-                    break 2;
-                }
-            }
-        }
-
-        $this->assertTrue(
-            $foundExtra,
+        $this->assertArrayHasKey(
+            '/',
+            $errors,
             sprintf(
-                'real undeclared property must reach the user even when the schema crosses an unsupported array shape; got: %s',
+                'real additionalProperties violation at root must surface; got: %s',
                 $this->formatErrors($errors),
             ),
+        );
+        $this->assertSame(
+            ['Additional object properties are not allowed: extra'],
+            $errors['/'],
+            'kept message must name `extra` and only `extra`',
         );
     }
 
@@ -691,6 +683,314 @@ class SchemaValidatorRunnerTest extends TestCase
             'name',
             $errors['/data/0'][0],
             'declared name must not appear in the kept additional-properties message',
+        );
+    }
+
+    #[Test]
+    public function additional_properties_dedup_preserves_message_for_out_of_range_tuple_index(): void
+    {
+        // Tuple-form `items: [s0, s1]` length is 2; data length is 3. opis
+        // applies `additionalProperties: false` against the parent array's
+        // *index 2* sub-validation context — the walker's `array_key_exists`
+        // guard returns null at the bail (no s2 in the tuple), so any
+        // cascade message at `/2` must be preserved. A future refactor that
+        // fell through to a default schema or to `additionalItems` could
+        // start filtering out names that ARE genuinely additional, which is
+        // the false-negative direction this test guards against. We assert
+        // by induction: a real undeclared property `rogue` at index 2 must
+        // surface with `rogue` in the message regardless of the walker's
+        // resolution choice for the out-of-range index.
+        $schema = ObjectConverter::convert([
+            'type' => 'array',
+            'items' => [
+                ['type' => 'string'],
+                ['type' => 'string'],
+            ],
+            // Without additionalItems specified, opis treats Draft 07
+            // tuple-overflow as allowed; constrain index 2 explicitly via a
+            // schema attached to additionalItems so a cascade fires.
+            'additionalItems' => [
+                'type' => 'object',
+                'properties' => [
+                    'declared' => ['type' => 'string'],
+                ],
+                'additionalProperties' => false,
+            ],
+        ]);
+        $data = ObjectConverter::convert(['ok', 'ok', ['declared' => 'x', 'rogue' => 'real-extra']]);
+
+        $errors = (new SchemaValidatorRunner(0))->validate($schema, $data);
+
+        $foundRogue = false;
+        foreach ($errors as $messages) {
+            foreach ($messages as $message) {
+                if (str_contains($message, 'rogue')) {
+                    $foundRogue = true;
+
+                    break 2;
+                }
+            }
+        }
+
+        $this->assertTrue(
+            $foundRogue,
+            sprintf(
+                'real additional `rogue` at out-of-range tuple index must reach the user; got: %s',
+                $this->formatErrors($errors),
+            ),
+        );
+    }
+
+    #[Test]
+    public function additional_properties_dedup_preserves_cascade_under_oneof_above_array(): void
+    {
+        // Composition keyword above an array boundary: `oneOf: [{ type:
+        // object, properties: { data: { items: ... } } }, ...]`. The
+        // walker's top-of-tree descent doesn't recognise `oneOf`, so each
+        // path with `oneOf` between root and `items` resolves to null —
+        // the cascade message is preserved. A real undeclared property at
+        // a parallel path (`extra`) must still surface as a regular
+        // additionalProperties violation without being entangled with the
+        // oneOf branch's items walk.
+        $schema = ObjectConverter::convert([
+            'oneOf' => [
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'data' => [
+                            'type' => 'array',
+                            'items' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'name' => ['type' => 'string'],
+                                ],
+                                'additionalProperties' => false,
+                            ],
+                        ],
+                    ],
+                    'additionalProperties' => false,
+                ],
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'data' => ['type' => 'string'],
+                    ],
+                    'additionalProperties' => false,
+                ],
+            ],
+        ]);
+        $data = ObjectConverter::convert(['data' => [['name' => 'a', 'rogue' => 'real']], 'extra' => 'real']);
+
+        $errors = (new SchemaValidatorRunner(0))->validate($schema, $data);
+
+        $foundExtra = false;
+        $foundRogue = false;
+        foreach ($errors as $messages) {
+            foreach ($messages as $message) {
+                if (str_contains($message, 'extra')) {
+                    $foundExtra = true;
+                }
+                if (str_contains($message, 'rogue')) {
+                    $foundRogue = true;
+                }
+            }
+        }
+
+        $this->assertTrue(
+            $foundExtra,
+            sprintf(
+                'real additional `extra` at root must reach the user under oneOf; got: %s',
+                $this->formatErrors($errors),
+            ),
+        );
+        $this->assertTrue(
+            $foundRogue,
+            sprintf(
+                'real additional `rogue` inside an items branch under oneOf must reach the user; got: %s',
+                $this->formatErrors($errors),
+            ),
+        );
+    }
+
+    #[Test]
+    public function additional_properties_dedup_dispatches_correctly_with_mixed_properties_and_items(): void
+    {
+        // Pathological-but-legal: an object schema declaring both
+        // `properties` and `items`. opis evaluates both keywords against
+        // their applicable data shape (object → properties; array → items),
+        // and the walker dispatches purely on segment type. This pin
+        // protects the dispatch invariant against a future refactor that
+        // collapsed the int/string branches into a single keyword lookup.
+        $schema = ObjectConverter::convert([
+            'type' => 'object',
+            'properties' => [
+                'list' => [
+                    'type' => 'object',
+                    // Both keywords present at the same level.
+                    'properties' => [
+                        'declared' => ['type' => 'string', 'enum' => ['allowed']],
+                    ],
+                    'items' => ['type' => 'integer'],
+                    'additionalProperties' => false,
+                ],
+            ],
+        ]);
+        $data = ObjectConverter::convert(['list' => ['declared' => 'notAllowed']]);
+
+        $errors = (new SchemaValidatorRunner(0))->validate($schema, $data);
+
+        // Real enum failure must remain at the property's path.
+        $this->assertArrayHasKey(
+            '/list/declared',
+            $errors,
+            sprintf(
+                'enum sub-error must surface despite mixed properties+items at parent; got: %s',
+                $this->formatErrors($errors),
+            ),
+        );
+        // Cascade at /list (lists `declared` → declared) must be dropped.
+        $this->assertArrayNotHasKey(
+            '/list',
+            $errors,
+            sprintf(
+                'cascade with declared name must drop even when sibling `items` is present; got: %s',
+                $this->formatErrors($errors),
+            ),
+        );
+    }
+
+    #[Test]
+    public function additional_properties_dedup_handles_digit_only_property_name(): void
+    {
+        // PHP coerces all-digits string keys to int when materialised on a
+        // stdClass. opis's `foreach ($properties as $name => $prop)` then
+        // pushes int(42) onto fullPath() for a property declared as "42".
+        // The walker's `is_int($segment)` branch takes over, finds no
+        // `items` keyword, and bails to null. Result: the cascade is
+        // preserved (no false-negative), but no dedup is applied for
+        // digit-only property names. This test pins the no-op contract:
+        // a real undeclared property `extra` must still reach the user even
+        // when the schema declares a digit-only property whose sub-error
+        // would otherwise be a cascade trigger.
+        $schema = ObjectConverter::convert([
+            'type' => 'object',
+            'properties' => [
+                '42' => ['type' => 'string', 'enum' => ['allowed']],
+            ],
+            'additionalProperties' => false,
+        ]);
+        $data = ObjectConverter::convert(['42' => 'notAllowed', 'extra' => 'real']);
+
+        $errors = (new SchemaValidatorRunner(0))->validate($schema, $data);
+
+        // Real enum violation surfaces (even at the int-segment path).
+        $foundEnum = false;
+        $foundExtra = false;
+        foreach ($errors as $messages) {
+            foreach ($messages as $message) {
+                if (str_contains($message, 'enum')) {
+                    $foundEnum = true;
+                }
+                if (str_contains($message, 'extra')) {
+                    $foundExtra = true;
+                }
+            }
+        }
+
+        $this->assertTrue(
+            $foundEnum,
+            sprintf(
+                'enum violation on digit-only property must surface; got: %s',
+                $this->formatErrors($errors),
+            ),
+        );
+        $this->assertTrue(
+            $foundExtra,
+            sprintf(
+                'real additional `extra` must surface even when schema has digit-only declared property; got: %s',
+                $this->formatErrors($errors),
+            ),
+        );
+    }
+
+    #[Test]
+    public function additional_properties_dedup_with_empty_array_data(): void
+    {
+        // Empty array under a cascade-capable schema: `data: []` produces
+        // no per-element sub-errors, so opis emits no cascade for the
+        // items schema. A separate root-level real `extra` must surface
+        // unaffected, and there must be no spurious `/data/<n>` entry.
+        $schema = ObjectConverter::convert([
+            'type' => 'object',
+            'properties' => [
+                'data' => [
+                    'type' => 'array',
+                    'items' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'name' => ['type' => 'string'],
+                        ],
+                        'additionalProperties' => false,
+                    ],
+                ],
+            ],
+            'additionalProperties' => false,
+        ]);
+        $data = ObjectConverter::convert(['data' => [], 'extra' => 'real']);
+
+        $errors = (new SchemaValidatorRunner(0))->validate($schema, $data);
+
+        $this->assertArrayHasKey('/', $errors, 'real root cascade must survive');
+        $this->assertSame(
+            ['Additional object properties are not allowed: extra'],
+            $errors['/'],
+        );
+        // No bogus per-element cascade.
+        foreach ($errors as $path => $_) {
+            $this->assertStringStartsNotWith(
+                '/data/',
+                $path,
+                sprintf('no /data/<n> entry expected for empty array data; saw [%s]', $path),
+            );
+        }
+    }
+
+    #[Test]
+    public function additional_properties_dedup_handles_mixed_boolean_object_tuple(): void
+    {
+        // Tuple-form `items: [true, <stdClass>]`. The boolean entry at
+        // index 0 must NOT be descended into (`instanceof stdClass` filters
+        // it), so a cascade at `/0` falls back to the safe path and the
+        // real format/enum failure of index 1's sub-schema survives
+        // independently. We pin the boolean-slot bail by putting an
+        // undeclared property at index 0: it must reach the user.
+        $schema = ObjectConverter::convert([
+            'type' => 'array',
+            'items' => [
+                true,
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'name' => ['type' => 'string'],
+                    ],
+                    'additionalProperties' => false,
+                ],
+            ],
+        ]);
+        // Index 0 is permitted by `true`; index 1 has a declared cascade
+        // path that should still dedup correctly.
+        $data = ObjectConverter::convert([['anything' => 'goes'], ['name' => 'a', 'rogue' => 'real']]);
+
+        $errors = (new SchemaValidatorRunner(0))->validate($schema, $data);
+
+        // Index 1 cascade must keep the real `rogue` (declared `name` filtered).
+        $this->assertArrayHasKey('/1', $errors, 'real additional at index 1 must surface');
+        $this->assertCount(1, $errors['/1']);
+        $this->assertStringContainsString('rogue', $errors['/1'][0]);
+        $this->assertStringNotContainsString(
+            'name',
+            $errors['/1'][0],
+            'declared `name` must be filtered from the tuple-form cascade message',
         );
     }
 
