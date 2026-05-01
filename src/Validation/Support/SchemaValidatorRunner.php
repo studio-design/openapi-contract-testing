@@ -9,8 +9,20 @@ use const PHP_INT_MAX;
 use InvalidArgumentException;
 use Opis\JsonSchema\Errors\ErrorFormatter;
 use Opis\JsonSchema\Validator;
+use stdClass;
 
+use function array_filter;
+use function array_keys;
+use function array_map;
+use function array_values;
+use function explode;
+use function get_object_vars;
+use function implode;
+use function in_array;
+use function preg_match;
+use function property_exists;
 use function sprintf;
+use function trim;
 
 /**
  * @internal Not part of the package's public API. Do not use from user code.
@@ -77,6 +89,137 @@ final class SchemaValidatorRunner
             return ['/' => ['Schema validation failed but opis reported no error detail.']];
         }
 
-        return $this->errorFormatter->format($error);
+        return self::stripCascadingAdditionalProperties($this->errorFormatter->format($error), $jsonSchema);
+    }
+
+    /**
+     * opis's `PropertiesKeyword::validate()` early-returns whenever any
+     * sub-property fails its schema, which leaves the validation context
+     * without `$checked`. The follow-on `additionalProperties: false` keyword
+     * then sees every property the data carries as "unchecked" and fires a
+     * paired pseudo-error naming declared properties as "additional" — see
+     * issue #159 for the upstream root cause analysis.
+     *
+     * From the user's perspective, the second error reads as "these
+     * properties are not allowed by the schema", which is the opposite of
+     * what the schema actually says. In a large suite this routinely doubles
+     * the failure count and points contributors at the wrong fix.
+     *
+     * The cleanup logic: for each `Additional object properties are not
+     * allowed: a, b, c` message, drop names that ARE declared in the
+     * schema's `properties` keyword at the cascade's path (those are cascade
+     * artifacts). If every listed name is a cascade, drop the whole message;
+     * otherwise rewrite it with the surviving genuinely-additional names so
+     * the real signal still surfaces.
+     *
+     * Schema-based detection is required because the cascade reports
+     * declared properties even when their sub-validation succeeded silently
+     * (e.g. `message` is well-typed, but listed alongside `code` whose enum
+     * failed). A purely sub-error-based heuristic would let those silently-
+     * valid declared properties leak through as false-positive additionals.
+     *
+     * The strategy degrades safely: if `$jsonSchema` is not an object (opis
+     * accepts `true`/`false`/scalar schemas too) or the cascade path can't
+     * be resolved against it (composition keywords like `oneOf`/`allOf`
+     * route data through alternate sub-schemas), the original messages are
+     * returned unchanged — no false-positive suppression.
+     *
+     * @param array<string, string[]> $errors
+     *
+     * @return array<string, string[]>
+     */
+    private static function stripCascadingAdditionalProperties(array $errors, mixed $jsonSchema): array
+    {
+        if (!$jsonSchema instanceof stdClass) {
+            return $errors;
+        }
+
+        $cleaned = [];
+
+        foreach ($errors as $path => $messages) {
+            $keptMessages = [];
+            foreach ($messages as $message) {
+                $matches = [];
+                if (preg_match('/^Additional object properties are not allowed: (.+)$/', $message, $matches) !== 1) {
+                    $keptMessages[] = $message;
+
+                    continue;
+                }
+
+                $declared = self::declaredPropertyNamesAtPath($jsonSchema, $path);
+                if ($declared === null) {
+                    // Path didn't resolve to an object schema with a
+                    // `properties` keyword we can inspect. Conservative:
+                    // keep the message untouched.
+                    $keptMessages[] = $message;
+
+                    continue;
+                }
+
+                $listed = array_filter(
+                    array_map(static fn(string $name): string => trim($name), explode(',', $matches[1])),
+                    static fn(string $name): bool => $name !== '',
+                );
+                $real = array_values(array_filter(
+                    $listed,
+                    static fn(string $name): bool => !in_array($name, $declared, true),
+                ));
+
+                if ($real === []) {
+                    continue;
+                }
+
+                $keptMessages[] = sprintf(
+                    'Additional object properties are not allowed: %s',
+                    implode(', ', $real),
+                );
+            }
+
+            if ($keptMessages !== []) {
+                $cleaned[$path] = $keptMessages;
+            }
+        }
+
+        return $cleaned;
+    }
+
+    /**
+     * Walk `$schema` via the JSON pointer in `$path` and return the keys of
+     * the `properties` keyword at that location, or null when the path
+     * doesn't resolve through plain property nesting (e.g. composition
+     * keywords, `additionalProperties: <schema>`, missing schemas).
+     *
+     * Conservative: only steps through `properties.<name>`. If a path
+     * segment can't be resolved that way the caller treats the cascade as
+     * unsafe to dedup and keeps the message intact.
+     *
+     * @return null|list<string>
+     */
+    private static function declaredPropertyNamesAtPath(stdClass $schema, string $path): ?array
+    {
+        $current = $schema;
+
+        if ($path !== '/' && $path !== '') {
+            $segments = explode('/', trim($path, '/'));
+            foreach ($segments as $segment) {
+                if (!property_exists($current, 'properties') || !$current->properties instanceof stdClass) {
+                    return null;
+                }
+                if (!property_exists($current->properties, $segment)) {
+                    return null;
+                }
+                $next = $current->properties->{$segment};
+                if (!$next instanceof stdClass) {
+                    return null;
+                }
+                $current = $next;
+            }
+        }
+
+        if (!property_exists($current, 'properties') || !$current->properties instanceof stdClass) {
+            return null;
+        }
+
+        return array_keys(get_object_vars($current->properties));
     }
 }
