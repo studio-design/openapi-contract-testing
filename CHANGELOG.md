@@ -51,12 +51,21 @@ until 1.0.0 ships. Each entry below tags whether it is breaking.
   under `Validation\Request\` / `Validation\Response\` / `Validation\Support\`,
   the `Spec\` machinery (`OpenApiSchemaConverter`, `OpenApiPathMatcher`,
   `OpenApiPathSuggester`, `OpenApiRefResolver`, `RefResolutionContext`),
-  the PHPUnit `CoverageReportSubscriber` / `ConsoleOutput` enum, and
-  `Fuzz\SchemaDataGenerator`. No behavioural change — the public
-  entry points (`OpenApiResponseValidator`, `OpenApiRequestValidator`,
-  `OpenApiCoverageTracker`, `Coverage\*` renderers, `Fuzz\OpenApiEndpointExplorer`,
-  `Laravel\*`, attributes, exceptions, enums, `OpenApiSpecLoader`)
-  remain user-callable. Refs #113.
+  the PHPUnit `CoverageReportSubscriber`, `Coverage\CoverageMergeCommand`
+  (the `bin/openapi-coverage-merge` CLI surface remains covered — the
+  class itself is the implementation detail behind it), and
+  `Fuzz\SchemaDataGenerator`. The `ConsoleOutput` enum is intentionally
+  NOT marked `@internal` because it appears on the public
+  `Coverage\ConsoleCoverageRenderer::render()` signature; its string
+  values (`default`, `all`, `uncovered_only`, `active_only`) remain part
+  of the v1.0 SemVer surface as the documented `console_output` config
+  parameter. Wording on the existing `Internal\` and
+  `Laravel\Internal\StackTraceFilter` markers normalised to the same
+  boilerplate sentence. No behavioural change — the public entry points
+  (`OpenApiResponseValidator`, `OpenApiRequestValidator`,
+  `OpenApiCoverageTracker`, `Coverage\*` renderers,
+  `Fuzz\OpenApiEndpointExplorer`, `Laravel\*`, attributes, exceptions,
+  enums, `OpenApiSpecLoader`) remain user-callable. Refs #113.
 
 ### Fixed
 

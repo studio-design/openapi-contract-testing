@@ -57,6 +57,11 @@ use function unlink;
  *     min_coverage_strict?: bool,
  *     help?: bool,
  * }
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
+ *           The CLI surface of `bin/openapi-coverage-merge` is the documented
+ *           invocation path; this class's constructor / methods may change in
+ *           any release without a SemVer bump.
  */
 final class CoverageMergeCommand
 {

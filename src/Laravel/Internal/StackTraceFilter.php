@@ -16,9 +16,11 @@ use function str_contains;
 use function str_replace;
 
 /**
- * @internal Trims this library's own + Laravel test-concern frames out of an
- *           assertion-failure trace so a contract-test failure points at the
- *           user's test line, not at vendor code.
+ * Trims this library's own + Laravel test-concern frames out of an
+ * assertion-failure trace so a contract-test failure points at the
+ * user's test line, not at vendor code.
+ *
+ * @internal Not part of the package's public API. Do not use from user code.
  */
 final class StackTraceFilter
 {
