@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Integration;
 
+use const E_USER_WARNING;
+
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
@@ -13,6 +15,9 @@ use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function implode;
+use function restore_error_handler;
+use function set_error_handler;
+use function str_contains;
 
 /**
  * End-to-end integration tests for the fixture-coverage gaps the v1.0
@@ -63,34 +68,42 @@ class FixtureCoverageTest extends TestCase
     #[Test]
     public function composition_oneof_accepts_each_branch_independently(): void
     {
-        $cat = $this->requestValidator->validate(
-            'composition',
-            'POST',
-            '/v1/pets/oneOf',
-            [],
-            [],
-            ['kind' => 'cat', 'meow' => true],
-            'application/json',
-        );
-        $this->assertTrue($cat->isValid(), 'cat branch: ' . implode(' | ', $cat->errors()));
+        // /v1/pets/oneOf carries discriminator.mapping for documentation
+        // purposes; the schema converter now warns once per process about it.
+        // This test focuses on the union-validates-each-branch behaviour, so
+        // the warning is suppressed locally — it's covered explicitly by
+        // composition_discriminator_mapping_is_silently_stripped.
+        [$cat, $dog] = $this->suppressSchemaSilentPassWarnings(fn() => [
+            $this->requestValidator->validate(
+                'composition',
+                'POST',
+                '/v1/pets/oneOf',
+                [],
+                [],
+                ['kind' => 'cat', 'meow' => true],
+                'application/json',
+            ),
+            $this->requestValidator->validate(
+                'composition',
+                'POST',
+                '/v1/pets/oneOf',
+                [],
+                [],
+                ['kind' => 'dog', 'bark' => false],
+                'application/json',
+            ),
+        ]);
 
-        $dog = $this->requestValidator->validate(
-            'composition',
-            'POST',
-            '/v1/pets/oneOf',
-            [],
-            [],
-            ['kind' => 'dog', 'bark' => false],
-            'application/json',
-        );
+        $this->assertTrue($cat->isValid(), 'cat branch: ' . implode(' | ', $cat->errors()));
         $this->assertTrue($dog->isValid(), 'dog branch: ' . implode(' | ', $dog->errors()));
     }
 
     #[Test]
     public function composition_oneof_rejects_body_matching_no_branch(): void
     {
-        // Neither shape: no `kind`, no `meow` / `bark`.
-        $result = $this->requestValidator->validate(
+        // Neither shape: no `kind`, no `meow` / `bark`. discriminator.mapping
+        // warning suppressed — see composition_oneof_accepts_each_branch_independently.
+        $result = $this->suppressSchemaSilentPassWarnings(fn() => $this->requestValidator->validate(
             'composition',
             'POST',
             '/v1/pets/oneOf',
@@ -98,7 +111,7 @@ class FixtureCoverageTest extends TestCase
             [],
             ['unrelated' => 'value'],
             'application/json',
-        );
+        ));
 
         $this->assertFalse($result->isValid());
         $this->assertNotEmpty($result->errors());
@@ -114,20 +127,40 @@ class FixtureCoverageTest extends TestCase
         // branch (Cat) by mapping but matches the OTHER branch's shape (Dog)
         // would FAIL with mapping enforced — but PASS today because mapping
         // is stripped and the body is judged against the oneOf union.
-        $result = $this->requestValidator->validate(
-            'composition',
-            'POST',
-            '/v1/pets/oneOf',
-            [],
-            [],
-            // kind=dog routes to Dog by mapping; body is a valid Dog.
-            // If mapping were enforced and kind said "cat", we would route
-            // to Cat and fail. As-is, the body passes the union because
-            // it satisfies Dog's branch.
-            ['kind' => 'dog', 'bark' => true],
-            'application/json',
-        );
+        //
+        // The strip now also fires a one-shot E_USER_WARNING; capture it here
+        // so the silent-pass-plus-warning contract is pinned end-to-end.
+        $captured = null;
+        set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
+            if ($errno === E_USER_WARNING && str_contains($errstr, 'discriminator.mapping')) {
+                $captured = $errstr;
+
+                return true;
+            }
+
+            return false;
+        });
+
+        try {
+            $result = $this->requestValidator->validate(
+                'composition',
+                'POST',
+                '/v1/pets/oneOf',
+                [],
+                [],
+                // kind=dog routes to Dog by mapping; body is a valid Dog.
+                // If mapping were enforced and kind said "cat", we would route
+                // to Cat and fail. As-is, the body passes the union because
+                // it satisfies Dog's branch.
+                ['kind' => 'dog', 'bark' => true],
+                'application/json',
+            );
+        } finally {
+            restore_error_handler();
+        }
+
         $this->assertTrue($result->isValid(), implode(' | ', $result->errors()));
+        $this->assertNotNull($captured, 'discriminator.mapping strip must fire its silent-pass warning');
     }
 
     #[Test]
@@ -767,5 +800,26 @@ class FixtureCoverageTest extends TestCase
             'lastSeen' => '2026-04-30T12:34:56Z',
             'userId' => '01234567-89ab-cdef-0123-456789abcdef',
         ];
+    }
+
+    /**
+     * Run a callable while absorbing the converter's `[OpenAPI Schema]`
+     * silent-pass warnings (discriminator.mapping, unknown format). Tests
+     * that exercise fixtures with these features but focus on validation
+     * outcome use this; warning *contents* are pinned by
+     * `composition_discriminator_mapping_is_silently_stripped` and the
+     * unit-level `OpenApiSchemaConverterTest`.
+     */
+    private function suppressSchemaSilentPassWarnings(callable $fn): mixed
+    {
+        set_error_handler(static function (int $errno, string $errstr): bool {
+            return $errno === E_USER_WARNING && str_contains($errstr, '[OpenAPI Schema]');
+        });
+
+        try {
+            return $fn();
+        } finally {
+            restore_error_handler();
+        }
     }
 }

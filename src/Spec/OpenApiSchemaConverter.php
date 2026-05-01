@@ -11,6 +11,7 @@ use Studio\OpenApiContractTesting\SchemaContext;
 
 use function array_is_list;
 use function array_key_exists;
+use function implode;
 use function in_array;
 use function is_array;
 use function is_string;
@@ -68,6 +69,51 @@ final class OpenApiSchemaConverter
         'unevaluatedItems',
     ];
 
+    /**
+     * `format` keywords opis (Draft 06+) actually validates. Values outside
+     * this set are silently accepted by opis regardless of the data, so
+     * `format: emial` (typo for `email`) would pass any string. Mirrors
+     * `vendor/opis/json-schema/src/Resolvers/FormatResolver.php` registrations.
+     */
+    private const KNOWN_OPIS_FORMATS = [
+        'date',
+        'time',
+        'date-time',
+        'duration',
+        'uri',
+        'uri-reference',
+        'uri-template',
+        'iri',
+        'iri-reference',
+        'regex',
+        'ipv4',
+        'ipv6',
+        'hostname',
+        'idn-hostname',
+        'uuid',
+        'email',
+        'idn-email',
+        'json-pointer',
+        'relative-json-pointer',
+    ];
+
+    /**
+     * `format` keywords the OpenAPI spec defines as advisory hints rather
+     * than enforcement targets (numeric width, binary encoding, password
+     * sensitivity). README documents these as "not range-checked / not
+     * specifically handled" — they are deliberately not enforced and must
+     * not trigger the unknown-format warning.
+     */
+    private const ADVISORY_FORMATS = [
+        'int32',
+        'int64',
+        'float',
+        'double',
+        'byte',
+        'binary',
+        'password',
+    ];
+
     /** @var array<string, true> */
     private static array $warnedKeywords = [];
 
@@ -123,6 +169,13 @@ final class OpenApiSchemaConverter
         // Draft 04/07 keywords used in 3.0 specs as well, so silent ignoring is
         // just as risky there.
         self::warnIfUsesUnsupportedKeywords($schema);
+
+        // Run the OAS-only warnings BEFORE the common-key removal below: once
+        // `discriminator` is stripped its `mapping` is gone, and `format` is
+        // not in OPENAPI_COMMON_KEYS but the order keeps the "warn before any
+        // mutation" reading consistent.
+        self::warnIfDiscriminatorMappingPresent($schema);
+        self::warnIfUnknownFormat($schema);
 
         self::removeKeys($schema, self::OPENAPI_COMMON_KEYS);
 
@@ -343,6 +396,95 @@ final class OpenApiSchemaConverter
                 E_USER_WARNING,
             );
         }
+    }
+
+    /**
+     * Issue a one-shot E_USER_WARNING when a schema declares a non-empty
+     * `discriminator.mapping`. The converter strips the entire `discriminator`
+     * keyword (it's OAS-only, not a JSON Schema keyword) before handing the
+     * schema to opis — the underlying `oneOf` / `anyOf` is still validated
+     * as a plain union, but the mapping does not steer validation toward a
+     * single branch. A polymorphic body with the wrong discriminator value
+     * passes as long as it satisfies any branch, masking serialiser bugs.
+     *
+     * Dedup key is the literal `discriminator.mapping` string — fired at
+     * most once per process regardless of how many polymorphic schemas
+     * carry the keyword.
+     *
+     * @param array<string, mixed> $schema
+     */
+    private static function warnIfDiscriminatorMappingPresent(array $schema): void
+    {
+        if (!isset($schema['discriminator']) || !is_array($schema['discriminator'])) {
+            return;
+        }
+        $mapping = $schema['discriminator']['mapping'] ?? null;
+        if (!is_array($mapping) || $mapping === []) {
+            return;
+        }
+
+        $dedupKey = 'discriminator.mapping';
+        if (isset(self::$warnedKeywords[$dedupKey])) {
+            return;
+        }
+
+        self::$warnedKeywords[$dedupKey] = true;
+        trigger_error(
+            "[OpenAPI Schema] 'discriminator.mapping' is silently stripped — the underlying oneOf/anyOf is still validated as a plain union, but the mapping does not steer validation toward a single branch. A body with the wrong discriminator value passes as long as it satisfies any branch, masking serialiser bugs. See README \"Schema features\" for the full limitation note.",
+            E_USER_WARNING,
+        );
+    }
+
+    /**
+     * Issue a one-shot E_USER_WARNING per format value when a schema
+     * declares a `format` opis cannot validate. Without this, a typo like
+     * `format: emial` (instead of `email`) silently passes against any
+     * string — the user thinks they're enforcing email syntax but anything
+     * goes.
+     *
+     * The advisory-format allowlist (`int32`, `int64`, `float`, `double`,
+     * `byte`, `binary`, `password`) is intentional: these are OAS hint
+     * formats that the README documents as not enforced. They must not
+     * trigger the warning so users do not get spammed for spec-correct
+     * advisory usage.
+     *
+     * Custom formats registered against opis at runtime are NOT detected by
+     * this static check — users who extend opis's format set will see false
+     * positives and must rename their format or suppress the warning. A
+     * future enhancement could expose an allowlist override.
+     *
+     * @param array<string, mixed> $schema
+     */
+    private static function warnIfUnknownFormat(array $schema): void
+    {
+        $format = $schema['format'] ?? null;
+        if (!is_string($format) || $format === '') {
+            return;
+        }
+
+        if (in_array($format, self::KNOWN_OPIS_FORMATS, true)) {
+            return;
+        }
+
+        if (in_array($format, self::ADVISORY_FORMATS, true)) {
+            return;
+        }
+
+        $dedupKey = 'format:' . $format;
+        if (isset(self::$warnedKeywords[$dedupKey])) {
+            return;
+        }
+
+        self::$warnedKeywords[$dedupKey] = true;
+        trigger_error(
+            sprintf(
+                "[OpenAPI Schema] format '%s' is not in opis's known set; the validator will silently accept any string regardless of the value. Common cause: a typo (e.g. 'emial' instead of 'email'). Validated formats: %s. Advisory formats (not enforced by design, no warning): %s.",
+                $format,
+                implode(', ', self::KNOWN_OPIS_FORMATS),
+                implode(', ', self::ADVISORY_FORMATS),
+            ),
+            E_USER_WARNING,
+        );
     }
 
     /**

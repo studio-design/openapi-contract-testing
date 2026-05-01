@@ -14,6 +14,7 @@ use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 
 use function restore_error_handler;
 use function set_error_handler;
+use function str_contains;
 
 class OpenApiSchemaConverterTest extends TestCase
 {
@@ -1001,6 +1002,223 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     // ========================================
+    // discriminator.mapping silent-strip warning (#147)
+    // ========================================
+
+    #[Test]
+    public function discriminator_with_mapping_emits_warning(): void
+    {
+        // discriminator.mapping is dropped during conversion (it's OAS-only,
+        // not a JSON Schema keyword); the underlying oneOf still validates
+        // as a plain union. Without the warning, a body with the wrong
+        // discriminator value would silently pass as long as it satisfies
+        // any branch — masking serialiser bugs.
+        $schema = [
+            'oneOf' => [
+                ['type' => 'object', 'properties' => ['kind' => ['enum' => ['cat']]]],
+                ['type' => 'object', 'properties' => ['kind' => ['enum' => ['dog']]]],
+            ],
+            'discriminator' => [
+                'propertyName' => 'kind',
+                'mapping' => [
+                    'cat' => '#/components/schemas/Cat',
+                    'dog' => '#/components/schemas/Dog',
+                ],
+            ],
+        ];
+
+        $captured = $this->captureFirstWarning(static fn() => OpenApiSchemaConverter::convert($schema));
+
+        $this->assertNotNull($captured);
+        $this->assertStringContainsString('discriminator.mapping', (string) $captured);
+        $this->assertStringContainsString('silently stripped', (string) $captured);
+    }
+
+    #[Test]
+    public function discriminator_without_mapping_does_not_warn(): void
+    {
+        // Bare discriminator (propertyName only, no mapping) is just a
+        // documentation hint — there is no "branch routing" semantics to
+        // silently lose. Must not warn, otherwise users get noise for
+        // spec-correct usage.
+        $schema = [
+            'oneOf' => [
+                ['type' => 'object'],
+                ['type' => 'object'],
+            ],
+            'discriminator' => [
+                'propertyName' => 'kind',
+            ],
+        ];
+
+        $captured = $this->captureFirstWarning(static fn() => OpenApiSchemaConverter::convert($schema));
+
+        $this->assertNull($captured, 'discriminator without mapping must not warn');
+    }
+
+    #[Test]
+    public function discriminator_with_empty_mapping_does_not_warn(): void
+    {
+        // `mapping: {}` is functionally equivalent to no mapping — nothing
+        // to silently route, nothing to warn about.
+        $schema = [
+            'oneOf' => [['type' => 'object']],
+            'discriminator' => [
+                'propertyName' => 'kind',
+                'mapping' => [],
+            ],
+        ];
+
+        $captured = $this->captureFirstWarning(static fn() => OpenApiSchemaConverter::convert($schema));
+
+        $this->assertNull($captured);
+    }
+
+    #[Test]
+    public function discriminator_mapping_warns_only_once_per_process(): void
+    {
+        // Avoid log spam: the mapping warning fires once per process even if
+        // dozens of polymorphic schemas in one spec carry it. (setUp()
+        // resets the warned-set.)
+        $schema = [
+            'oneOf' => [['type' => 'object']],
+            'discriminator' => [
+                'propertyName' => 'kind',
+                'mapping' => ['a' => '#/components/schemas/A'],
+            ],
+        ];
+
+        $count = 0;
+        set_error_handler(static function (int $errno, string $errstr) use (&$count): bool {
+            if ($errno === E_USER_WARNING && str_contains($errstr, 'discriminator.mapping')) {
+                $count++;
+
+                return true;
+            }
+
+            return false;
+        });
+
+        try {
+            OpenApiSchemaConverter::convert($schema);
+            OpenApiSchemaConverter::convert($schema);
+            OpenApiSchemaConverter::convert($schema);
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertSame(1, $count);
+    }
+
+    // ========================================
+    // Unknown format silent-pass warning (#151)
+    // ========================================
+
+    #[Test]
+    public function unknown_format_emits_warning(): void
+    {
+        // opis silently accepts unknown format values regardless of data,
+        // so `format: emial` (typo) would pass any string. Pin that the
+        // converter surfaces this as a loud signal.
+        $schema = ['type' => 'string', 'format' => 'emial'];
+
+        $captured = $this->captureFirstWarning(static fn() => OpenApiSchemaConverter::convert($schema));
+
+        $this->assertNotNull($captured);
+        $this->assertStringContainsString("format 'emial'", (string) $captured);
+        $this->assertStringContainsString('not in opis', (string) $captured);
+    }
+
+    #[Test]
+    public function known_opis_formats_do_not_warn(): void
+    {
+        // Regression guard: every format opis Draft 06+ actually validates
+        // must be silent. A future trim of the allowlist would surface here
+        // as a noisy warning for spec-correct usage.
+        $known = [
+            'date', 'time', 'date-time', 'duration',
+            'uri', 'uri-reference', 'uri-template', 'iri', 'iri-reference',
+            'regex', 'ipv4', 'ipv6', 'hostname', 'idn-hostname',
+            'uuid', 'email', 'idn-email',
+            'json-pointer', 'relative-json-pointer',
+        ];
+
+        foreach ($known as $format) {
+            OpenApiSchemaConverter::resetWarningStateForTesting();
+            $schema = ['type' => 'string', 'format' => $format];
+
+            $captured = $this->captureFirstWarning(static fn() => OpenApiSchemaConverter::convert($schema));
+
+            $this->assertNull($captured, "format '{$format}' is opis-supported and must not warn");
+        }
+    }
+
+    #[Test]
+    public function advisory_formats_do_not_warn(): void
+    {
+        // OAS hint formats are deliberately not enforced (README says so).
+        // They must not trigger the unknown-format warning, otherwise users
+        // get spammed for spec-correct usage of advisory hints.
+        $advisory = ['int32', 'int64', 'float', 'double', 'byte', 'binary', 'password'];
+
+        foreach ($advisory as $format) {
+            OpenApiSchemaConverter::resetWarningStateForTesting();
+            $schema = ['type' => 'string', 'format' => $format];
+
+            $captured = $this->captureFirstWarning(static fn() => OpenApiSchemaConverter::convert($schema));
+
+            $this->assertNull($captured, "advisory format '{$format}' must not warn");
+        }
+    }
+
+    #[Test]
+    public function unknown_format_warns_once_per_format_value(): void
+    {
+        // Dedup is per format value, not per call. Two calls referencing the
+        // same typo fire one warning; two distinct typos fire two.
+        $count = 0;
+        set_error_handler(static function (int $errno, string $errstr) use (&$count): bool {
+            if ($errno === E_USER_WARNING && str_contains($errstr, "format '")) {
+                $count++;
+
+                return true;
+            }
+
+            return false;
+        });
+
+        try {
+            OpenApiSchemaConverter::convert(['type' => 'string', 'format' => 'emial']);
+            OpenApiSchemaConverter::convert(['type' => 'string', 'format' => 'emial']);
+            OpenApiSchemaConverter::convert(['type' => 'string', 'format' => 'urll']);
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertSame(2, $count, 'two distinct unknown formats expected to fire two warnings');
+    }
+
+    #[Test]
+    public function unknown_format_inside_nested_property_warns(): void
+    {
+        // Format keywords are most often nested inside `properties.X`. The
+        // recursive descent in convertInPlace must reach them; pin that an
+        // unknown format on a nested property triggers the warning, not just
+        // a top-level one.
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'contact' => ['type' => 'string', 'format' => 'phone'],
+            ],
+        ];
+
+        $captured = $this->captureFirstWarning(static fn() => OpenApiSchemaConverter::convert($schema));
+
+        $this->assertNotNull($captured);
+        $this->assertStringContainsString("format 'phone'", (string) $captured);
+    }
+
+    // ========================================
     // $schema stripped from converter output (Draft 07 alignment)
     // ========================================
 
@@ -1197,5 +1415,32 @@ class OpenApiSchemaConverterTest extends TestCase
         $result = OpenApiSchemaConverter::convert(['const' => []], OpenApiVersion::V3_1);
 
         $this->assertSame([[]], $result['enum']);
+    }
+
+    /**
+     * Run the conversion and capture the first `E_USER_WARNING` it triggers.
+     * Returns null if no warning fires. Use this in single-warning tests so
+     * the boilerplate stays in one place.
+     */
+    private function captureFirstWarning(callable $fn): ?string
+    {
+        $captured = null;
+        set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
+            if ($errno === E_USER_WARNING && $captured === null) {
+                $captured = $errstr;
+
+                return true;
+            }
+
+            return $errno === E_USER_WARNING;
+        });
+
+        try {
+            $fn();
+        } finally {
+            restore_error_handler();
+        }
+
+        return $captured;
     }
 }
