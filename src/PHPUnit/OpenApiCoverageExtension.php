@@ -130,7 +130,23 @@ final class OpenApiCoverageExtension implements Extension
                 $stripPrefixes = array_map('trim', explode(',', $parameters->get('strip_prefixes')));
             }
 
-            OpenApiSpecLoader::configure($basePath, $stripPrefixes);
+            // Issue #170: secondary base path used only for
+            // #[BoundToOpenApiEnum] resolution. Absent → loader returns
+            // null and the asserter falls back to spec_base_path, keeping
+            // existing single-root setups bit-for-bit identical.
+            $enumBasePath = null;
+            if ($parameters->has('enum_spec_base_path')) {
+                $enumBasePath = $parameters->get('enum_spec_base_path');
+                if (!str_starts_with($enumBasePath, '/')) {
+                    $enumBasePath = getcwd() . '/' . $enumBasePath;
+                }
+            }
+
+            OpenApiSpecLoader::configure(
+                $basePath,
+                $stripPrefixes,
+                enumBasePath: $enumBasePath,
+            );
         }
 
         $specs = ['front'];

@@ -65,6 +65,39 @@ class OpenApiSpecLoaderTest extends TestCase
     }
 
     #[Test]
+    public function get_enum_base_path_returns_null_when_not_configured(): void
+    {
+        // Issue #170: enum_spec_base_path is opt-in. Absence is the
+        // documented default — getEnumBasePath() must not throw the way
+        // getBasePath() does, because the asserter relies on the null
+        // return to fall back to spec_base_path.
+        $this->assertNull(OpenApiSpecLoader::getEnumBasePath());
+    }
+
+    #[Test]
+    public function configure_stores_enum_base_path_with_trailing_slash_trimmed(): void
+    {
+        OpenApiSpecLoader::configure(
+            basePath: '/path/to/specs',
+            enumBasePath: '/path/to/openapi/',
+        );
+
+        $this->assertSame('/path/to/openapi', OpenApiSpecLoader::getEnumBasePath());
+    }
+
+    #[Test]
+    public function reset_clears_enum_base_path(): void
+    {
+        OpenApiSpecLoader::configure(
+            basePath: '/path/to/specs',
+            enumBasePath: '/path/to/openapi',
+        );
+        OpenApiSpecLoader::reset();
+
+        $this->assertNull(OpenApiSpecLoader::getEnumBasePath());
+    }
+
+    #[Test]
     public function get_base_path_throws_when_not_configured(): void
     {
         try {

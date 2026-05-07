@@ -23,6 +23,7 @@ use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use function fclose;
 use function file_get_contents;
 use function fopen;
+use function getcwd;
 use function restore_error_handler;
 use function rewind;
 use function set_error_handler;
@@ -120,6 +121,58 @@ class OpenApiCoverageExtensionTest extends TestCase
         $extension->setupExtension(null, $parameters, null);
 
         $this->assertSame('', $this->readStderr());
+    }
+
+    #[Test]
+    public function bootstrap_leaves_enum_base_path_unset_when_parameter_omitted(): void
+    {
+        // Issue #170: enum_spec_base_path is opt-in. When the parameter is
+        // not present the loader must report null so EnumDriftAsserter
+        // falls back to spec_base_path — keeping pre-1.2.0 setups
+        // bit-for-bit identical.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => 'refs-valid',
+        ]);
+
+        $extension->setupExtension(null, $parameters, null);
+
+        $this->assertNull(OpenApiSpecLoader::getEnumBasePath());
+    }
+
+    #[Test]
+    public function bootstrap_passes_absolute_enum_spec_base_path_to_loader(): void
+    {
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => 'refs-valid',
+            'enum_spec_base_path' => '/absolute/path/to/openapi',
+        ]);
+
+        $extension->setupExtension(null, $parameters, null);
+
+        $this->assertSame('/absolute/path/to/openapi', OpenApiSpecLoader::getEnumBasePath());
+    }
+
+    #[Test]
+    public function bootstrap_resolves_relative_enum_spec_base_path_against_cwd(): void
+    {
+        // Pin that the extension absolutises a relative `enum_spec_base_path`
+        // against `getcwd()`, mirroring `spec_base_path` / `output_file` /
+        // `sidecar_dir`. Without this the asserter would silently look in the
+        // wrong place when paratest workers run with a different cwd.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => 'refs-valid',
+            'enum_spec_base_path' => 'relative/openapi',
+        ]);
+
+        $extension->setupExtension(null, $parameters, null);
+
+        $this->assertSame(getcwd() . '/relative/openapi', OpenApiSpecLoader::getEnumBasePath());
     }
 
     #[Test]

@@ -30,6 +30,7 @@ use function file_get_contents;
 use function get_debug_type;
 use function implode;
 use function is_array;
+use function is_dir;
 use function is_int;
 use function is_string;
 use function json_decode;
@@ -268,12 +269,41 @@ final class EnumDriftAsserter
     }
 
     /**
-     * @return list<int|string>
+     * Pick the base path against which `$specPath` should resolve.
+     *
+     * When `enum_spec_base_path` (issue #170) is configured we consult it
+     * exclusively — `spec_base_path` is irrelevant for `#[BoundToOpenApiEnum]`
+     * resolution in that mode, including the case where `spec_base_path` is
+     * not configured at all. When it is not configured we fall back to the
+     * legacy single-root behavior via {@see OpenApiSpecLoader::getBasePath()},
+     * preserving bit-for-bit identical resolution for projects that never
+     * touch the new parameter.
      */
-    private static function loadSpecEnumValues(string $fqcn, string $specPath): array
+    private static function resolveEnumBasePath(string $fqcn, string $specPath): string
     {
+        $enumBasePath = OpenApiSpecLoader::getEnumBasePath();
+        if ($enumBasePath !== null) {
+            // We validate the directory only on the opt-in branch. Misconfigured
+            // enum_spec_base_path would otherwise surface as a generic
+            // SpecFileNotFound on every binding, hiding the real cause.
+            if (!is_dir($enumBasePath)) {
+                throw new EnumBindingException(
+                    EnumBindingReason::EnumBasePathNotFound,
+                    sprintf(
+                        'Configured enum_spec_base_path is not a directory: %s. '
+                        . 'Either fix the path or remove the parameter to fall back to spec_base_path.',
+                        $enumBasePath,
+                    ),
+                    enumFqcn: $fqcn,
+                    specPath: $specPath,
+                );
+            }
+
+            return $enumBasePath;
+        }
+
         try {
-            $basePath = OpenApiSpecLoader::getBasePath();
+            return OpenApiSpecLoader::getBasePath();
         } catch (InvalidOpenApiSpecException $e) {
             // The loader currently only throws BasePathNotConfigured here.
             // If a future loader change leaks a different reason through
@@ -298,6 +328,14 @@ final class EnumDriftAsserter
                 previous: $e,
             );
         }
+    }
+
+    /**
+     * @return list<int|string>
+     */
+    private static function loadSpecEnumValues(string $fqcn, string $specPath): array
+    {
+        $basePath = self::resolveEnumBasePath($fqcn, $specPath);
 
         $absolute = rtrim($basePath, '/') . '/' . $specPath;
 
