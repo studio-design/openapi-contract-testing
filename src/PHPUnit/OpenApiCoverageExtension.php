@@ -32,6 +32,7 @@ use function file_put_contents;
 use function fwrite;
 use function getcwd;
 use function getenv;
+use function implode;
 use function in_array;
 use function is_numeric;
 use function sprintf;
@@ -282,10 +283,8 @@ final class OpenApiCoverageExtension implements Extension
     }
 
     /**
-     * Resolve a boolean parameter with the same XML-shorthand semantics as
-     * `resolveStrictFlag()`: `<parameter name=".." />` (empty value) reads
-     * as `true`, `'0'` / `'false'` / `'no'` read as `false`, anything else
-     * is `true`. Missing parameters fall back to `$default`.
+     * Generalization of {@see resolveStrictFlag()} with a configurable
+     * default for the missing-parameter case.
      */
     private static function resolveBooleanFlag(
         ParameterCollection $parameters,
@@ -333,7 +332,7 @@ final class OpenApiCoverageExtension implements Extension
             );
             self::appendGithubStepSummaryEnumDriftBlock($githubSummaryPath, $reason, isFatal: true);
 
-            throw new EnumBindingException(
+            throw EnumBindingException::forScan(
                 EnumBindingReason::NoNamespacesConfigured,
                 $reason,
             );
@@ -351,9 +350,19 @@ final class OpenApiCoverageExtension implements Extension
         $failOnDrift = self::resolveBooleanFlag($parameters, 'enum_drift_fail_on_drift', true);
 
         if ($fqcns === []) {
-            // No bound enums under the configured prefixes — nothing to
-            // assert. Returning silently keeps the extension a no-op for
-            // codebases that haven't started annotating yet.
+            // No bound enums under the configured prefixes. Common in two
+            // cases: (a) a codebase mid-migration that hasn't annotated any
+            // enums yet, and (b) a typo'd `enum_drift_scan_namespaces`
+            // (e.g. `App\Enum` vs `App\Enums`). The first is intentional
+            // and must not fail; the second is a misconfiguration the user
+            // wants to see. A NOTE line surfaces the typo without breaking
+            // the migration use case.
+            self::writeStderr(
+                '[OpenAPI Enum Drift] NOTE: scan matched zero #[BoundToOpenApiEnum] enums under '
+                . 'configured prefixes (' . implode(', ', $namespaces) . '). '
+                . "Check enum_drift_scan_namespaces if you expected matches.\n",
+            );
+
             return;
         }
 

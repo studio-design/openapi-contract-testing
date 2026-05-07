@@ -28,4 +28,35 @@ final class EnumBindingException extends RuntimeException
     ) {
         parent::__construct($message, 0, $previous);
     }
+
+    /**
+     * Build an exception for a specific bound enum that failed to resolve
+     * against its spec file. `$enumFqcn` is required because all per-binding
+     * reasons (`TargetIsNotEnum`, `AttributeMissing`, `SpecFileNotFound`, …)
+     * carry it.
+     */
+    public static function forBinding(
+        EnumBindingReason $reason,
+        string $message,
+        string $enumFqcn,
+        ?string $specPath = null,
+        ?Throwable $previous = null,
+    ): self {
+        return new self($reason, $message, $enumFqcn, $specPath, $previous);
+    }
+
+    /**
+     * Build an exception for a scanner-level misconfiguration that is not
+     * tied to any single binding (`NoNamespacesConfigured`,
+     * `ScanNamespaceUnresolvable`, `ScanComposerLoaderUnavailable`).
+     * `$enumFqcn` and `$specPath` are deliberately not accepted — these
+     * reasons describe the scan setup itself, not a failed binding.
+     */
+    public static function forScan(
+        EnumBindingReason $reason,
+        string $message,
+        ?Throwable $previous = null,
+    ): self {
+        return new self($reason, $message, null, null, $previous);
+    }
 }

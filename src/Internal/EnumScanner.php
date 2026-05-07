@@ -72,7 +72,7 @@ final class EnumScanner
     public static function scan(array $namespacePrefixes): array
     {
         if ($namespacePrefixes === []) {
-            throw new EnumBindingException(
+            throw EnumBindingException::forScan(
                 EnumBindingReason::NoNamespacesConfigured,
                 'EnumScanner::scan() requires at least one namespace prefix.',
             );
@@ -157,7 +157,7 @@ final class EnumScanner
     private static function resolveLoader(): ClassLoader
     {
         if (self::$forceUnavailable) {
-            throw new EnumBindingException(
+            throw EnumBindingException::forScan(
                 EnumBindingReason::ScanComposerLoaderUnavailable,
                 'Composer ClassLoader unavailable; cannot auto-discover enums.',
             );
@@ -176,7 +176,7 @@ final class EnumScanner
             }
         }
 
-        throw new EnumBindingException(
+        throw EnumBindingException::forScan(
             EnumBindingReason::ScanComposerLoaderUnavailable,
             'Composer ClassLoader unavailable; cannot auto-discover enums.',
         );
@@ -191,7 +191,7 @@ final class EnumScanner
         $candidates = [...$candidates, ...self::collectFromPsr4($loader, $prefix)];
 
         if ($candidates === [] && !self::prefixHasResolvableRoot($loader, $prefix)) {
-            throw new EnumBindingException(
+            throw EnumBindingException::forScan(
                 EnumBindingReason::ScanNamespaceUnresolvable,
                 sprintf(
                     'Namespace prefix "%s" is not registered as a Composer PSR-4 root '
