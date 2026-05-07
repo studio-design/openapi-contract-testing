@@ -13,11 +13,19 @@ use PHPUnit\Runner\Extension\Facade;
 use PHPUnit\Runner\Extension\ParameterCollection;
 use PHPUnit\TextUI\Configuration\Configuration;
 use Studio\OpenApiContractTesting\Coverage\InvalidThresholdConfigurationException;
+use Studio\OpenApiContractTesting\Exception\EnumBindingException;
+use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
+use Studio\OpenApiContractTesting\Exception\EnumDriftException;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
+use Studio\OpenApiContractTesting\Internal\EnumScanner;
+use Studio\OpenApiContractTesting\Schema\EnumDriftAsserter;
+use Studio\OpenApiContractTesting\Schema\EnumDriftReport;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
+use function array_filter;
 use function array_map;
+use function array_values;
 use function explode;
 use function fflush;
 use function file_put_contents;
@@ -78,7 +86,7 @@ final class OpenApiCoverageExtension implements Extension
     {
         try {
             $this->setupExtension($facade, $parameters, getenv('GITHUB_STEP_SUMMARY') ?: null);
-        } catch (InvalidOpenApiSpecException|InvalidThresholdConfigurationException|SpecFileNotFoundException) {
+        } catch (EnumBindingException|EnumDriftException|InvalidOpenApiSpecException|InvalidThresholdConfigurationException|SpecFileNotFoundException) {
             // setupExtension() has already written a FATAL line to stderr and
             // (if GITHUB_STEP_SUMMARY is set) appended a fatal block to it.
             // PHPUnit's ExtensionBootstrapper::bootstrap() wraps this call in
@@ -155,6 +163,8 @@ final class OpenApiCoverageExtension implements Extension
                 throw $e;
             }
         }
+
+        self::runEnumDriftCheck($parameters, $githubSummaryPath);
 
         $outputFile = null;
         if ($parameters->has('output_file')) {
@@ -269,6 +279,157 @@ final class OpenApiCoverageExtension implements Extension
         // value (the `<parameter name="..." />` shorthand) is treated as
         // "set" so the XML and CLI sides agree.
         return !in_array($raw, ['0', 'false', 'no'], true);
+    }
+
+    /**
+     * Resolve a boolean parameter with the same XML-shorthand semantics as
+     * `resolveStrictFlag()`: `<parameter name=".." />` (empty value) reads
+     * as `true`, `'0'` / `'false'` / `'no'` read as `false`, anything else
+     * is `true`. Missing parameters fall back to `$default`.
+     */
+    private static function resolveBooleanFlag(
+        ParameterCollection $parameters,
+        string $name,
+        bool $default,
+    ): bool {
+        if (!$parameters->has($name)) {
+            return $default;
+        }
+        $raw = trim($parameters->get($name));
+
+        return !in_array($raw, ['0', 'false', 'no'], true);
+    }
+
+    /**
+     * Auto-discover `#[BoundToOpenApiEnum]` enums under the configured
+     * namespace prefixes and run a static drift check at bootstrap. A
+     * misconfiguration or strict-mode drift hard-fails the run; lenient
+     * mode only emits a WARNING block.
+     *
+     * Runs after the spec eager-load loop so `OpenApiSpecLoader::getBasePath()`
+     * is already configured by the time `EnumDriftAsserter` resolves
+     * `#[BoundToOpenApiEnum]` paths.
+     */
+    private static function runEnumDriftCheck(ParameterCollection $parameters, ?string $githubSummaryPath): void
+    {
+        if (!self::resolveBooleanFlag($parameters, 'enum_drift_enabled', false)) {
+            return;
+        }
+
+        $namespaces = [];
+        if ($parameters->has('enum_drift_scan_namespaces')) {
+            $namespaces = array_values(array_filter(
+                array_map('trim', explode(',', $parameters->get('enum_drift_scan_namespaces'))),
+                static fn(string $entry): bool => $entry !== '',
+            ));
+        }
+
+        if ($namespaces === []) {
+            $reason = 'enum_drift_enabled=true but enum_drift_scan_namespaces is empty.';
+            self::writeStderr(
+                "[OpenAPI Enum Drift] FATAL: {$reason}\n"
+                . '  Action: provide one or more PSR-4 namespace prefixes '
+                . "(e.g. enum_drift_scan_namespaces=\"App\\Enums\").\n",
+            );
+            self::appendGithubStepSummaryEnumDriftBlock($githubSummaryPath, $reason, isFatal: true);
+
+            throw new EnumBindingException(
+                EnumBindingReason::NoNamespacesConfigured,
+                $reason,
+            );
+        }
+
+        try {
+            $fqcns = EnumScanner::scan($namespaces);
+        } catch (EnumBindingException $e) {
+            self::writeStderr("[OpenAPI Enum Drift] FATAL: {$e->getMessage()}\n");
+            self::appendGithubStepSummaryEnumDriftBlock($githubSummaryPath, $e->getMessage(), isFatal: true);
+
+            throw $e;
+        }
+
+        $failOnDrift = self::resolveBooleanFlag($parameters, 'enum_drift_fail_on_drift', true);
+
+        if ($fqcns === []) {
+            // No bound enums under the configured prefixes — nothing to
+            // assert. Returning silently keeps the extension a no-op for
+            // codebases that haven't started annotating yet.
+            return;
+        }
+
+        if ($failOnDrift) {
+            try {
+                EnumDriftAsserter::assertNoDrift($fqcns, true);
+            } catch (EnumBindingException|EnumDriftException $e) {
+                self::writeStderr($e->getMessage() . "\n");
+                self::appendGithubStepSummaryEnumDriftBlock($githubSummaryPath, $e->getMessage(), isFatal: true);
+
+                throw $e;
+            }
+
+            return;
+        }
+
+        try {
+            $reports = EnumDriftAsserter::detectAll($fqcns);
+        } catch (EnumBindingException $e) {
+            // Misconfigured bindings are setup errors, not drift signals,
+            // and they fail loud regardless of $failOnDrift — same policy
+            // as the asserter (`EnumDriftAsserter::detectOne`).
+            self::writeStderr("[OpenAPI Enum Drift] FATAL: {$e->getMessage()}\n");
+            self::appendGithubStepSummaryEnumDriftBlock($githubSummaryPath, $e->getMessage(), isFatal: true);
+
+            throw $e;
+        }
+
+        $drifting = array_values(array_filter(
+            $reports,
+            static fn(EnumDriftReport $r): bool => $r->hasDrift(),
+        ));
+
+        if ($drifting === []) {
+            return;
+        }
+
+        $message = EnumDriftAsserter::renderMessage($drifting, false);
+        self::writeStderr($message . "\n");
+        self::appendGithubStepSummaryEnumDriftBlock($githubSummaryPath, $message, isFatal: false);
+    }
+
+    /**
+     * Append a Markdown block describing an enum-drift outcome to the
+     * GitHub Actions Step Summary file. Mirrors
+     * {@see appendGithubStepSummaryFatalBlock()} but keeps a separate body
+     * so the spec-load and enum-drift narratives stay distinct.
+     */
+    private static function appendGithubStepSummaryEnumDriftBlock(
+        ?string $path,
+        string $body,
+        bool $isFatal,
+    ): void {
+        if ($path === null) {
+            return;
+        }
+
+        $title = $isFatal
+            ? '## :rotating_light: FATAL OpenAPI enum drift'
+            : '## :warning: OpenAPI enum drift';
+
+        $block = $title . PHP_EOL
+            . PHP_EOL
+            . ($isFatal
+                ? 'One or more `#[BoundToOpenApiEnum]` checks failed and the test run was aborted.'
+                : 'One or more `#[BoundToOpenApiEnum]` checks reported drift.') . PHP_EOL
+            . PHP_EOL
+            . '```' . PHP_EOL
+            . $body . PHP_EOL
+            . '```' . PHP_EOL
+            . PHP_EOL;
+
+        $written = file_put_contents($path, $block, FILE_APPEND);
+        if ($written === false) {
+            self::writeStderr("[OpenAPI Enum Drift] WARNING: Failed to append block to GITHUB_STEP_SUMMARY ({$path})\n");
+        }
     }
 
     private static function appendGithubStepSummaryFatalBlock(?string $path, string $spec, string $reason): void
