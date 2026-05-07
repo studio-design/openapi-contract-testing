@@ -9,11 +9,11 @@ use FilesystemIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionEnum;
+use ReflectionException;
 use SplFileInfo;
 use Studio\OpenApiContractTesting\Attribute\BoundToOpenApiEnum;
 use Studio\OpenApiContractTesting\Exception\EnumBindingException;
 use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
-use Throwable;
 
 use function array_keys;
 use function array_unique;
@@ -38,9 +38,11 @@ use function substr;
  * more PSR-4 namespace prefixes. Used by `OpenApiCoverageExtension` so users
  * no longer have to enumerate every bound enum manually.
  *
- * Discovery walks Composer's classmap first (covers `--optimize-autoloader`
- * and `--classmap-authoritative`), then falls back to a recursive scan of
- * each PSR-4-registered directory (covers default dev installs).
+ * Discovery merges results from Composer's classmap (`getClassMap()`) and a
+ * recursive scan of each PSR-4-registered directory, deduplicating across
+ * both sources. Production deployments using `--optimize-autoloader` /
+ * `--classmap-authoritative` are covered by the classmap pass; default dev
+ * installs are covered by the PSR-4 directory walk.
  *
  * @internal Not part of the package's public API. Do not use from user code.
  */
@@ -109,8 +111,10 @@ final class EnumScanner
     }
 
     /**
-     * Test seam: inject a synthetic ClassLoader so unit tests don't have to
-     * mutate the global autoloader stack.
+     * Inject a synthetic ClassLoader so unit tests don't have to mutate the
+     * global autoloader stack.
+     *
+     * @internal Test seam — never call from production code.
      */
     public static function overrideClassLoaderForTesting(?ClassLoader $loader): void
     {
@@ -120,9 +124,11 @@ final class EnumScanner
     }
 
     /**
-     * Test seam: simulate environments where no Composer ClassLoader is
-     * registered (e.g., custom autoloader). The next `scan()` call will
-     * raise {@see EnumBindingReason::ScanComposerLoaderUnavailable}.
+     * Simulate environments where no Composer ClassLoader is registered
+     * (e.g., custom autoloader). The next `scan()` call will raise
+     * {@see EnumBindingReason::ScanComposerLoaderUnavailable}.
+     *
+     * @internal Test seam — never call from production code.
      */
     public static function forceLoaderUnavailableForTesting(): void
     {
@@ -131,6 +137,9 @@ final class EnumScanner
         self::$cache = [];
     }
 
+    /**
+     * @internal Lifecycle hook for test isolation; mirrors `OpenApiSpecLoader::reset()`.
+     */
     public static function reset(): void
     {
         self::$loaderOverride = null;
@@ -369,18 +378,27 @@ final class EnumScanner
 
     private static function isBoundEnum(string $fqcn): bool
     {
-        try {
-            if (!enum_exists($fqcn)) {
-                return false;
-            }
-            $reflection = new ReflectionEnum($fqcn);
-            if (!$reflection->isBacked()) {
-                return false;
-            }
-
-            return $reflection->getAttributes(BoundToOpenApiEnum::class) !== [];
-        } catch (Throwable) {
+        // `enum_exists()` and `ReflectionEnum` are intentionally NOT wrapped
+        // in a `catch (Throwable)`: a `ParseError` from a broken enum source
+        // file or an `Error` from a missing parent class is exactly the
+        // bootstrap-time misconfiguration this library exists to surface
+        // (issue #134). Swallowing them would convert a real bug into a
+        // silent "no bound enums found" pass. Only the narrow case where
+        // `enum_exists()` returned true but ReflectionEnum then disagrees
+        // (autoloader race / stub mismatch) is caught.
+        if (!enum_exists($fqcn)) {
             return false;
         }
+
+        try {
+            $reflection = new ReflectionEnum($fqcn);
+        } catch (ReflectionException) {
+            return false;
+        }
+        if (!$reflection->isBacked()) {
+            return false;
+        }
+
+        return $reflection->getAttributes(BoundToOpenApiEnum::class) !== [];
     }
 }
