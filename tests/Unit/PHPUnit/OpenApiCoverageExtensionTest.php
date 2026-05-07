@@ -176,6 +176,103 @@ class OpenApiCoverageExtensionTest extends TestCase
     }
 
     #[Test]
+    public function bootstrap_trims_whitespace_around_enum_spec_base_path(): void
+    {
+        // XML editors sometimes wrap parameter values in stray newlines or
+        // spaces. Without trim() those would silently flow as
+        // `getcwd()."/   /openapi"` and produce a confusing
+        // EnumBasePathNotFound diagnostic later.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => 'refs-valid',
+            'enum_spec_base_path' => "  \n /absolute/path/to/openapi  \n",
+        ]);
+
+        $extension->setupExtension(null, $parameters, null);
+
+        $this->assertSame('/absolute/path/to/openapi', OpenApiSpecLoader::getEnumBasePath());
+    }
+
+    #[Test]
+    public function bootstrap_fatal_when_enum_spec_base_path_is_empty(): void
+    {
+        // <parameter name="enum_spec_base_path" value=""/> would otherwise
+        // flow as the empty string and silently coerce to getcwd(), masking
+        // the misconfiguration.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => 'refs-valid',
+            'enum_spec_base_path' => '',
+        ]);
+
+        try {
+            $extension->setupExtension(null, $parameters, null);
+            $this->fail('expected EnumBindingException');
+        } catch (EnumBindingException $e) {
+            $this->assertSame(EnumBindingReason::EnumSpecBasePathOrphaned, $e->reason);
+            $this->assertNull($e->enumFqcn);
+            $this->assertNull($e->specPath);
+            $this->assertStringContainsString('empty', $e->getMessage());
+        }
+
+        $this->assertStringContainsString('FATAL', $this->readStderr());
+    }
+
+    #[Test]
+    public function bootstrap_fatal_when_enum_spec_base_path_set_without_spec_base_path(): void
+    {
+        // C1 from review: a typo in spec_base_path that leaves
+        // enum_spec_base_path orphaned must FATAL instead of silently
+        // dropping the parameter.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'enum_spec_base_path' => '/some/path/openapi',
+        ]);
+
+        try {
+            $extension->setupExtension(null, $parameters, null);
+            $this->fail('expected EnumBindingException');
+        } catch (EnumBindingException $e) {
+            $this->assertSame(EnumBindingReason::EnumSpecBasePathOrphaned, $e->reason);
+            $this->assertStringContainsString('spec_base_path is not', $e->getMessage());
+        }
+
+        $this->assertStringContainsString('FATAL', $this->readStderr());
+    }
+
+    #[Test]
+    public function bootstrap_fatal_writes_block_to_github_step_summary_for_orphaned_enum_spec_base_path(): void
+    {
+        // FATAL diagnostics for spec misconfiguration already land in
+        // GITHUB_STEP_SUMMARY (issue #134); the new orphaned-parameter
+        // diagnostic must follow the same convention so reviewers see it
+        // in the PR summary, not buried in CI logs.
+        $tmp = tempnam(sys_get_temp_dir(), 'openapi-summary-');
+        if ($tmp === false) {
+            $this->fail('Could not create temp file for GITHUB_STEP_SUMMARY');
+        }
+        $this->githubSummaryTmp = $tmp;
+
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'enum_spec_base_path' => '/some/path/openapi',
+        ]);
+
+        try {
+            $extension->setupExtension(null, $parameters, $tmp);
+            $this->fail('expected EnumBindingException');
+        } catch (EnumBindingException) {
+            // Expected — block must still be written before re-throw.
+        }
+
+        $contents = (string) file_get_contents($tmp);
+        $this->assertStringContainsString('FATAL OpenAPI enum drift', $contents);
+        $this->assertStringContainsString('spec_base_path is not', $contents);
+    }
+
+    #[Test]
     public function bootstrap_appends_fatal_block_to_github_step_summary(): void
     {
         $tmp = tempnam(sys_get_temp_dir(), 'openapi-summary-');

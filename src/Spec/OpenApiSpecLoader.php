@@ -26,6 +26,7 @@ use function json_decode;
 use function realpath;
 use function rtrim;
 use function sprintf;
+use function trim;
 
 final class OpenApiSpecLoader
 {
@@ -77,8 +78,8 @@ final class OpenApiSpecLoader
      *                                  bundled aggregate root (e.g. `openapi/bundled/`) while
      *                                  individual enum JSONs live elsewhere (e.g.
      *                                  `openapi/_shared/...`). When `null` the asserter falls
-     *                                  back to `$basePath`, keeping single-root setups bit-for-
-     *                                  bit identical to pre-1.2.0 behavior.
+     *                                  back to `$basePath`, keeping single-root setups
+     *                                  bit-for-bit identical to the pre-issue-#170 behavior.
      *
      * @throws InvalidArgumentException for any misconfigured pair: `$allowRemoteRefs` true
      *                                  without client/factory, OR client provided without
@@ -111,6 +112,20 @@ final class OpenApiSpecLoader
                 'OpenApiSpecLoader::configure(): an HTTP client was provided but '
                 . 'allowRemoteRefs is false. HTTP $refs would be rejected silently. '
                 . 'Either pass allowRemoteRefs: true, or omit the client entirely.',
+            );
+        }
+
+        if ($enumBasePath !== null && trim($enumBasePath) === '') {
+            // Empty / whitespace-only `enumBasePath` would otherwise survive
+            // rtrim() as the empty string and surface later as
+            // `EnumBasePathNotFound: Configured enum_spec_base_path is not a
+            // directory: ` — an unhelpful diagnostic that hides the real
+            // misconfiguration. Reject at the API surface instead, matching
+            // the allowRemoteRefs pairing checks above. Pass `null` to
+            // intentionally disable the parameter.
+            throw new InvalidArgumentException(
+                'OpenApiSpecLoader::configure(): $enumBasePath is empty or whitespace-only. '
+                . 'Pass a valid directory path, or null to fall back to spec_base_path.',
             );
         }
 

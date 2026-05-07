@@ -98,6 +98,38 @@ class OpenApiSpecLoaderTest extends TestCase
     }
 
     #[Test]
+    public function configure_rejects_empty_enum_base_path(): void
+    {
+        // Reject at the API surface. Without this, an empty string would
+        // surface later as `EnumBasePathNotFound: ... is not a directory: `
+        // (with nothing after the colon) — a confusing diagnostic that hides
+        // the real misconfiguration.
+        try {
+            OpenApiSpecLoader::configure(
+                basePath: '/path/to/specs',
+                enumBasePath: '',
+            );
+            $this->fail('expected InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('$enumBasePath is empty', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function configure_rejects_whitespace_only_enum_base_path(): void
+    {
+        try {
+            OpenApiSpecLoader::configure(
+                basePath: '/path/to/specs',
+                enumBasePath: "  \n\t ",
+            );
+            $this->fail('expected InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString('whitespace-only', $e->getMessage());
+        }
+    }
+
+    #[Test]
     public function get_base_path_throws_when_not_configured(): void
     {
         try {

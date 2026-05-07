@@ -420,25 +420,51 @@ class EnumDriftAsserterTest extends TestCase
     #[Test]
     public function enum_base_path_equal_to_spec_base_path_is_a_no_op(): void
     {
-        // Setting enum_spec_base_path to the same value as spec_base_path
-        // must produce the same result as not setting it at all — proves
-        // the new branch never alters resolution when the user opts in
-        // unnecessarily.
+        // Compare report objects field-by-field between the fallback branch
+        // (no enumBasePath) and the opt-in branch (enumBasePath = basePath).
+        // A subtle bug where the opt-in branch produced a different
+        // specPath / phpOnly / specOnly would slip through a "did it throw?"
+        // shaped test — this one fails it.
+        OpenApiSpecLoader::reset();
+        OpenApiSpecLoader::configure(basePath: self::SPEC_BASE_PATH);
+        $baseline = EnumDriftAsserter::detectAll([MatchingEnum::class, PhpExtraEnum::class]);
+
         OpenApiSpecLoader::reset();
         OpenApiSpecLoader::configure(
             basePath: self::SPEC_BASE_PATH,
             enumBasePath: self::SPEC_BASE_PATH,
         );
+        $optIn = EnumDriftAsserter::detectAll([MatchingEnum::class, PhpExtraEnum::class]);
+
+        $this->assertCount(2, $optIn);
+        foreach ($optIn as $i => $report) {
+            $this->assertSame($baseline[$i]->enumFqcn, $report->enumFqcn);
+            $this->assertSame($baseline[$i]->specPath, $report->specPath);
+            $this->assertSame($baseline[$i]->phpOnly, $report->phpOnly);
+            $this->assertSame($baseline[$i]->specOnly, $report->specOnly);
+            $this->assertSame($baseline[$i]->hasDrift(), $report->hasDrift());
+        }
+    }
+
+    #[Test]
+    public function enum_base_path_with_trailing_slash_resolves_identically(): void
+    {
+        // OpenApiSpecLoader::configure() trims trailing slashes (covered at
+        // the loader unit level). End-to-end through the asserter pins that
+        // the trim survives the full resolution path — a future refactor
+        // that stops trimming and instead concatenates blindly would still
+        // pass the loader-level test alone.
+        OpenApiSpecLoader::reset();
+        OpenApiSpecLoader::configure(
+            basePath: self::SPEC_BASE_PATH,
+            enumBasePath: self::SPEC_BASE_PATH . '/',
+        );
 
         EnumDriftAsserter::assertNoDrift([MatchingEnum::class]);
 
-        try {
-            EnumDriftAsserter::assertNoDrift([PhpExtraEnum::class]);
-            $this->fail('expected EnumDriftException');
-        } catch (EnumDriftException $e) {
-            $this->assertSame(['blue'], $e->reports[0]->phpOnly);
-            $this->assertSame([], $e->reports[0]->specOnly);
-        }
+        $reports = EnumDriftAsserter::detectAll([MatchingEnum::class]);
+        $this->assertFalse($reports[0]->hasDrift());
+        $this->assertSame('enum-drift/matching.json', $reports[0]->specPath);
     }
 
     #[Test]

@@ -272,12 +272,13 @@ final class EnumDriftAsserter
      * Pick the base path against which `$specPath` should resolve.
      *
      * When `enum_spec_base_path` (issue #170) is configured we consult it
-     * exclusively — `spec_base_path` is irrelevant for `#[BoundToOpenApiEnum]`
-     * resolution in that mode, including the case where `spec_base_path` is
-     * not configured at all. When it is not configured we fall back to the
-     * legacy single-root behavior via {@see OpenApiSpecLoader::getBasePath()},
-     * preserving bit-for-bit identical resolution for projects that never
-     * touch the new parameter.
+     * exclusively; `spec_base_path` is not consulted in that mode, so the
+     * asserter still operates correctly when only `enum_spec_base_path` is
+     * set (the loader's `configure()` API requires `spec_base_path` to be
+     * passed too, so this case is mostly theoretical). When the new parameter
+     * is absent we fall back to the legacy single-root behavior via
+     * {@see OpenApiSpecLoader::getBasePath()}, preserving identical
+     * resolution for projects that never touch the new parameter.
      */
     private static function resolveEnumBasePath(string $fqcn, string $specPath): string
     {
@@ -286,16 +287,18 @@ final class EnumDriftAsserter
             // We validate the directory only on the opt-in branch. Misconfigured
             // enum_spec_base_path would otherwise surface as a generic
             // SpecFileNotFound on every binding, hiding the real cause.
+            // Do not mirror this is_dir() check on the fallback branch:
+            // getBasePath()'s contract is path-string-only, and adding the
+            // check there would break existing setups whose spec_base_path
+            // resolves files via getcwd-relative tricks.
             if (!is_dir($enumBasePath)) {
-                throw new EnumBindingException(
+                throw EnumBindingException::forConfig(
                     EnumBindingReason::EnumBasePathNotFound,
                     sprintf(
                         'Configured enum_spec_base_path is not a directory: %s. '
                         . 'Either fix the path or remove the parameter to fall back to spec_base_path.',
                         $enumBasePath,
                     ),
-                    enumFqcn: $fqcn,
-                    specPath: $specPath,
                 );
             }
 
