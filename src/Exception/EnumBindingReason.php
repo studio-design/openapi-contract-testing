@@ -23,4 +23,7 @@ enum EnumBindingReason
     case EnumKeyMissing;
     case EnumKeyNotArray;
     case EnumValueUnsupported;
+    case ScanNamespaceUnresolvable;
+    case ScanComposerLoaderUnavailable;
+    case NoNamespacesConfigured;
 }
