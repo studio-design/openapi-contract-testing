@@ -13,12 +13,14 @@ namespace Studio\OpenApiContractTesting\Exception;
 enum EnumBindingReason
 {
     case TargetIsNotEnum;
+    case TargetIsNotBackedEnum;
+    case ReflectionFailed;
     case AttributeMissing;
     case BasePathNotConfigured;
     case SpecFileNotFound;
-    case SpecFileUnreadable;
     case MalformedJson;
     case NonMappingRoot;
     case EnumKeyMissing;
     case EnumKeyNotArray;
+    case EnumValueUnsupported;
 }

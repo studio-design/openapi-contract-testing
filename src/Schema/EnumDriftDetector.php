@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Schema;
 
 use function array_filter;
-use function array_unique;
 use function array_values;
 use function in_array;
 use function sort;
@@ -33,9 +32,12 @@ final class EnumDriftDetector
     ): EnumDriftReport {
         // Dedupe defensively. Real PHP enums forbid duplicate case values, so
         // dupes only sneak in via direct caller input; the diff would still
-        // emit them and double-count drift in the rendered report.
-        $php = array_values(array_unique($phpValues));
-        $spec = array_values(array_unique($specValues));
+        // emit them and double-count drift in the rendered report. We can't
+        // use array_unique() — its default SORT_STRING flag would collapse
+        // int 201 and string "201" into a single entry, masking the very
+        // type drift the strict comparison below is meant to surface.
+        $php = self::dedupStrict($phpValues);
+        $spec = self::dedupStrict($specValues);
 
         // Strict comparison via in_array(..., strict: true). array_diff would
         // type-juggle, conflating PHP '1' with spec 1 — a real type drift the
@@ -60,5 +62,22 @@ final class EnumDriftDetector
             phpOnly: $phpOnly,
             specOnly: $specOnly,
         );
+    }
+
+    /**
+     * @param list<int|string> $values
+     *
+     * @return list<int|string>
+     */
+    private static function dedupStrict(array $values): array
+    {
+        $out = [];
+        foreach ($values as $value) {
+            if (!in_array($value, $out, true)) {
+                $out[] = $value;
+            }
+        }
+
+        return $out;
     }
 }

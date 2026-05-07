@@ -24,8 +24,10 @@ use function array_map;
 use function array_values;
 use function count;
 use function enum_exists;
+use function error_get_last;
 use function file_exists;
 use function file_get_contents;
+use function get_debug_type;
 use function implode;
 use function is_array;
 use function is_int;
@@ -143,14 +145,30 @@ final class EnumDriftAsserter
         try {
             $reflection = new ReflectionEnum($fqcn);
         } catch (ReflectionException $e) {
-            // enum_exists() returned true but reflection failed — practically
-            // impossible; surface it as a target-not-enum error rather than
-            // letting a raw ReflectionException escape.
+            // enum_exists() returned true yet reflection failed — typically
+            // an autoloader race or stub-class mismatch. Carries its own
+            // reason so consumers can branch on the genuinely unusual case
+            // instead of conflating it with TargetIsNotEnum.
             throw new EnumBindingException(
-                EnumBindingReason::TargetIsNotEnum,
+                EnumBindingReason::ReflectionFailed,
                 sprintf('Failed to reflect %s as an enum: %s', $fqcn, $e->getMessage()),
                 enumFqcn: $fqcn,
                 previous: $e,
+            );
+        }
+
+        if (!$reflection->isBacked()) {
+            // Pure enums have no scalar identity that can bind to a spec
+            // `enum:` array. Fail loud here so the user sees a clear
+            // diagnostic rather than chasing every spec value as
+            // mysterious "spec-only" drift.
+            throw new EnumBindingException(
+                EnumBindingReason::TargetIsNotBackedEnum,
+                sprintf(
+                    '%s is a pure enum. #[BoundToOpenApiEnum] requires a backed enum (`enum X: string` or `enum X: int`).',
+                    $fqcn,
+                ),
+                enumFqcn: $fqcn,
             );
         }
 
@@ -182,18 +200,16 @@ final class EnumDriftAsserter
     }
 
     /**
+     * Caller must have already verified the target is a backed enum
+     * (see `detectOne`'s `isBacked()` guard). The `instanceof` here is
+     * a static-narrowing aid for PHPStan, not a runtime safety net.
+     *
      * @return list<int|string>
      */
     private static function extractCaseValues(string $fqcn): array
     {
         $values = [];
         foreach ($fqcn::cases() as $case) {
-            // The asserter targets backed enums — pure enums have no scalar
-            // identity that can bind to a spec `enum:` array. If a pure
-            // enum somehow carries the attribute, it contributes zero values
-            // here, and the resulting diff will surface every spec value as
-            // "spec-only" drift — a loud and correct signal that the binding
-            // is misapplied.
             if ($case instanceof BackedEnum) {
                 $values[] = $case->value;
             }
@@ -210,16 +226,18 @@ final class EnumDriftAsserter
         try {
             $basePath = OpenApiSpecLoader::getBasePath();
         } catch (InvalidOpenApiSpecException $e) {
-            // OpenApiSpecLoader throws this with reason BasePathNotConfigured
-            // when configure() hasn't been called. Re-shape into a
-            // domain-appropriate exception so the caller branches on a
-            // single exception type for binding-resolution failures.
-            $reason = $e->reason === InvalidOpenApiSpecReason::BasePathNotConfigured
-                ? EnumBindingReason::BasePathNotConfigured
-                : EnumBindingReason::BasePathNotConfigured;
+            // The loader currently only throws BasePathNotConfigured here.
+            // If a future loader change leaks a different reason through
+            // getBasePath(), re-throw unwrapped rather than silently
+            // mislabeling it — the caller can then handle the surprise
+            // category explicitly instead of branching on a wrong
+            // EnumBindingReason.
+            if ($e->reason !== InvalidOpenApiSpecReason::BasePathNotConfigured) {
+                throw $e;
+            }
 
             throw new EnumBindingException(
-                $reason,
+                EnumBindingReason::BasePathNotConfigured,
                 sprintf(
                     'Cannot resolve #[BoundToOpenApiEnum(%s)] on %s: %s',
                     $specPath,
@@ -248,11 +266,22 @@ final class EnumDriftAsserter
             );
         }
 
-        $content = file_get_contents($absolute);
+        $content = @file_get_contents($absolute);
         if ($content === false) {
+            // file_exists() passed but the read failed — typically a TOCTOU
+            // unlink, a permission flip, or a dangling symlink. Surface the
+            // raw error_get_last() text so the user can distinguish chmod
+            // from race-with-cleanup without running strace.
+            $lastError = error_get_last()['message'] ?? 'unknown error';
+
             throw new EnumBindingException(
-                EnumBindingReason::SpecFileUnreadable,
-                sprintf('Failed to read bound spec file: %s for %s', $absolute, $fqcn),
+                EnumBindingReason::SpecFileNotFound,
+                sprintf(
+                    'Failed to read bound spec file %s for %s: %s',
+                    $absolute,
+                    $fqcn,
+                    $lastError,
+                ),
                 enumFqcn: $fqcn,
                 specPath: $specPath,
             );
@@ -308,15 +337,28 @@ final class EnumDriftAsserter
         }
 
         $values = [];
-        foreach ($decoded['enum'] as $value) {
+        foreach ($decoded['enum'] as $index => $value) {
             // OpenAPI permits any JSON value in `enum`, but a backed PHP
-            // enum can only carry int or string. Skip non-scalar entries
-            // (null / bool / nested arrays) — they will surface as drift
-            // since they cannot appear on the PHP side, prompting the user
-            // to either narrow the spec or unbind the enum.
-            if (is_string($value) || is_int($value)) {
-                $values[] = $value;
+            // enum can only carry int or string. Bail loudly on the first
+            // unsupported entry — silently dropping non-scalars would let
+            // a malformed spec pass the asserter clean (the dropped value
+            // never reaches the diff, so neither phpOnly nor specOnly
+            // surfaces it).
+            if (!is_string($value) && !is_int($value)) {
+                throw new EnumBindingException(
+                    EnumBindingReason::EnumValueUnsupported,
+                    sprintf(
+                        'Bound spec file %s has an unsupported "enum" value at index %d (got %s). Backed PHP enums can only carry string or int.',
+                        $absolute,
+                        $index,
+                        get_debug_type($value),
+                    ),
+                    enumFqcn: $fqcn,
+                    specPath: $specPath,
+                );
             }
+
+            $values[] = $value;
         }
 
         return $values;

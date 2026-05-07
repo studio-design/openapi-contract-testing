@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Exception;
 
+use InvalidArgumentException;
 use RuntimeException;
 use Studio\OpenApiContractTesting\Schema\EnumDriftReport;
 
@@ -20,15 +21,32 @@ use Studio\OpenApiContractTesting\Schema\EnumDriftReport;
 final class EnumDriftException extends RuntimeException
 {
     /**
-     * @param list<EnumDriftReport> $reports every report passed in here is
-     *                                       guaranteed to satisfy
-     *                                       {@see EnumDriftReport::hasDrift()}; clean
-     *                                       reports are filtered out by the asserter
+     * @param list<EnumDriftReport> $reports must be non-empty and every
+     *                                       entry must satisfy
+     *                                       {@see EnumDriftReport::hasDrift()} — the
+     *                                       exception means "drift was detected", so
+     *                                       carrying clean or empty reports would
+     *                                       contradict the type
+     *
+     * @throws InvalidArgumentException when the invariant is violated
      */
     public function __construct(
         public readonly array $reports,
         string $message,
     ) {
+        if ($reports === []) {
+            throw new InvalidArgumentException(
+                'EnumDriftException requires at least one EnumDriftReport — empty reports contradict the "drift detected" semantic.',
+            );
+        }
+        foreach ($reports as $report) {
+            if (!$report->hasDrift()) {
+                throw new InvalidArgumentException(
+                    'EnumDriftException reports must all satisfy hasDrift(). Filter clean reports before constructing.',
+                );
+            }
+        }
+
         parent::__construct($message);
     }
 }

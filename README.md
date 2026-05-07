@@ -670,7 +670,7 @@ To downgrade drift to a non-fatal warning (matches the `failOnWarning` ergonomic
 EnumDriftAsserter::assertNoDrift([NotificationCodeEnum::class], failOnDrift: false);
 ```
 
-The asserter then fires a single `E_USER_WARNING` per drifting binding instead of throwing — `failOnWarning="true"` in `phpunit.xml` will still fail the run, but explicit warning suppressors will not.
+The asserter then fires one `E_USER_WARNING` containing the full drift report (every drifting binding aggregated into a single message) instead of throwing — `failOnWarning="true"` in `phpunit.xml` will still fail the run, but explicit warning suppressors will not. For programmatic access without the global error channel, use `detectAll()` (see below) and inspect the returned `EnumDriftReport[]` directly.
 
 ### `detectAll()` — inspection without throwing
 
@@ -687,13 +687,14 @@ Each `EnumDriftReport` carries `enumFqcn`, `specPath`, `phpOnly`, and `specOnly`
 
 ### Misconfiguration vs drift
 
-`EnumBindingException` is thrown when the comparison cannot be performed at all (missing `#[BoundToOpenApiEnum]`, target is not an enum, spec file not found, malformed JSON, `enum` key missing or not an array). `$reason` carries an `EnumBindingReason` enum so you can branch programmatically. These errors fire regardless of `failOnDrift` — they are setup mistakes, not drift signals.
+`EnumBindingException` is thrown when the comparison cannot be performed at all — missing `#[BoundToOpenApiEnum]`, target is not a backed enum, spec file not found, malformed JSON, `enum` key missing or not an array, or an `enum` array entry is non-scalar (`null` / `bool` / nested arrays — backed PHP enums can only carry `string` or `int`). `$reason` carries an `EnumBindingReason` enum so you can branch programmatically. These errors fire regardless of `failOnDrift` — they are setup mistakes, not drift signals.
 
 ### Known limitations
 
-- **`oneOf` enum unions** (e.g., `code: oneOf: [CommonCode, AdminCode]`) are not yet auto-resolved. Bind each PHP enum to the leaf JSON file directly. Tracked separately.
+- **JSON only.** The asserter currently reads the bound enum file with `file_get_contents` + `json_decode`. YAML enum files are not supported in v1; convert them to JSON or extract the enum into a `.json` sidecar.
+- **No `$ref` traversal on the bound file.** Unlike `OpenApiSpecLoader::load()`, the asserter does not resolve `$ref` inside the bound JSON. Bind to the leaf file containing the literal `enum:` array.
+- **`oneOf` enum unions** (e.g., `code: oneOf: [CommonCode, AdminCode]`) are not yet auto-resolved. Bind each PHP enum to its leaf JSON file directly.
 - **`x-enum-varnames` / `x-enum-descriptions`** are not validated. Only the `enum` value array is compared.
-- The asserter loads the bound JSON file directly; it does not run `$ref` resolution or full OpenAPI spec validation on it.
 
 ## Coverage Report
 

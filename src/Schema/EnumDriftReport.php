@@ -7,9 +7,9 @@ namespace Studio\OpenApiContractTesting\Schema;
 /**
  * Result of a single (PHP enum, OpenAPI enum file) drift comparison.
  *
- * `phpOnly` and `specOnly` are zero-indexed lists, regardless of which keys
- * `array_diff` produced — consumers (JSON output, sorted rendering) need
- * stable list shape.
+ * `phpOnly` and `specOnly` are zero-indexed and sorted by
+ * {@see EnumDriftDetector} for deterministic output — consumers (JSON
+ * exports, snapshot-style diagnostic rendering) need a stable list shape.
  */
 final class EnumDriftReport
 {

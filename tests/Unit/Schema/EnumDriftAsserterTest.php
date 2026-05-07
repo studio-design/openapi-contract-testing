@@ -13,12 +13,17 @@ use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
 use Studio\OpenApiContractTesting\Exception\EnumDriftException;
 use Studio\OpenApiContractTesting\Schema\EnumDriftAsserter;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\EmptySpecEnum;
 use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\EnumKeyNotArrayEnum;
+use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\IntegerBackedDriftEnum;
+use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\IntegerBackedEnum;
 use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\MalformedSpecEnum;
 use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\MatchingEnum;
 use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\NoEnumKeySpecEnum;
+use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\NonScalarSpecValueEnum;
 use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\NotAnEnum;
 use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\PhpExtraEnum;
+use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\PureEnum;
 use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\SpecExtraEnum;
 use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\SpecFileMissingEnum;
 use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\UnattributedEnum;
@@ -98,6 +103,10 @@ class EnumDriftAsserterTest extends TestCase
         } catch (EnumDriftException $e) {
             $this->assertCount(2, $e->reports);
             $this->assertStringContainsString('2 enum binding(s) drift', $e->getMessage());
+            // Reports preserve input order so consumers building dashboards
+            // can correlate row N with the N-th class they passed in.
+            $this->assertSame(PhpExtraEnum::class, $e->reports[0]->enumFqcn);
+            $this->assertSame(SpecExtraEnum::class, $e->reports[1]->enumFqcn);
         }
     }
 
@@ -300,6 +309,79 @@ class EnumDriftAsserterTest extends TestCase
 
             // Footer
             $this->assertStringContainsString('Action:', $msg);
+        }
+    }
+
+    #[Test]
+    public function assert_no_drift_passes_for_integer_backed_enum(): void
+    {
+        EnumDriftAsserter::assertNoDrift([IntegerBackedEnum::class]);
+
+        $reports = EnumDriftAsserter::detectAll([IntegerBackedEnum::class]);
+        $this->assertFalse($reports[0]->hasDrift());
+    }
+
+    #[Test]
+    public function strict_comparison_surfaces_string_vs_int_drift(): void
+    {
+        // Spec carries `[200, 201, "201"]` against a PHP enum of `200, 201`.
+        // The string "201" must surface as spec-only drift even though
+        // == comparison would equate it with the int 201.
+        try {
+            EnumDriftAsserter::assertNoDrift([IntegerBackedDriftEnum::class]);
+            $this->fail('expected EnumDriftException');
+        } catch (EnumDriftException $e) {
+            $this->assertSame(['201'], $e->reports[0]->specOnly);
+            $this->assertSame([], $e->reports[0]->phpOnly);
+        }
+    }
+
+    #[Test]
+    public function diagnostic_renders_int_values_unquoted(): void
+    {
+        try {
+            EnumDriftAsserter::assertNoDrift([IntegerBackedDriftEnum::class]);
+            $this->fail('expected EnumDriftException');
+        } catch (EnumDriftException $e) {
+            // String values are quoted in the diagnostic; ints are not.
+            $this->assertStringContainsString('Spec-only (1): "201"', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function pure_enum_throws_target_is_not_backed_enum(): void
+    {
+        try {
+            EnumDriftAsserter::assertNoDrift([PureEnum::class]);
+            $this->fail('expected EnumBindingException');
+        } catch (EnumBindingException $e) {
+            $this->assertSame(EnumBindingReason::TargetIsNotBackedEnum, $e->reason);
+            $this->assertStringContainsString('pure enum', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function non_scalar_spec_enum_value_throws_enum_value_unsupported(): void
+    {
+        try {
+            EnumDriftAsserter::assertNoDrift([NonScalarSpecValueEnum::class]);
+            $this->fail('expected EnumBindingException');
+        } catch (EnumBindingException $e) {
+            $this->assertSame(EnumBindingReason::EnumValueUnsupported, $e->reason);
+            $this->assertStringContainsString('index 1', $e->getMessage());
+            $this->assertStringContainsString('null', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function empty_spec_enum_array_reports_all_php_cases_as_drift(): void
+    {
+        try {
+            EnumDriftAsserter::assertNoDrift([EmptySpecEnum::class]);
+            $this->fail('expected EnumDriftException');
+        } catch (EnumDriftException $e) {
+            $this->assertSame(['a', 'b'], $e->reports[0]->phpOnly);
+            $this->assertSame([], $e->reports[0]->specOnly);
         }
     }
 }
