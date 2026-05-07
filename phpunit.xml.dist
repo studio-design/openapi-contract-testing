@@ -16,6 +16,14 @@
         </testsuite>
         <testsuite name="Integration">
             <directory>tests/Integration</directory>
+            <!--
+                Smoke fixture is consumed by
+                OpenApiCoverageExtensionEnumDriftBootstrapTest's subprocess
+                runs (where PHPUnit needs at least one passing test for the
+                lenient/clean cases to exit zero) — not part of the regular
+                suite.
+            -->
+            <exclude>tests/Integration/Fixture/Smoke</exclude>
         </testsuite>
     </testsuites>
 

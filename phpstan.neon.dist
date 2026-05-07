@@ -17,6 +17,10 @@ parameters:
         - tests
     excludePaths:
         - src/Laravel
+        # EnumScanner fixture dir holds intentionally-unused trait/abstract
+        # files so the scanner can walk past them; PHPStan would otherwise
+        # flag them as `trait.unused`.
+        - tests/Unit/Internal/Fixture/EnumScanner
     tmpDir: .phpstan.cache
     ignoreErrors:
         # PHPUnit marks AssertionFailedError + Exception @internal, but test code
