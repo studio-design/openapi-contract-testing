@@ -33,18 +33,13 @@ return [
     // bypass. oauth2 / openIdConnect / mutualTLS / http-basic are
     // silent-passed by the validator and therefore not auto-injected.
     // Defaults to false for backward compatibility.
-    //
-    // This is the recommended setting; `auto_inject_dummy_bearer` below is
-    // its bearer-only legacy alias kept for v1.x compatibility.
     'auto_inject_dummy_credentials' => false,
 
-    // Legacy bearer-only variant of `auto_inject_dummy_credentials`. When
-    // true (and `auto_validate_request` is on), endpoints whose spec security
-    // requires a `http` + `bearer` scheme automatically receive a fixed dummy
-    // `Authorization: Bearer test-token` header in the validator's view when
-    // the test did not set one. apiKey and oauth2 endpoints are unaffected.
-    // Prefer `auto_inject_dummy_credentials` above; this key remains for
-    // existing consumers and is bypassed when the credentials key is on.
+    // Bearer-only predecessor of `auto_inject_dummy_credentials`, kept for
+    // existing consumers. Same gating (auto_validate_request must also be
+    // on) and same view-only injection, but limited to endpoints whose spec
+    // security requires `http` + `bearer`. Bypassed when the superset key
+    // above is true.
     'auto_inject_dummy_bearer' => false,
 
     // Regex patterns (without delimiters or anchors) matched against the

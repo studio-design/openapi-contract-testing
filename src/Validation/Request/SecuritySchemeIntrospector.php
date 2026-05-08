@@ -30,11 +30,10 @@ use function is_string;
 final class SecuritySchemeIntrospector
 {
     /**
-     * Legacy bearer-only probe retained for `auto_inject_dummy_bearer`
-     * (the v1.x flag that pre-dates `auto_inject_dummy_credentials`). The
-     * superset path uses {@see self::injectableCredentialsFor()}; this method
-     * stays so the legacy flag's narrower semantics — bearer endpoints only —
-     * survive byte-for-byte.
+     * Legacy bearer-only probe retained for `auto_inject_dummy_bearer`. The
+     * implementation delegates to {@see self::injectableCredentialsFor()} and
+     * filters the result to bearer entries — the legacy flag's narrower scope
+     * is enforced by the caller, not by reproducing the spec walk.
      *
      * Returns true even when bearer appears alongside other schemes in an
      * AND-entry (e.g. `bearer + apiKey`). Injecting bearer alone won't satisfy
@@ -67,6 +66,11 @@ final class SecuritySchemeIntrospector
      * - `['kind' => 'apiKey', 'in' => 'header'|'cookie'|'query', 'name' => …]`
      *   → set the named header / cookie / query param to a dummy value
      *
+     * Resolution mirrors {@see SecurityValidator::validate()}: operation-level
+     * `security` wins over root-level, an explicit `security: []` opts the
+     * operation out of all authentication and yields an empty list, and a
+     * silent (missing) `security` on both levels also yields an empty list.
+     *
      * AND/OR semantics are intentionally not modelled here. Over-injection on
      * an OR-endpoint is harmless because the spec already accepts either
      * alternative; under-injection on an AND-endpoint would re-introduce the
@@ -77,12 +81,10 @@ final class SecuritySchemeIntrospector
      * `components.securitySchemes`) are deduplicated so the caller never
      * double-writes a header or cookie.
      *
-     * `apiKey in: query` injection is currently safe under the request
-     * validator's tolerant query-parameter handling. If the validator ever
-     * gains a strict-extras mode, the injected `api_key` query value would
-     * have to be either added to the operation's `parameters` ignore list or
-     * the strict mode would need to know about security-driven injects. Track
-     * this as a follow-up if strict-query-mode lands.
+     * `apiKey in: query` injection is safe under the request validator's
+     * current tolerant query-parameter handling. A strict-extras mode would
+     * need to teach itself about security-driven injects; tracked separately
+     * if that mode ships.
      *
      * @param array<string, mixed> $spec full spec root (for
      *                                   `components.securitySchemes` +
@@ -139,17 +141,10 @@ final class SecuritySchemeIntrospector
                 }
 
                 if ($classification->kind === SchemeKind::ApiKey) {
-                    /** @var string $in */
-                    $in = $definition['in'];
+                    /** @var 'cookie'|'header'|'query' $in */
+                    $in = $classification->apiKeyIn;
                     /** @var string $name */
-                    $name = $definition['name'];
-
-                    if ($in !== 'header' && $in !== 'cookie' && $in !== 'query') {
-                        // classifyScheme already rejected anything else as
-                        // Malformed; this guard exists so the array shape
-                        // contract above stays provable to static analysis.
-                        continue;
-                    }
+                    $name = $classification->apiKeyName;
 
                     $key = "apiKey:{$in}:{$name}";
                     if (isset($seen[$key])) {

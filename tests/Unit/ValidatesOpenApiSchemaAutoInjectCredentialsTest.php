@@ -7,6 +7,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
@@ -211,6 +212,52 @@ class ValidatesOpenApiSchemaAutoInjectCredentialsTest extends TestCase
     }
 
     #[Test]
+    public function inject_credentials_treats_empty_apikey_header_value_as_absent_and_injects(): void
+    {
+        // Header bag stores values as `list<?string>` and the
+        // slotIsAlreadyPopulated array branch peels the first element. An
+        // empty-string entry must collapse to "absent" the same way the
+        // cookie path does, otherwise `array_key_first` regressions or a
+        // tightening of the empty check could silently re-introduce the
+        // false-fail.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_inject_dummy_credentials'] = true;
+
+        $request = Request::create(
+            '/v1/secure/apikey-header',
+            'GET',
+            [],
+            [],
+            [],
+            ['HTTP_X_API_KEY' => ''],
+        );
+
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::GET, '/v1/secure/apikey-header');
+
+        $this->assertArrayHasKey(
+            'GET /v1/secure/apikey-header',
+            OpenApiCoverageTracker::getCovered()['petstore-3.0'] ?? [],
+        );
+    }
+
+    #[Test]
+    public function inject_credentials_treats_empty_apikey_query_value_as_absent_and_injects(): void
+    {
+        // Query bag stores values as plain strings (scalar branch in
+        // slotIsAlreadyPopulated). `?api_key=` produces an empty-string entry
+        // that must be treated as absent so the inject still fires.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_inject_dummy_credentials'] = true;
+
+        $request = Request::create('/v1/secure/apikey-query?api_key=', 'GET');
+
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::GET, '/v1/secure/apikey-query');
+
+        $this->assertArrayHasKey(
+            'GET /v1/secure/apikey-query',
+            OpenApiCoverageTracker::getCovered()['petstore-3.0'] ?? [],
+        );
+    }
+
+    #[Test]
     public function inject_credentials_handles_and_entry_with_bearer_and_apikey(): void
     {
         // /v1/secure/and requires both bearer AND apiKey-header in a single
@@ -225,6 +272,27 @@ class ValidatesOpenApiSchemaAutoInjectCredentialsTest extends TestCase
 
         $this->assertArrayHasKey(
             'GET /v1/secure/and',
+            OpenApiCoverageTracker::getCovered()['petstore-3.0'] ?? [],
+        );
+    }
+
+    #[Test]
+    public function inject_credentials_handles_and_entry_with_multiple_apikey_locations(): void
+    {
+        // /v1/secure/and-multi-apikey requires bearer AND apiKey-header AND
+        // apiKey-cookie in a single requirement. Exercises the dedup path
+        // (different `in` values for distinct schemes) end-to-end through
+        // the trait — introspector unit tests cover spec-walking shape, this
+        // test pins the actual write across header bag + cookie bag in one
+        // call.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_inject_dummy_credentials'] = true;
+
+        $request = Request::create('/v1/secure/and-multi-apikey', 'GET');
+
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::GET, '/v1/secure/and-multi-apikey');
+
+        $this->assertArrayHasKey(
+            'GET /v1/secure/and-multi-apikey',
             OpenApiCoverageTracker::getCovered()['petstore-3.0'] ?? [],
         );
     }
@@ -291,6 +359,25 @@ class ValidatesOpenApiSchemaAutoInjectCredentialsTest extends TestCase
 
         $this->expectException(AssertionFailedError::class);
         $this->expectExceptionMessage("api key 'session_id' is missing from the cookie");
+
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::GET, '/v1/secure/apikey-cookie');
+    }
+
+    #[Test]
+    public function inject_credentials_swallows_runtime_exception_and_lets_validator_surface_it(): void
+    {
+        // RuntimeException from OpenApiSpecLoader::load() is caught inside
+        // resolveAutoInjectCredentials() so the inject path returns []. The
+        // validator loads the same spec immediately after and re-raises the
+        // error — pinning that contract here so a refactor that decouples
+        // inject and validate (silently making the spec error invisible)
+        // gets caught in CI.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = 'nonexistent-spec-name';
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_inject_dummy_credentials'] = true;
+
+        $request = Request::create('/v1/secure/apikey-cookie', 'GET');
+
+        $this->expectException(RuntimeException::class);
 
         $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::GET, '/v1/secure/apikey-cookie');
     }

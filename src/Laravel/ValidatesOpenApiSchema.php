@@ -329,9 +329,9 @@ trait ValidatesOpenApiSchema
 
         foreach ($this->resolveAutoInjectCredentials($specName, $resolvedMethod, $resolvedPath, $headers, $cookies, $queryParams) as $credential) {
             if ($credential['kind'] === 'bearer') {
-                // Inject under the canonical framework key (Symfony lowercases)
-                // so both any existing "Authorization" and the validator's
-                // case-insensitive lookup see the same value.
+                // Lower-case the key so it round-trips through
+                // HeaderNormalizer::normalize() the same way Symfony's
+                // already-lowercased header bag does.
                 $headers['authorization'] = ['Bearer ' . self::DUMMY_BEARER_TOKEN];
 
                 continue;
@@ -340,9 +340,6 @@ trait ValidatesOpenApiSchema
             $name = $credential['name'];
             switch ($credential['in']) {
                 case 'header':
-                    // Header bag is case-insensitive but stored lowercased; the
-                    // SecurityValidator normalises before lookup so writing
-                    // either form would work, but we mirror the bearer case.
                     $headers[strtolower($name)] = [self::DUMMY_API_KEY_VALUE];
 
                     break;
@@ -568,9 +565,13 @@ trait ValidatesOpenApiSchema
     /**
      * Treat a slot as populated only when it carries a non-empty string value,
      * matching {@see Validation\Request\SecurityValidator::checkApiKeySatisfied()}'s
-     * "missing" definition. Symfony's HeaderBag exposes header values as a
-     * `list<?string>`, so the array branch peels the first element before
-     * applying the same string check.
+     * "missing" definition.
+     *
+     * Symfony's HeaderBag exposes header values as `list<?string>` (array
+     * branch); CookieBag and ParameterBag (query) expose plain strings (scalar
+     * branch). The array branch peels the first element before applying the
+     * same string check so all three bag shapes converge on the same
+     * "absent vs populated" verdict.
      */
     private static function slotIsAlreadyPopulated(mixed $value): bool
     {
@@ -619,14 +620,17 @@ trait ValidatesOpenApiSchema
      * Two modes coexist for backward compatibility:
      * - `auto_inject_dummy_credentials` (preferred) — injects bearer + every
      *   apiKey scheme (header / cookie / query) the operation declares.
-     * - `auto_inject_dummy_bearer` (legacy) — injects bearer only, bypassed
-     *   when the credentials flag is on.
+     * - `auto_inject_dummy_bearer` (legacy) — injects bearer only.
      *
-     * Callers are expected to have already confirmed auto-validate-request
-     * is on — this method is reached only from {@see self::maybeAutoValidateOpenApiRequest()},
-     * which gates on that flag. Calling it from a new code path without the
-     * same gate would silently load the spec even when request validation is
-     * disabled.
+     * When both flags are true the credentials flag wins and the legacy flag
+     * is bypassed; setting only the legacy flag preserves its narrower
+     * bearer-only behavior exactly.
+     *
+     * Precondition: callers must already have gated on
+     * `auto_validate_request` being on. Without that gate this method would
+     * load the spec even when request validation is disabled, which is both
+     * wasteful and surfacing-time-dependent (the validator's error path is
+     * what makes the swallow below safe).
      *
      * Errors walking the spec (unreadable file, no matching path, missing
      * operation) fall through as "do not inject" — the validator will surface

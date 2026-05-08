@@ -47,10 +47,10 @@ final class SecurityValidator
      * four outcomes; the `$reason` field of the returned classification is
      * populated only for `Malformed` to explain which spec field is broken.
      *
-     * Public static so that {@see SecuritySchemeIntrospector} can reuse the
-     * exact classification rules when deciding which credentials to auto-inject —
-     * keeping the rules in one place avoids the "introspector says inject but
-     * validator says missing" drift that a duplicated implementation would risk.
+     * The single source of truth for "what does this scheme look like?" —
+     * other components within the package read the result rather than
+     * re-implementing the rules so the auto-inject side and the validate
+     * side cannot drift apart.
      *
      * @param array<string, mixed> $schemeDef
      *
@@ -73,7 +73,7 @@ final class SecurityValidator
                 return SchemeClassification::malformed("apiKey scheme 'in' must be one of header|query|cookie, got '{$in}'.");
             }
 
-            return SchemeClassification::apiKey();
+            return SchemeClassification::apiKey($in, $name);
         }
 
         if ($type === 'http') {
