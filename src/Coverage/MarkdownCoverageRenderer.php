@@ -96,7 +96,7 @@ final class MarkdownCoverageRenderer
         $heading = $endpoint['operationId'] !== null
             ? sprintf('#### `%s` (%s)', $endpoint['endpoint'], $endpoint['operationId'])
             : sprintf('#### `%s`', $endpoint['endpoint']);
-        $lines = [$heading];
+        $lines = [$heading, ''];
 
         if ($endpoint['responses'] === []) {
             $lines[] = $endpoint['requestReached']
