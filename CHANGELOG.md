@@ -10,6 +10,14 @@ the README for the full surface contract.
 
 ## Unreleased
 
+## [1.3.0](https://github.com/studio-design/openapi-contract-testing/compare/v1.2.0...v1.3.0) (2026-05-08)
+
+
+### Features
+
+* **request:** auto-inject dummy credentials for non-bearer auth schemes ([#180](https://github.com/studio-design/openapi-contract-testing/issues/180)) ([14e560f](https://github.com/studio-design/openapi-contract-testing/commit/14e560fffe652c04647ad8bf1cf8bcfdf6fa7606))
+* **request:** downgrade validation to skipped on documented 4xx response ([#182](https://github.com/studio-design/openapi-contract-testing/issues/182)) ([3ea6089](https://github.com/studio-design/openapi-contract-testing/commit/3ea6089550db6fd79a6c1463755a17d86dae8674))
+
 ## [1.2.0](https://github.com/studio-design/openapi-contract-testing/compare/v1.1.0...v1.2.0) (2026-05-08)
 
 
