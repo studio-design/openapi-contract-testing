@@ -14,11 +14,11 @@ use function dirname;
 use function escapeshellarg;
 use function exec;
 use function explode;
+use function file_exists;
 use function file_put_contents;
 use function implode;
-use function shell_exec;
+use function preg_match;
 use function sprintf;
-use function str_contains;
 use function sys_get_temp_dir;
 use function tempnam;
 use function unlink;
@@ -101,6 +101,11 @@ final class MarkdownCoverageRendererLintTest extends TestCase
                         requestReached: true,
                     ),
                     self::endpoint(
+                        'PATCH /v1/admin/{id}',
+                        EndpointCoverageState::Uncovered,
+                        requestReached: false,
+                    ),
+                    self::endpoint(
                         'DELETE /v1/pets/{petId}',
                         EndpointCoverageState::Partial,
                         responses: [
@@ -115,10 +120,10 @@ final class MarkdownCoverageRendererLintTest extends TestCase
                         ],
                     ),
                 ],
-                'endpointTotal' => 2,
+                'endpointTotal' => 3,
                 'endpointFullyCovered' => 0,
                 'endpointPartial' => 1,
-                'endpointUncovered' => 0,
+                'endpointUncovered' => 1,
                 'endpointRequestOnly' => 1,
                 'responseTotal' => 2,
                 'responseCovered' => 1,
@@ -186,22 +191,32 @@ final class MarkdownCoverageRendererLintTest extends TestCase
      */
     private function assertRenderedMarkdownPassesLint(array $results): void
     {
-        $version = (string) shell_exec('npx --version 2>&1');
-        if (!str_contains($version, '.')) {
-            $this->markTestSkipped('npx is not available; install Node.js to run this test locally');
+        $probeOutput = [];
+        $probeExit = 1;
+        exec('npx --version 2>/dev/null', $probeOutput, $probeExit);
+        if ($probeExit !== 0 || !preg_match('/^\d+\.\d+/', $probeOutput[0] ?? '')) {
+            $this->markTestSkipped('npx is not available; install Node.js to run this test');
         }
 
+        $tmpFile = tempnam(sys_get_temp_dir(), 'mdlint_');
+        if ($tmpFile === false) {
+            $this->fail('tempnam() failed to create a temp file');
+        }
         $output = MarkdownCoverageRenderer::render($results);
-        $tmpFile = tempnam(sys_get_temp_dir(), 'mdlint_') . '.md';
-        file_put_contents($tmpFile, $output);
+        if (file_put_contents($tmpFile, $output) === false) {
+            unlink($tmpFile);
+            $this->fail('file_put_contents() failed to write the rendered markdown');
+        }
         $configPath = dirname(__DIR__, 3) . '/.markdownlint.jsonc';
 
         try {
             $cmd = sprintf(
-                'npx --yes markdownlint-cli2@0 --config %s %s 2>&1',
+                'npx --yes markdownlint-cli2@0.22 --config %s %s 2>&1',
                 escapeshellarg($configPath),
                 escapeshellarg($tmpFile),
             );
+            $stdout = [];
+            $exitCode = 1;
             exec($cmd, $stdout, $exitCode);
 
             $this->assertSame(
@@ -210,7 +225,9 @@ final class MarkdownCoverageRendererLintTest extends TestCase
                 "markdownlint-cli2 failed with exit code {$exitCode}:\n" . implode("\n", $stdout),
             );
         } finally {
-            @unlink($tmpFile);
+            if (file_exists($tmpFile)) {
+                unlink($tmpFile);
+            }
         }
     }
 }

@@ -1,8 +1,8 @@
-// markdownlint config for output produced by MarkdownCoverageRenderer.
-//
-// Currently scoped to the lint compliance test
-// (tests/Unit/Coverage/MarkdownCoverageRendererLintTest.php) only — repo
-// docs (README, CONTRIBUTING, etc.) are NOT linted by this config.
+// markdownlint config consumed only by
+// tests/Unit/Coverage/MarkdownCoverageRendererLintTest.php to verify the
+// markdown produced by MarkdownCoverageRenderer. The disables below are
+// chosen for that generated output and are not intended to apply to repo
+// documentation (README, CONTRIBUTING, etc.).
 {
   "default": true,
 

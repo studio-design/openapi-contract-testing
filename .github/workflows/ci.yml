@@ -150,6 +150,11 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Verify Node toolchain is usable
+        run: |
+          node --version
+          npx --version
+
       - name: Install PHP dependencies
         run: composer install --prefer-dist --no-interaction --no-progress
 
