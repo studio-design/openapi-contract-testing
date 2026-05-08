@@ -80,6 +80,7 @@
         "exclude": [
             "/tests",
             "/.github",
+            "/.markdownlint.jsonc",
             "/.php-cs-fixer.dist.php",
             "/.php-cs-fixer.cache",
             "/.phpstan.cache",

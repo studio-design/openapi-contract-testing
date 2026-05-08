@@ -282,6 +282,66 @@ class MarkdownCoverageRendererTest extends TestCase
     }
 
     #[Test]
+    public function render_inserts_blank_line_between_unexpected_observations_label_and_list(): void
+    {
+        // Regression for #175: markdownlint MD032 (blanks-around-lists).
+        // The italic "_Unexpected observations:_" label must be followed by
+        // a blank line before the bullet list starts so consumers running
+        // markdownlint don't get noise.
+        $results = [
+            'front' => self::coverage(
+                endpoints: [
+                    self::endpoint('GET /v1/pets', 'partial', responses: [
+                        self::row('200', 'application/json', 'validated', hits: 1),
+                    ], coveredResponseCount: 1, totalResponseCount: 1, unexpectedObservations: [
+                        ['statusKey' => '418', 'contentTypeKey' => 'application/json'],
+                    ]),
+                ],
+                endpointTotal: 1,
+                endpointPartial: 1,
+                responseTotal: 1,
+                responseCovered: 1,
+            ),
+        ];
+
+        $output = MarkdownCoverageRenderer::render($results);
+
+        $this->assertMatchesRegularExpression(
+            '/_Unexpected observations \(status \/ content-type not in spec\):_\n\n- /',
+            $output,
+        );
+    }
+
+    #[Test]
+    public function render_inserts_blank_line_between_spec_heading_and_responses_summary(): void
+    {
+        // Regression for #175: markdownlint MD022 (blanks-around-headings).
+        // The `### spec — ...` heading must be followed by a blank line before
+        // the italic responses summary so consumers running markdownlint don't
+        // get noise.
+        $results = [
+            'front' => self::coverage(
+                endpoints: [
+                    self::endpoint('GET /v1/pets', 'all-covered', responses: [
+                        self::row('200', 'application/json', 'validated', hits: 1),
+                    ], coveredResponseCount: 1, totalResponseCount: 1),
+                ],
+                endpointTotal: 1,
+                endpointFullyCovered: 1,
+                responseTotal: 1,
+                responseCovered: 1,
+            ),
+        ];
+
+        $output = MarkdownCoverageRenderer::render($results);
+
+        $this->assertMatchesRegularExpression(
+            '/^### front — endpoints: 1\/1 fully covered \(100%\)\n\n_responses: /m',
+            $output,
+        );
+    }
+
+    #[Test]
     public function render_includes_operation_id_when_present(): void
     {
         $results = [
