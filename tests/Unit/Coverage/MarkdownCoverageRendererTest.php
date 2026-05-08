@@ -254,6 +254,34 @@ class MarkdownCoverageRendererTest extends TestCase
     }
 
     #[Test]
+    public function render_inserts_blank_line_between_endpoint_heading_and_response_table(): void
+    {
+        // Regression for #174: markdownlint MD058 (blanks-around-tables).
+        // The `#### ...` heading must be followed by a blank line before the
+        // response table starts so consumers running markdownlint don't get noise.
+        $results = [
+            'front' => self::coverage(
+                endpoints: [
+                    self::endpoint('GET /v1/pets', 'all-covered', responses: [
+                        self::row('200', 'application/json', 'validated', hits: 1),
+                    ], coveredResponseCount: 1, totalResponseCount: 1),
+                ],
+                endpointTotal: 1,
+                endpointFullyCovered: 1,
+                responseTotal: 1,
+                responseCovered: 1,
+            ),
+        ];
+
+        $output = MarkdownCoverageRenderer::render($results);
+
+        $this->assertMatchesRegularExpression(
+            '/^#### `GET \/v1\/pets`\n\n\| Status \| Content-Type \| State \|$/m',
+            $output,
+        );
+    }
+
+    #[Test]
     public function render_includes_operation_id_when_present(): void
     {
         $results = [
