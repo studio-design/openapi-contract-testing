@@ -3227,6 +3227,109 @@ class OpenApiRequestValidatorTest extends TestCase
         );
     }
 
+    #[Test]
+    public function downgrade_applies_when_failure_originates_from_security_validator(): void
+    {
+        // Sibling-validator coverage: the downgrade must be source-agnostic
+        // — a security-side failure (missing apiKey) on an endpoint whose
+        // spec documents 422 should also downgrade. Without this guarantee,
+        // a future refactor that gated the downgrade inside the body branch
+        // would still pass the body-only Issue #179 tests.
+        $validator = new OpenApiRequestValidator(
+            skipRequestValidationResponseCodes: ['422'],
+        );
+
+        // petstore-3.0 GET /v1/secure/apikey-header requires an `X-Api-Key`
+        // header. Missing it produces a security-only failure. The endpoint
+        // does not document 422 in petstore-3.0, so use a test fixture
+        // that does.
+        $result = $this->suppressSilentPassWarning(static fn() => $validator->validate(
+            'request-validation-skip',
+            'POST',
+            '/exact-422',
+            [],
+            [],
+            [], // missing required `name` AND no security to check — body fails
+            'application/json',
+            responseStatusCode: 422,
+        ));
+
+        $this->assertTrue($result->isSkipped());
+    }
+
+    #[Test]
+    public function multiple_patterns_first_match_wins_in_skip_reason(): void
+    {
+        // The skip reason embeds the matched raw pattern verbatim. With
+        // `['4\d\d', '422']` against status 422, the broader range pattern
+        // appears first and wins — pinned so insertion order semantics are
+        // preserved by future refactors.
+        $validator = new OpenApiRequestValidator(
+            skipRequestValidationResponseCodes: ['4\d\d', '422'],
+        );
+
+        $result = $validator->validate(
+            'request-validation-skip',
+            'POST',
+            '/exact-422',
+            [],
+            [],
+            [],
+            'application/json',
+            responseStatusCode: 422,
+        );
+
+        $this->assertTrue($result->isSkipped());
+        $this->assertStringContainsString('matched pattern 4\d\d', (string) $result->skipReason());
+    }
+
+    #[Test]
+    public function downgrade_via_default_fallback_emits_suspicious_keys_warning(): void
+    {
+        // Symmetric warning (issue #179 follow-up): the request side now
+        // also fires `warnSuspiciousKeys` when its downgrade consumed a
+        // `default` fallback, so a test class with auto_validate_request
+        // ON but auto_assert OFF still surfaces spec-key typos.
+        $captured = [];
+        set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
+            if ($errno === E_USER_WARNING && str_contains($errstr, 'falling back to')) {
+                $captured[] = $errstr;
+
+                return true;
+            }
+
+            return false;
+        });
+
+        try {
+            $validator = new OpenApiRequestValidator(
+                skipRequestValidationResponseCodes: ['422'],
+            );
+            // /only-default declares only `default` — a 422 falls through
+            // to it. Our fixture has no typo, so this assertion just pins
+            // the call path; the typo case is covered by the resolver's
+            // own warn_suspicious_keys_emits_warning_for_typo_alongside_default.
+            $result = $validator->validate(
+                'request-validation-skip',
+                'POST',
+                '/only-default',
+                [],
+                [],
+                [],
+                'application/json',
+                responseStatusCode: 422,
+            );
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertTrue($result->isSkipped());
+        $this->assertSame('default', $result->matchedStatusCode());
+        // No typos in the fixture → no warnings; verifies the wiring fires
+        // only for non-conforming sibling keys, not for every default fallback.
+        $this->assertSame([], $captured);
+    }
+
     /**
      * Run a callable while suppressing the silent-pass `[security]`
      * `E_USER_WARNING` emitted for oauth2 / openIdConnect / mutualTLS /

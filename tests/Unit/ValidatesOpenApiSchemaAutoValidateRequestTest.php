@@ -508,6 +508,36 @@ class ValidatesOpenApiSchemaAutoValidateRequestTest extends TestCase
     }
 
     #[Test]
+    public function request_validator_cache_invalidates_when_skip_codes_config_changes(): void
+    {
+        // The trait's cache is keyed on (maxErrors, skipRequestValidationResponseCodes).
+        // When the second value changes mid-test (e.g. one test toggles it off
+        // for strict assertions), the cached validator must be rebuilt or the
+        // new config silently won't take effect.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_validate_request'] = true;
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = 'request-validation-skip';
+
+        // First call: default ['422', '400'] — invalid body + documented 422
+        // response is downgraded silently (no exception).
+        $request = $this->makeJsonRequest('POST', '/exact-422', []);
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::POST, '/exact-422', 422);
+
+        // Toggle to strict mode mid-test — the cached validator must be
+        // rebuilt with the new (empty) skip set so the next call fails loud.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.skip_request_validation_response_codes'] = [];
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('OpenAPI request validation failed');
+
+        $this->maybeAutoValidateOpenApiRequest(
+            $this->makeJsonRequest('POST', '/exact-422', []),
+            HttpMethod::POST,
+            '/exact-422',
+            422,
+        );
+    }
+
+    #[Test]
     public function backward_compat_call_without_response_status_still_works(): void
     {
         // Direct callers (test harnesses, framework adapters not yet

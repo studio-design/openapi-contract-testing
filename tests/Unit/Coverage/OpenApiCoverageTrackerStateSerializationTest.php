@@ -652,6 +652,125 @@ class OpenApiCoverageTrackerStateSerializationTest extends TestCase
     }
 
     #[Test]
+    public function import_state_rejects_non_string_request_skip_reason(): void
+    {
+        // C2 hardening: a corrupt sidecar with a non-null, non-string
+        // requestSkipReason (int, array, bool — i.e. real corruption from
+        // a buggy serializer or hand-edit) must throw rather than silently
+        // coercing to null. Mirrors the response-side `state` strictness.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('invalid requestSkipReason in coverage state payload');
+
+        OpenApiCoverageTracker::importState([
+            'version' => 1,
+            'specs' => [
+                'petstore-3.0' => [
+                    'POST /v1/pets' => [
+                        'requestReached' => true,
+                        'requestSkipReason' => 42,
+                        'responses' => [],
+                    ],
+                ],
+            ],
+        ]);
+    }
+
+    #[Test]
+    public function reconcile_request_agrees_between_record_and_import_paths(): void
+    {
+        // Companion to reconcile_response_agrees_between_record_and_import_paths:
+        // the bulk-merge importState branch must produce the same final
+        // requestSkipReason as the sequential recordRequest branch when fed
+        // equivalent observations. Pinned here so a future tweak to one
+        // path and not the other is caught immediately.
+        OpenApiCoverageTracker::reset();
+        OpenApiCoverageTracker::recordRequest('petstore-3.0', 'GET', '/v1/pets', 'reason-1');
+        OpenApiCoverageTracker::recordRequest('petstore-3.0', 'GET', '/v1/pets', 'reason-2');
+        OpenApiCoverageTracker::recordRequest('petstore-3.0', 'GET', '/v1/pets');
+        $sequential = OpenApiCoverageTracker::exportState();
+
+        OpenApiCoverageTracker::reset();
+        OpenApiCoverageTracker::importState([
+            'version' => 1,
+            'specs' => ['petstore-3.0' => ['GET /v1/pets' => [
+                'requestReached' => true,
+                'requestSkipReason' => 'reason-2',
+                'responses' => [],
+            ]]],
+        ]);
+        OpenApiCoverageTracker::importState([
+            'version' => 1,
+            'specs' => ['petstore-3.0' => ['GET /v1/pets' => [
+                'requestReached' => true,
+                'requestSkipReason' => null,
+                'responses' => [],
+            ]]],
+        ]);
+        $bulk = OpenApiCoverageTracker::exportState();
+
+        $this->assertSame($sequential, $bulk);
+    }
+
+    #[Test]
+    public function import_state_does_not_demote_validated_request_to_skipped(): void
+    {
+        // Mirror of import_state_keeps_validated_when_skipped_arrives_later
+        // for the request side. Once a worker recorded a clean request
+        // validation, a later worker's downgrade for the same endpoint
+        // must not flip it back to skipped.
+        OpenApiCoverageTracker::importState([
+            'version' => 1,
+            'specs' => ['petstore-3.0' => ['GET /v1/pets' => [
+                'requestReached' => true,
+                'requestSkipReason' => null,
+                'responses' => [],
+            ]]],
+        ]);
+        OpenApiCoverageTracker::importState([
+            'version' => 1,
+            'specs' => ['petstore-3.0' => ['GET /v1/pets' => [
+                'requestReached' => true,
+                'requestSkipReason' => 'late downgrade',
+                'responses' => [],
+            ]]],
+        ]);
+
+        $merged = OpenApiCoverageTracker::exportState();
+        $this->assertNull($merged['specs']['petstore-3.0']['GET /v1/pets']['requestSkipReason']);
+    }
+
+    #[Test]
+    public function import_state_after_record_response_preserves_request_skip_reason(): void
+    {
+        // C1 regression in the bulk-merge path: a worker A that wrote a
+        // response-only sidecar must not erase the skipReason carried by
+        // worker B's request-side payload when they merge.
+        OpenApiCoverageTracker::importState([
+            'version' => 1,
+            'specs' => ['petstore-3.0' => ['GET /v1/pets' => [
+                'requestReached' => false,
+                'requestSkipReason' => null,
+                'responses' => [
+                    '200:application/json' => ['state' => 'validated', 'hits' => 1, 'skipReason' => null],
+                ],
+            ]]],
+        ]);
+        OpenApiCoverageTracker::importState([
+            'version' => 1,
+            'specs' => ['petstore-3.0' => ['GET /v1/pets' => [
+                'requestReached' => true,
+                'requestSkipReason' => 'downgraded after response',
+                'responses' => [],
+            ]]],
+        ]);
+
+        $merged = OpenApiCoverageTracker::exportState();
+        $endpoint = $merged['specs']['petstore-3.0']['GET /v1/pets'];
+        $this->assertTrue($endpoint['requestReached']);
+        $this->assertSame('downgraded after response', $endpoint['requestSkipReason']);
+    }
+
+    #[Test]
     public function reconcile_response_agrees_between_record_and_import_paths(): void
     {
         // Sequential single-record path: 2 skip + 1 validated.

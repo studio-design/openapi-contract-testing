@@ -190,6 +190,15 @@ final class OpenApiRequestValidator
                 $responses = is_array($operation['responses'] ?? null) ? $operation['responses'] : [];
                 $matchedResponseKey = SpecResponseKeyResolver::resolve($statusCodeStr, $responses);
                 if ($matchedResponseKey !== null) {
+                    // Emit the suspicious-keys diagnostic when we
+                    // consumed a `default` fallback. Mirrors the
+                    // response-side path so a test class with only
+                    // auto_validate_request enabled (no auto_assert)
+                    // still surfaces spec-key typos.
+                    if ($matchedResponseKey === 'default') {
+                        SpecResponseKeyResolver::warnSuspiciousKeys($specName, $method, $matchedPath, $responses);
+                    }
+
                     return OpenApiValidationResult::skipped(
                         $matchedPath,
                         sprintf(

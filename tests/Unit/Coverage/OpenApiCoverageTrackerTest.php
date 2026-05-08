@@ -265,6 +265,76 @@ class OpenApiCoverageTrackerTest extends TestCase
     }
 
     #[Test]
+    public function record_request_keeps_validated_when_skipped_arrives_later(): void
+    {
+        // Inverse of the promotion test: once an endpoint has been cleanly
+        // request-validated, a subsequent downgrade must NOT demote it back
+        // to skipped. The "validated wins over skipped" rule is the
+        // request-side mirror of the response-side promotion semantics.
+        OpenApiCoverageTracker::recordRequest('petstore-3.0', 'GET', '/v1/pets');
+        OpenApiCoverageTracker::recordRequest(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            'late downgrade: should be ignored',
+        );
+
+        $state = OpenApiCoverageTracker::exportState();
+        $endpoint = $state['specs']['petstore-3.0']['GET /v1/pets'];
+        $this->assertTrue($endpoint['requestReached']);
+        $this->assertNull($endpoint['requestSkipReason']);
+    }
+
+    #[Test]
+    public function record_request_skipped_then_skipped_keeps_latest_reason(): void
+    {
+        // Two different downgrade reasons against the same endpoint —
+        // mirrors the response-side "latest non-null reason wins" rule so
+        // per-test overrides aren't silently dropped.
+        OpenApiCoverageTracker::recordRequest('petstore-3.0', 'GET', '/v1/pets', 'first reason');
+        OpenApiCoverageTracker::recordRequest('petstore-3.0', 'GET', '/v1/pets', 'second reason');
+
+        $state = OpenApiCoverageTracker::exportState();
+        $endpoint = $state['specs']['petstore-3.0']['GET /v1/pets'];
+        $this->assertSame('second reason', $endpoint['requestSkipReason']);
+    }
+
+    #[Test]
+    public function record_request_after_record_response_preserves_skip_reason(): void
+    {
+        // Regression guard for the C1 reconciliation bug: if recordResponse
+        // initialises an entry first (creating requestReached=false +
+        // requestSkipReason=null), a subsequent recordRequest with a skip
+        // reason must store that reason. Pre-fix, the reconciliation
+        // treated the response-only entry as "already cleanly
+        // request-validated" and silently dropped the incoming reason.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        OpenApiCoverageTracker::recordRequest(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            'downgraded after response',
+        );
+
+        $state = OpenApiCoverageTracker::exportState();
+        $endpoint = $state['specs']['petstore-3.0']['GET /v1/pets'];
+        $this->assertTrue($endpoint['requestReached']);
+        $this->assertSame(
+            'downgraded after response',
+            $endpoint['requestSkipReason'],
+            'first request-side recording must store the reason even when '
+            . 'recordResponse initialised the entry',
+        );
+    }
+
+    #[Test]
     public function content_type_match_is_case_insensitive(): void
     {
         // The 422 response in petstore-3.0 declares `Application/Problem+JSON`

@@ -135,12 +135,21 @@ final class OpenApiCoverageTracker
         ?string $skipReason = null,
     ): void {
         $key = self::endpointKey($method, $path);
-        $existed = isset(self::$covered[$specName][$key]);
+        // Gate the reconciliation on `requestReached` rather than
+        // `isset($covered[...])`. An entry can pre-exist purely because
+        // `recordResponse()` initialised it (the trait orchestrator
+        // currently runs request-before-response, but framework adapters
+        // and the bulk-merge `importState()` path can reach the tracker
+        // in any order). Using $existed would treat such an entry as
+        // "already cleanly request-validated" and silently drop the
+        // skipReason on the first request-side recording — the very
+        // mode this feature was added to surface.
+        $wasRequestReached = self::$covered[$specName][$key]['requestReached'] ?? false;
         self::$covered[$specName][$key] ??= ['requestReached' => false, 'requestSkipReason' => null, 'responses' => []];
         self::$covered[$specName][$key]['requestReached'] = true;
 
-        if (!$existed) {
-            // Fresh entry — store whatever we got verbatim.
+        if (!$wasRequestReached) {
+            // First request-side recording for this endpoint — store as-is.
             self::$covered[$specName][$key]['requestSkipReason'] = $skipReason;
 
             return;
@@ -277,26 +286,38 @@ final class OpenApiCoverageTracker
         $normalised = self::validateStatePayload($state);
         foreach ($normalised as $specName => $endpoints) {
             foreach ($endpoints as $endpointKey => $entry) {
-                $existed = isset(self::$covered[$specName][$endpointKey]);
+                // Same `wasRequestReached` gate as `recordRequest()` —
+                // an entry that exists only because a prior `importState`
+                // or live `recordResponse` initialised it has no
+                // request-side history; treat the incoming entry as
+                // fresh from the request-side perspective so its
+                // `requestSkipReason` is not silently dropped.
+                $wasRequestReached = self::$covered[$specName][$endpointKey]['requestReached'] ?? false;
                 self::$covered[$specName][$endpointKey] ??= ['requestReached' => false, 'requestSkipReason' => null, 'responses' => []];
                 if ($entry['requestReached']) {
                     self::$covered[$specName][$endpointKey]['requestReached'] = true;
                 }
                 // Mirror the single-record recordRequest reconciliation so
                 // sequential-record and bulk-merge paths cannot drift:
-                //   - fresh entry: store as-is
+                //   - first request-side observation: store as-is
                 //   - existing.validated wins over incoming.skipped
                 //   - incoming.validated promotes existing.skipped to validated
                 //   - skipped + skipped: latest non-null reason wins
+                // Only entries whose incoming side actually carries a
+                // request-side observation (`requestReached === true`)
+                // participate in reconciliation — a response-only
+                // incoming entry leaves the request-side state alone.
                 $incomingReason = $entry['requestSkipReason'];
-                if (!$existed) {
-                    self::$covered[$specName][$endpointKey]['requestSkipReason'] = $incomingReason;
-                } else {
-                    $existingReason = self::$covered[$specName][$endpointKey]['requestSkipReason'];
-                    if ($incomingReason === null && $entry['requestReached']) {
-                        self::$covered[$specName][$endpointKey]['requestSkipReason'] = null;
-                    } elseif ($incomingReason !== null && $existingReason !== null) {
+                if ($entry['requestReached']) {
+                    if (!$wasRequestReached) {
                         self::$covered[$specName][$endpointKey]['requestSkipReason'] = $incomingReason;
+                    } else {
+                        $existingReason = self::$covered[$specName][$endpointKey]['requestSkipReason'];
+                        if ($incomingReason === null) {
+                            self::$covered[$specName][$endpointKey]['requestSkipReason'] = null;
+                        } elseif ($existingReason !== null) {
+                            self::$covered[$specName][$endpointKey]['requestSkipReason'] = $incomingReason;
+                        }
                     }
                 }
                 foreach ($entry['responses'] as $responseKey => $row) {
@@ -543,10 +564,23 @@ final class OpenApiCoverageTracker
         // sidecars written by older library versions (pre-#179) omit the
         // field, and a missing key normalises to null. Importer stays
         // backward-compatible with v1 payloads — no STATE_FORMAT_VERSION
-        // bump is needed for the additive field.
-        $requestSkipReason = isset($entry['requestSkipReason']) && is_string($entry['requestSkipReason'])
-            ? $entry['requestSkipReason']
-            : null;
+        // bump is needed for the additive field. PRESENT-but-non-string
+        // values (int, array, bool — i.e. real corruption) are rejected
+        // loudly to match the response-side `state` strictness; silently
+        // coercing them to null would mask a buggy serializer or
+        // hand-edited sidecar as a clean "validated" recording.
+        if (array_key_exists('requestSkipReason', $entry)) {
+            $rawSkipReason = $entry['requestSkipReason'];
+            if ($rawSkipReason !== null && !is_string($rawSkipReason)) {
+                throw new InvalidArgumentException(sprintf(
+                    'invalid requestSkipReason in coverage state payload: expected string|null, got %s',
+                    get_debug_type($rawSkipReason),
+                ));
+            }
+            $requestSkipReason = $rawSkipReason;
+        } else {
+            $requestSkipReason = null;
+        }
         $responses = isset($entry['responses']) && is_array($entry['responses']) ? $entry['responses'] : [];
 
         $normalisedResponses = [];
