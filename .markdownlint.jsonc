@@ -1,0 +1,32 @@
+// markdownlint config consumed only by
+// tests/Unit/Coverage/MarkdownCoverageRendererLintTest.php to verify the
+// markdown produced by MarkdownCoverageRenderer. The disables below are
+// chosen for that generated output and are not intended to apply to repo
+// documentation (README, CONTRIBUTING, etc.).
+{
+  "default": true,
+
+  // The renderer emits an embeddable fragment rooted at h2
+  // (## OpenAPI Contract Test Coverage), not a standalone document with an h1.
+  "MD041": false,
+
+  // <details> / <summary> are required for the collapsible per-response
+  // detail section. Other inline HTML stays disallowed.
+  "MD033": {
+    "allowed_elements": ["details", "summary"]
+  },
+
+  // The italic sub-summary line under each `### spec` heading
+  // (`_responses: x/y covered ..._`) is intentional UX: it semantically
+  // belongs to the heading as a concise stats line.
+  "MD036": false,
+
+  // Markdown table rows can exceed any reasonable line length when endpoint
+  // paths or skip reasons are long; line-length is not the lint we want here.
+  "MD013": false,
+
+  // Pipe-alignment within tables would require pre-computing column widths
+  // for every row before emitting the header. Disabled because misaligned
+  // pipes don't affect rendering and the cost/benefit doesn't justify it.
+  "MD060": false
+}

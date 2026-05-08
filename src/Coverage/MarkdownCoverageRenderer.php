@@ -43,6 +43,7 @@ final class MarkdownCoverageRenderer
                 $result['endpointTotal'],
                 self::formatPercent($endpointPct),
             );
+            $lines[] = '';
             $lines[] = sprintf(
                 '_responses: %d/%d covered (%s%%) — %d skipped, %d uncovered, %d partial endpoints, %d uncovered endpoints_',
                 $result['responseCovered'],
@@ -122,6 +123,7 @@ final class MarkdownCoverageRenderer
         if ($endpoint['unexpectedObservations'] !== []) {
             $lines[] = '';
             $lines[] = '_Unexpected observations (status / content-type not in spec):_';
+            $lines[] = '';
             foreach ($endpoint['unexpectedObservations'] as $obs) {
                 $lines[] = sprintf('- `%s` `%s`', $obs['statusKey'], $obs['contentTypeKey']);
             }

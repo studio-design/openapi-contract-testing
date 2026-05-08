@@ -132,3 +132,31 @@ jobs:
 
       - name: Audit installed dependencies
         run: composer audit --abandoned=fail
+
+  markdown-lint:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Verify Node toolchain is usable
+        run: |
+          node --version
+          npx --version
+
+      - name: Install PHP dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Run markdown lint test
+        run: vendor/bin/phpunit --filter MarkdownCoverageRendererLintTest
