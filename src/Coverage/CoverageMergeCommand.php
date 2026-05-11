@@ -53,6 +53,7 @@ use function unlink;
  *     strip_prefixes?: list<string>,
  *     output_file?: string,
  *     junit_output?: string,
+ *     json_output?: string,
  *     github_step_summary?: string,
  *     console_output?: string,
  *     cleanup?: bool,
@@ -163,6 +164,8 @@ final class CoverageMergeCommand
               --output-file=<path>          Markdown report output path.
               --junit-output=<path>         JUnit XML report output path (for CI dashboards
                                             like GitLab CI test reports, Jenkins, SonarQube).
+              --json-output=<path>          JSON report output path (machine-readable; see
+                                            docs/coverage-json-schema.md for the schema).
               --github-step-summary=<path>  Append Markdown report to this file (also
                                             consults GITHUB_STEP_SUMMARY env var).
               --console-output=<mode>       default | all | uncovered_only.
@@ -208,6 +211,9 @@ final class CoverageMergeCommand
             : null;
         $junitOutput = isset($options['junit_output']) && $options['junit_output'] !== ''
             ? $this->absolutise($options['junit_output'])
+            : null;
+        $jsonOutput = isset($options['json_output']) && $options['json_output'] !== ''
+            ? $this->absolutise($options['json_output'])
             : null;
         $githubSummaryPath = isset($options['github_step_summary']) && $options['github_step_summary'] !== ''
             ? $options['github_step_summary']
@@ -306,7 +312,7 @@ final class CoverageMergeCommand
 
         $this->writeStdout(ConsoleCoverageRenderer::render($results, $consoleOutput));
 
-        $writeFailures = $this->writeReports($results, $outputFile, $junitOutput);
+        $writeFailures = $this->writeReports($results, $outputFile, $junitOutput, $jsonOutput);
         $this->appendGithubStepSummary($results, $githubSummaryPath);
 
         $thresholdFailure = $this->evaluateThresholdGate($results, $minEndpointPct, $minResponsePct, $minStrict);
@@ -329,11 +335,11 @@ final class CoverageMergeCommand
      *
      * @return int Number of format outputs that failed to write
      */
-    private function writeReports(array $results, ?string $outputFile, ?string $junitOutput): int
+    private function writeReports(array $results, ?string $outputFile, ?string $junitOutput, ?string $jsonOutput): int
     {
         $writeFailures = 0;
 
-        foreach ($this->buildReportEntries($outputFile, $junitOutput) as $entry) {
+        foreach ($this->buildReportEntries($outputFile, $junitOutput, $jsonOutput) as $entry) {
             if ($entry['outputFile'] === null) {
                 continue;
             }
@@ -366,7 +372,7 @@ final class CoverageMergeCommand
      *
      * @return list<CoverageReportEntry>
      */
-    private function buildReportEntries(?string $outputFile, ?string $junitOutput): array
+    private function buildReportEntries(?string $outputFile, ?string $junitOutput, ?string $jsonOutput): array
     {
         return [
             [
@@ -378,6 +384,11 @@ final class CoverageMergeCommand
                 'label' => 'JUnit XML',
                 'renderer' => static fn(array $r): string => JUnitCoverageRenderer::render($r),
                 'outputFile' => $junitOutput,
+            ],
+            [
+                'label' => 'JSON',
+                'renderer' => static fn(array $r): string => JsonCoverageRenderer::render($r),
+                'outputFile' => $jsonOutput,
             ],
         ];
     }

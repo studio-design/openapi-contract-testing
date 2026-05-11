@@ -912,6 +912,30 @@ class OpenApiCoverageExtensionTest extends TestCase
     }
 
     #[Test]
+    public function bootstrap_fatal_when_json_output_is_empty(): void
+    {
+        // Reuses resolveOutputPathParameter() helper validated for junit_output;
+        // pin the parameter name so a future helper rewrite that drops
+        // json_output wiring is caught.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => 'refs-valid',
+            'json_output' => '',
+        ]);
+
+        try {
+            $extension->setupExtension(null, $parameters, null);
+            $this->fail('expected InvalidCoverageOutputPathException');
+        } catch (InvalidCoverageOutputPathException $e) {
+            $this->assertSame('json_output', $e->parameterName);
+            $this->assertStringContainsString('empty', $e->getMessage());
+        }
+
+        $this->assertStringContainsString('FATAL', $this->readStderr());
+    }
+
+    #[Test]
     public function bootstrap_fatal_when_junit_output_parent_dir_not_writable(): void
     {
         // Surface the misconfiguration at bootstrap rather than as a runtime
