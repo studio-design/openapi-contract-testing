@@ -4,29 +4,38 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Pest;
 
+use Illuminate\Testing\TestResponse;
+use Pest\PendingCalls\TestCall;
+use Pest\Support\HigherOrderTapProxy;
 use RuntimeException;
+use Studio\OpenApiContractTesting\HttpMethod;
+use Symfony\Component\HttpFoundation\Request;
 
+use function function_exists;
+use function get_debug_type;
+use function implode;
+use function in_array;
+use function method_exists;
 use function sprintf;
+use function strtoupper;
 
 /**
  * Static dispatch target for the Pest custom expectations registered in
  * {@see Autoload.php}. Centralising the implementation here (rather than
- * inlining it inside the closure) gives us a real call site that PHPStan
- * and PHPUnit-driven Pest tests can introspect, and lets PR2 land the real
- * validator orchestration without touching the autoload boundary.
+ * inlining it inside the closure) gives PHPStan and PHPUnit-driven tests a
+ * real call site to introspect, and isolates the autoload boundary from
+ * the validator orchestration.
  *
- * The methods are stubs in PR1 — they intentionally throw so the smoke
- * test in `tests/Integration/Pest/PluginLoadsTest.php` can prove that
- * (a) the autoload entrypoint registered the expectation under the
- * expected name and (b) the dispatch reaches this class. PR2 replaces
- * the throw with the real `OpenApiResponseValidator` /
- * `OpenApiRequestValidator` orchestration and the `ValidatesOpenApiSchema`
- * public bridge call.
+ * The dispatch contract: the running Pest test class must use the
+ * `Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema` trait
+ * (typically by extending a base `TestCase` that already does, then
+ * registering it via `uses(...)->in(...)` in `tests/Pest.php`). Without
+ * the trait the bridge methods don't exist and these helpers raise a
+ * RuntimeException pointing the user at the standard wiring. Standalone
+ * (non-Laravel) Pest support is tracked by issue #109's follow-up.
  */
 final class Expectations
 {
-    public const NOT_IMPLEMENTED_URL = 'https://github.com/studio-design/openapi-contract-testing/issues/109';
-
     /**
      * @param string[] $skipResponseCodes
      */
@@ -37,7 +46,25 @@ final class Expectations
         ?string $path,
         array $skipResponseCodes,
     ): void {
-        throw new RuntimeException(self::notImplementedMessage(__METHOD__));
+        if (!$value instanceof TestResponse) {
+            throw new RuntimeException(sprintf(
+                'expect(...)->toMatchOpenApiResponseSchema() requires a %s, got %s. '
+                . 'Standalone (non-Laravel) Pest support is tracked separately.',
+                TestResponse::class,
+                get_debug_type($value),
+            ));
+        }
+
+        $testCase = self::resolveTestCase('toMatchOpenApiResponseSchema');
+        $resolvedMethod = self::resolveHttpMethod($method, 'toMatchOpenApiResponseSchema');
+
+        $testCase->runOpenApiResponseAssertion(
+            $value,
+            $spec,
+            $resolvedMethod,
+            $path,
+            $skipResponseCodes,
+        );
     }
 
     public static function matchRequest(
@@ -46,21 +73,125 @@ final class Expectations
         ?string $method,
         ?string $path,
     ): void {
-        throw new RuntimeException(self::notImplementedMessage(__METHOD__));
+        if (!$value instanceof Request) {
+            throw new RuntimeException(sprintf(
+                'expect(...)->toMatchOpenApiRequestSchema() requires a %s, got %s. '
+                . 'In a Laravel test the current request is available via app(\'request\').',
+                Request::class,
+                get_debug_type($value),
+            ));
+        }
+
+        $testCase = self::resolveTestCase('toMatchOpenApiRequestSchema');
+        $resolvedMethod = self::resolveHttpMethod($method, 'toMatchOpenApiRequestSchema');
+
+        $testCase->runOpenApiRequestAssertion(
+            $value,
+            $spec,
+            $resolvedMethod,
+            $path,
+        );
     }
 
     /**
-     * Build the stub error message identifying which dispatch was hit.
-     * Carrying __METHOD__ lets a clipped CI log still pinpoint matchResponse
-     * vs matchRequest. The constant URL is the single source of truth for
-     * the tracking issue so PR2 only deletes call sites, not literals.
+     * Locate the running Pest TestCase via the global `test()` helper and
+     * verify it carries the public bridge methods. Failing here means the
+     * test class is missing the `ValidatesOpenApiSchema` trait — almost
+     * always a `tests/Pest.php` `uses(...)` misconfiguration.
+     *
+     * Pest's `test()` returns `HigherOrderTapProxy` whenever called with no
+     * description argument while a TestCase is active — the proxy forwards
+     * to the underlying TestCase via `__call` / `__get` so user code can
+     * write `test()->skip(...)` or `test()->throws(...)`. We unwrap it
+     * here because `method_exists()` against the proxy would resolve the
+     * proxy's `__call` rather than the real bridge method, returning
+     * false unconditionally.
+     *
+     * Pest can also return a `Pest\PendingCalls\TestCall` when `test()` is
+     * resolved before any `it(...)` body has been entered (e.g., from a
+     * dataset closure or `beforeEach` initialiser). The TestCall has its
+     * own method surface and would surface as the misleading "missing
+     * trait" message; we detect it explicitly and report the actual
+     * environmental cause instead.
      */
-    private static function notImplementedMessage(string $method): string
+    private static function resolveTestCase(string $expectationName): object
     {
-        return sprintf(
-            'The Pest plugin entrypoint loaded, but %s lands in PR2. See %s.',
-            $method,
-            self::NOT_IMPLEMENTED_URL,
-        );
+        if (!function_exists('test')) {
+            throw new RuntimeException(sprintf(
+                '%s() was invoked outside a Pest test run (`test()` global is undefined). '
+                . 'Custom expectations only run when the Pest CLI is the entrypoint.',
+                $expectationName,
+            ));
+        }
+
+        /** @var object $testCase */
+        $testCase = test();
+        if ($testCase instanceof HigherOrderTapProxy) {
+            /** @var object $testCase */
+            $testCase = $testCase->target;
+        }
+
+        if ($testCase instanceof TestCall) {
+            throw new RuntimeException(sprintf(
+                '%s() must be called from inside an it(...) / test(...) body. '
+                . '`test()` returned a pending TestCall, which means no PHPUnit '
+                . 'TestCase is currently executing (most often this happens when '
+                . 'the expectation is invoked from a dataset closure or beforeEach '
+                . 'initialiser before any test body has been entered).',
+                $expectationName,
+            ));
+        }
+
+        $bridge = $expectationName === 'toMatchOpenApiResponseSchema'
+            ? 'runOpenApiResponseAssertion'
+            : 'runOpenApiRequestAssertion';
+        if (!method_exists($testCase, $bridge)) {
+            throw new RuntimeException(sprintf(
+                '%s() requires the test class (%s) to use the %s trait. '
+                . 'Add `uses(\Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema::class)->in(...)` '
+                . 'to tests/Pest.php, or extend a base TestCase that already uses the trait.',
+                $expectationName,
+                $testCase::class,
+                'Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema',
+            ));
+        }
+
+        return $testCase;
+    }
+
+    /**
+     * Coerce the optional method string to the trait's HttpMethod enum.
+     * Null passes through (the trait then auto-resolves from the current
+     * request); anything else must be one of the supported verbs.
+     */
+    private static function resolveHttpMethod(?string $method, string $expectationName): ?HttpMethod
+    {
+        if ($method === null) {
+            return null;
+        }
+
+        $resolved = HttpMethod::tryFrom(strtoupper($method));
+        if ($resolved === null) {
+            throw new RuntimeException(sprintf(
+                '%s() received unsupported method: %s. Allowed: %s.',
+                $expectationName,
+                $method,
+                self::supportedMethodList(),
+            ));
+        }
+
+        return $resolved;
+    }
+
+    private static function supportedMethodList(): string
+    {
+        $names = [];
+        foreach (HttpMethod::cases() as $case) {
+            if (!in_array($case->value, $names, true)) {
+                $names[] = $case->value;
+            }
+        }
+
+        return implode(', ', $names);
     }
 }

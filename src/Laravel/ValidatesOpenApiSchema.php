@@ -33,10 +33,12 @@ use Symfony\Component\HttpFoundation\Response;
 use WeakMap;
 
 use function array_key_first;
+use function array_map;
 use function array_merge;
 use function filter_var;
 use function fwrite;
 use function get_debug_type;
+use function implode;
 use function is_array;
 use function is_int;
 use function is_numeric;
@@ -126,6 +128,98 @@ trait ValidatesOpenApiSchema
         self::$cachedSkipRequestValidationResponseCodes = null;
         self::$cachedSecuritySchemeIntrospector = null;
         self::$validatedResponses = null;
+    }
+
+    /**
+     * Public bridge for the Pest expectation `expect($response)->toMatchOpenApiResponseSchema()`.
+     * Forwards to the existing protected {@see self::assertResponseMatchesOpenApiSchema()}
+     * so dedup, skip-codes merging, and coverage recording are shared verbatim
+     * with PHPUnit usage. When `$spec` is non-null, pins this single assertion
+     * to that spec via {@see OpenApiSpecResolver::withExplicitOpenApiSpec()}.
+     *
+     * @internal Pest plugin only — see src/Pest/Expectations.php.
+     *
+     * @param string[] $extraSkipResponseCodes
+     */
+    public function runOpenApiResponseAssertion(
+        TestResponse $response,
+        ?string $spec = null,
+        ?HttpMethod $method = null,
+        ?string $path = null,
+        array $extraSkipResponseCodes = [],
+    ): void {
+        if ($spec === null) {
+            $this->assertResponseMatchesOpenApiSchema($response, $method, $path, $extraSkipResponseCodes);
+
+            return;
+        }
+
+        // try/finally guards against the override leaking into the next
+        // assertion if assertResponseMatchesOpenApiSchema throws BEFORE
+        // resolveOpenApiSpec consumes the override. The resolver also
+        // self-clears on read, so the finally is a no-op on the success
+        // path — it only matters when an early throw catches the override
+        // mid-flight.
+        $this->withExplicitOpenApiSpec($spec);
+
+        try {
+            $this->assertResponseMatchesOpenApiSchema($response, $method, $path, $extraSkipResponseCodes);
+        } finally {
+            $this->withExplicitOpenApiSpec(null);
+        }
+    }
+
+    /**
+     * Public bridge for the Pest expectation `expect($request)->toMatchOpenApiRequestSchema()`.
+     * Always runs (bypasses the `auto_validate_request` config gate) because
+     * the user explicitly opted in by writing the expectation. The
+     * `#[SkipOpenApi]` attribute is NOT consulted here — the request side has
+     * no auto-vs-explicit advisory pattern to mirror (unlike the response
+     * side, where `assertResponseMatchesOpenApiSchema()` warns when both
+     * signals are present), so silence on the explicit request bridge is
+     * the deliberate behaviour, not a bug.
+     *
+     * @internal Pest plugin only — see src/Pest/Expectations.php.
+     */
+    public function runOpenApiRequestAssertion(
+        Request $request,
+        ?string $spec = null,
+        ?HttpMethod $method = null,
+        ?string $path = null,
+    ): void {
+        // Coerce the HTTP method BEFORE setting the explicit spec override.
+        // failOpenApi() throws AssertionFailedError, which a downstream test
+        // can intentionally catch (`expect(static fn () => ...)->toThrow(...)`).
+        // If the override were already set, the leak would carry into the
+        // next assertion in the same test method — exactly the invariant
+        // the resolver's single-shot consumption is meant to prevent.
+        $resolvedMethod = $method ?? HttpMethod::tryFrom(strtoupper($request->getMethod()));
+        if ($resolvedMethod === null) {
+            $this->failOpenApi(sprintf(
+                'toMatchOpenApiRequestSchema received a Request with unrecognised HTTP method %s. '
+                . 'Supported methods: %s.',
+                var_export($request->getMethod(), true),
+                implode(', ', array_map(static fn(HttpMethod $m): string => $m->value, HttpMethod::cases())),
+            ));
+        }
+
+        if ($spec === null) {
+            $this->runRequestAssertion($request, $resolvedMethod, $path, null);
+
+            return;
+        }
+
+        // Same try/finally rationale as runOpenApiResponseAssertion above —
+        // protects the override against an early throw in runRequestAssertion
+        // (e.g. failOpenApi from an empty spec name) that would otherwise
+        // leak into the next assertion in the same test method.
+        $this->withExplicitOpenApiSpec($spec);
+
+        try {
+            $this->runRequestAssertion($request, $resolvedMethod, $path, null);
+        } finally {
+            $this->withExplicitOpenApiSpec(null);
+        }
     }
 
     /**
@@ -309,91 +403,7 @@ trait ValidatesOpenApiSchema
             return;
         }
 
-        $specName = $this->resolveOpenApiSpec();
-        if ($specName === '') {
-            $this->failOpenApi(
-                'openApiSpec() must return a non-empty spec name, but an empty string was returned. '
-                . 'Either add #[OpenApiSpec(\'your-spec\')] to your test class or method, '
-                . 'override openApiSpec() in your test class, or set the "default_spec" key '
-                . 'in config/openapi-contract-testing.php.',
-            );
-        }
-
-        $resolvedMethod = $method->value;
-        $resolvedPath = $path ?? $request->getPathInfo();
-
-        /** @var array<string, mixed> $queryParams */
-        $queryParams = $request->query->all();
-        /** @var array<string, array<int, null|string>> $headers */
-        $headers = $request->headers->all();
-        /** @var array<string, mixed> $cookies */
-        $cookies = $request->cookies->all();
-        $rawContentType = $request->headers->get('Content-Type');
-        $contentType = is_string($rawContentType) ? $rawContentType : '';
-
-        $body = $this->extractRequestBody($request, $contentType);
-
-        foreach ($this->resolveAutoInjectCredentials($specName, $resolvedMethod, $resolvedPath, $headers, $cookies, $queryParams) as $credential) {
-            if ($credential['kind'] === 'bearer') {
-                // Lower-case the key so it round-trips through
-                // HeaderNormalizer::normalize() the same way Symfony's
-                // already-lowercased header bag does.
-                $headers['authorization'] = ['Bearer ' . self::DUMMY_BEARER_TOKEN];
-
-                continue;
-            }
-
-            $name = $credential['name'];
-            switch ($credential['in']) {
-                case 'header':
-                    $headers[strtolower($name)] = [self::DUMMY_API_KEY_VALUE];
-
-                    break;
-                case 'cookie':
-                    $cookies[$name] = self::DUMMY_API_KEY_VALUE;
-
-                    break;
-                case 'query':
-                    $queryParams[$name] = self::DUMMY_API_KEY_VALUE;
-
-                    break;
-            }
-        }
-
-        $validator = $this->getOrCreateRequestValidator();
-        $result = $validator->validate(
-            $specName,
-            $resolvedMethod,
-            $resolvedPath,
-            $queryParams,
-            $headers,
-            $body,
-            $contentType !== '' ? $contentType : null,
-            $cookies,
-            $responseStatusCode,
-        );
-
-        // Record coverage when the request matched a spec path, same
-        // tracking semantics as the response-side hook. The tracker is a set,
-        // so this does not double-count when response auto-assert also fires.
-        // When the validator downgraded to Skipped (documented-4xx case from
-        // issue #179), forward the skip reason so the coverage report
-        // surfaces the downgrade rather than reporting a clean validated
-        // request.
-        if ($result->matchedPath() !== null) {
-            OpenApiCoverageTracker::recordRequest(
-                $specName,
-                $resolvedMethod,
-                $result->matchedPath(),
-                $result->isSkipped() ? $result->skipReason() : null,
-            );
-        }
-
-        $this->assertOpenApi(
-            $result->isValid(),
-            "OpenAPI request validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"
-            . $result->errorMessage(),
-        );
+        $this->runRequestAssertion($request, $method, $path, $responseStatusCode);
     }
 
     protected function maybeAutoAssertOpenApiSchema(
@@ -602,6 +612,107 @@ trait ValidatesOpenApiSchema
         }
 
         return is_string($value) && $value !== '';
+    }
+
+    /**
+     * Run request schema validation against a Request, recording coverage and
+     * asserting the outcome. Callers gate on auto-validate config / skip
+     * flags / `#[SkipOpenApi]` themselves; this method always runs.
+     *
+     * Shared implementation for the auto-validate hook and the explicit
+     * `runOpenApiRequestAssertion()` public bridge.
+     */
+    private function runRequestAssertion(
+        Request $request,
+        HttpMethod $method,
+        ?string $path,
+        ?int $responseStatusCode,
+    ): void {
+        $specName = $this->resolveOpenApiSpec();
+        if ($specName === '') {
+            $this->failOpenApi(
+                'openApiSpec() must return a non-empty spec name, but an empty string was returned. '
+                . 'Either add #[OpenApiSpec(\'your-spec\')] to your test class or method, '
+                . 'override openApiSpec() in your test class, or set the "default_spec" key '
+                . 'in config/openapi-contract-testing.php.',
+            );
+        }
+
+        $resolvedMethod = $method->value;
+        $resolvedPath = $path ?? $request->getPathInfo();
+
+        /** @var array<string, mixed> $queryParams */
+        $queryParams = $request->query->all();
+        /** @var array<string, array<int, null|string>> $headers */
+        $headers = $request->headers->all();
+        /** @var array<string, mixed> $cookies */
+        $cookies = $request->cookies->all();
+        $rawContentType = $request->headers->get('Content-Type');
+        $contentType = is_string($rawContentType) ? $rawContentType : '';
+
+        $body = $this->extractRequestBody($request, $contentType);
+
+        foreach ($this->resolveAutoInjectCredentials($specName, $resolvedMethod, $resolvedPath, $headers, $cookies, $queryParams) as $credential) {
+            if ($credential['kind'] === 'bearer') {
+                // Lower-case the key so it round-trips through
+                // HeaderNormalizer::normalize() the same way Symfony's
+                // already-lowercased header bag does.
+                $headers['authorization'] = ['Bearer ' . self::DUMMY_BEARER_TOKEN];
+
+                continue;
+            }
+
+            $name = $credential['name'];
+            switch ($credential['in']) {
+                case 'header':
+                    $headers[strtolower($name)] = [self::DUMMY_API_KEY_VALUE];
+
+                    break;
+                case 'cookie':
+                    $cookies[$name] = self::DUMMY_API_KEY_VALUE;
+
+                    break;
+                case 'query':
+                    $queryParams[$name] = self::DUMMY_API_KEY_VALUE;
+
+                    break;
+            }
+        }
+
+        $validator = $this->getOrCreateRequestValidator();
+        $result = $validator->validate(
+            $specName,
+            $resolvedMethod,
+            $resolvedPath,
+            $queryParams,
+            $headers,
+            $body,
+            $contentType !== '' ? $contentType : null,
+            $cookies,
+            $responseStatusCode,
+        );
+
+        // Record coverage when the request matched a spec path, same
+        // tracking semantics as the response-side hook. The tracker is a set,
+        // so this does not double-count when response auto-assert also fires.
+        // When the validator downgraded to Skipped (documented-4xx case from
+        // issue #179), forward the skip reason so the coverage report
+        // surfaces the downgrade rather than reporting a clean validated
+        // request.
+        if ($result->matchedPath() !== null) {
+            OpenApiCoverageTracker::recordRequest(
+                $specName,
+                $resolvedMethod,
+                $result->matchedPath(),
+                $result->isSkipped() ? $result->skipReason() : null,
+            );
+        }
+
+        $this->assertOpenApi(
+            $result->isValid(),
+            "OpenAPI request validation failed for {$resolvedMethod} {$resolvedPath} (spec: {$specName}):\n"
+            . $result->errorMessage(),
+        );
     }
 
     private function getOrCreateRequestValidator(): OpenApiRequestValidator
