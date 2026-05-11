@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenAPI Contract Test Coverage</title>
+<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#222;margin:0;padding:2rem;max-width:1100px;line-height:1.5;}h1{margin-top:0;}.page-header{border-bottom:1px solid #ddd;padding-bottom:1rem;margin-bottom:2rem;}.aggregate .metric{font-size:1.1rem;margin:0.25rem 0;}.aggregate .meta{color:#666;font-size:0.9rem;}.spec{margin-bottom:2rem;}.spec-summary{color:#444;}.endpoint-list{list-style:none;padding:0;}.endpoint-list li{padding:0.25rem 0.5rem;margin:0.1rem 0;border-radius:4px;}.endpoint-list li a{text-decoration:none;color:#0366d6;}.endpoint-list li a:hover{text-decoration:underline;}.state-label{font-size:0.8rem;text-transform:uppercase;color:#666;margin-left:0.5rem;}.state-all-covered,.state-validated{border-left:4px solid #28a745;padding-left:0.5rem;}.state-partial{border-left:4px solid #f0ad4e;padding-left:0.5rem;}.state-uncovered{border-left:4px solid #d73a49;padding-left:0.5rem;}.state-request-only{border-left:4px solid #6f42c1;padding-left:0.5rem;}.state-skipped{border-left:4px solid #aaa;padding-left:0.5rem;}.endpoint{margin:0.5rem 0;padding:0.5rem;border:1px solid #eee;border-radius:4px;}.endpoint summary{cursor:pointer;}.endpoint .op-id{color:#666;}table.responses,table.unexpected{border-collapse:collapse;margin:0.75rem 0;width:100%;}table.responses th,table.responses td,table.unexpected th,table.unexpected td{border:1px solid #eee;padding:0.4rem 0.75rem;text-align:left;font-size:0.9rem;}table.responses th,table.unexpected th{background:#f6f8fa;font-weight:600;}.unexpected-heading{margin-top:1rem;font-weight:600;color:#d73a49;}</style>
+</head>
+<body>
+<header class="page-header">
+<h1>OpenAPI Contract Test Coverage</h1>
+<div class="aggregate"><p class="metric"><strong>1 / 2</strong> endpoints fully covered (50%)</p><p class="metric"><strong>2 / 3</strong> responses covered (66.7%)</p><p class="meta">0 skipped, 1 uncovered, 1 partial endpoints, 0 uncovered endpoints, 0 request-only</p></div>
+</header>
+<section class="spec">
+<h2>petstore</h2>
+<p class="spec-summary">endpoints: 1 / 2 fully covered (50%) — responses: 2 / 3 covered (66.7%)</p>
+<ul class="endpoint-list">
+<li class="state-all-covered"><a href="#endpoint-petstore-get--v1-pets">GET /v1/pets</a> <span class="state-label">all-covered</span></li>
+<li class="state-partial"><a href="#endpoint-petstore-post--v1-pets">POST /v1/pets</a> <span class="state-label">partial</span></li>
+</ul>
+<details id="endpoint-petstore-get--v1-pets" class="endpoint state-all-covered">
+<summary><code>GET /v1/pets</code> — <span class="state-label">all-covered</span> <em class="op-id">listPets</em></summary>
+<table class="responses">
+<thead><tr><th>Status</th><th>Content type</th><th>State</th><th>Hits</th><th>Skip reason</th></tr></thead>
+<tbody>
+<tr class="state-validated"><td>200</td><td>application/json</td><td>validated</td><td>12</td><td></td></tr>
+</tbody>
+</table>
+</details>
+<details id="endpoint-petstore-post--v1-pets" class="endpoint state-partial">
+<summary><code>POST /v1/pets</code> — <span class="state-label">partial</span> <em class="op-id">createPet</em></summary>
+<table class="responses">
+<thead><tr><th>Status</th><th>Content type</th><th>State</th><th>Hits</th><th>Skip reason</th></tr></thead>
+<tbody>
+<tr class="state-validated"><td>201</td><td>application/json</td><td>validated</td><td>3</td><td></td></tr>
+<tr class="state-uncovered"><td>422</td><td>application/problem+json</td><td>uncovered</td><td>0</td><td></td></tr>
+</tbody>
+</table>
+<p class="unexpected-heading">Unexpected observations</p>
+<table class="unexpected">
+<thead><tr><th>Status</th><th>Content type</th></tr></thead>
+<tbody>
+<tr><td>418</td><td>application/json</td></tr>
+</tbody>
+</table>
+</details>
+</section>
+</body>
+</html>

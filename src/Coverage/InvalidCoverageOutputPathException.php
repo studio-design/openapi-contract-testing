@@ -10,9 +10,9 @@ use Throwable;
 
 /**
  * Thrown by {@see OpenApiCoverageExtension} when an output-file path parameter
- * (currently `junit_output`; reusable for additional formats added under #116)
- * is set but invalid — empty/whitespace value, or a parent directory that
- * does not exist / is not writable.
+ * (`junit_output`, `json_output`, `html_output`) is set but invalid —
+ * empty/whitespace value, or a parent directory that does not exist / is not
+ * writable.
  *
  * Distinct from {@see InvalidThresholdConfigurationException} because the
  * failure mode is filesystem misconfiguration, not a threshold typo. Distinct

@@ -100,6 +100,7 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
             sidecarDir: $this->tmpDir,
             junitOutput: $this->tmpDir . '/coverage.junit.xml',
             jsonOutput: $this->tmpDir . '/coverage.json',
+            htmlOutput: $this->tmpDir . '/coverage.html',
         );
 
         ob_start();
@@ -115,6 +116,10 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
         $this->assertFileDoesNotExist(
             $this->tmpDir . '/coverage.json',
             'worker mode must not write json_output (merge CLI is the canonical paratest renderer)',
+        );
+        $this->assertFileDoesNotExist(
+            $this->tmpDir . '/coverage.html',
+            'worker mode must not write html_output (merge CLI is the canonical paratest renderer)',
         );
 
         $loaded = CoverageSidecarReader::readDir($this->tmpDir);
@@ -294,6 +299,81 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
 
         $this->assertStringContainsString('WARNING', $stderrLog);
         $this->assertStringContainsString('JUnit XML', $stderrLog);
+    }
+
+    #[Test]
+    public function sequential_mode_writes_html_output_when_configured(): void
+    {
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        mkdir($this->tmpDir, 0o755, recursive: true);
+        $htmlPath = $this->tmpDir . '/coverage.html';
+
+        $subscriber = new CoverageReportSubscriber(
+            specs: ['petstore-3.0'],
+            outputFile: null,
+            consoleOutput: ConsoleOutput::DEFAULT,
+            githubSummaryPath: null,
+            sidecarDir: $this->tmpDir,
+            htmlOutput: $htmlPath,
+        );
+
+        ob_start();
+        $subscriber->notify($this->fakeExecutionFinished());
+        ob_get_clean();
+
+        $this->assertFileExists($htmlPath, 'sequential mode must write html_output when configured');
+        $contents = (string) file_get_contents($htmlPath);
+        $this->assertStringStartsWith('<!DOCTYPE html>', $contents);
+        $this->assertStringContainsString('petstore-3.0', $contents);
+    }
+
+    #[Test]
+    public function sequential_mode_warns_and_continues_when_html_write_fails(): void
+    {
+        // Parity with the JUnit and JSON WARN tests — the HTML dispatch path
+        // must obey the same WARN-and-continue contract.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        mkdir($this->tmpDir, 0o755, recursive: true);
+        $htmlPath = $this->tmpDir . '/coverage.html';
+        mkdir($htmlPath, 0o755, recursive: true);
+
+        $stderrLog = '';
+        $subscriber = new CoverageReportSubscriber(
+            specs: ['petstore-3.0'],
+            outputFile: null,
+            consoleOutput: ConsoleOutput::DEFAULT,
+            githubSummaryPath: null,
+            stderrWriter: static function (string $msg) use (&$stderrLog): void {
+                $stderrLog .= $msg;
+            },
+            sidecarDir: $this->tmpDir,
+            htmlOutput: $htmlPath,
+        );
+
+        ob_start();
+        $subscriber->notify($this->fakeExecutionFinished());
+        ob_get_clean();
+
+        @rmdir($htmlPath);
+
+        $this->assertStringContainsString('WARNING', $stderrLog);
+        $this->assertStringContainsString('HTML', $stderrLog);
     }
 
     #[Test]

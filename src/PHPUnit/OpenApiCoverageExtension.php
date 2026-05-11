@@ -192,6 +192,7 @@ final class OpenApiCoverageExtension implements Extension
 
         $junitOutput = self::resolveOutputPathParameter($parameters, 'junit_output', $githubSummaryPath);
         $jsonOutput = self::resolveOutputPathParameter($parameters, 'json_output', $githubSummaryPath);
+        $htmlOutput = self::resolveOutputPathParameter($parameters, 'html_output', $githubSummaryPath);
 
         $consoleOutput = ConsoleOutput::resolve(
             $parameters->has('console_output') ? $parameters->get('console_output') : null,
@@ -226,6 +227,7 @@ final class OpenApiCoverageExtension implements Extension
             minCoverageStrict: $minCoverageStrict,
             junitOutput: $junitOutput,
             jsonOutput: $jsonOutput,
+            htmlOutput: $htmlOutput,
         ));
     }
 
@@ -287,8 +289,8 @@ final class OpenApiCoverageExtension implements Extension
     }
 
     /**
-     * Generic helper for output-file-path parameters (currently `junit_output`;
-     * reusable for other formats added under #116). Empty or whitespace-only
+     * Generic helper for output-file-path parameters (`junit_output`,
+     * `json_output`, `html_output`). Empty or whitespace-only
      * values are FATAL — silently dropping the parameter would defeat the
      * fail-loud-on-misconfiguration policy this extension enforces. Parent
      * directory writability is checked here so misconfigurations surface at
