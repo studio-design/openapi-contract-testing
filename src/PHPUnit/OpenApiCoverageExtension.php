@@ -8,6 +8,7 @@ use const FILE_APPEND;
 use const PHP_EOL;
 use const STDERR;
 
+use InvalidArgumentException;
 use PHPUnit\Runner\Extension\Extension;
 use PHPUnit\Runner\Extension\Facade;
 use PHPUnit\Runner\Extension\ParameterCollection;
@@ -26,6 +27,7 @@ use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use function array_filter;
 use function array_map;
 use function array_values;
+use function dirname;
 use function explode;
 use function fflush;
 use function file_put_contents;
@@ -34,7 +36,9 @@ use function getcwd;
 use function getenv;
 use function implode;
 use function in_array;
+use function is_dir;
 use function is_numeric;
+use function is_writable;
 use function sprintf;
 use function str_starts_with;
 use function sys_get_temp_dir;
@@ -87,7 +91,7 @@ final class OpenApiCoverageExtension implements Extension
     {
         try {
             $this->setupExtension($facade, $parameters, getenv('GITHUB_STEP_SUMMARY') ?: null);
-        } catch (EnumBindingException|EnumDriftException|InvalidOpenApiSpecException|InvalidThresholdConfigurationException|SpecFileNotFoundException) {
+        } catch (EnumBindingException|EnumDriftException|InvalidArgumentException|InvalidOpenApiSpecException|InvalidThresholdConfigurationException|SpecFileNotFoundException) {
             // setupExtension() has already written a FATAL line to stderr and
             // (if GITHUB_STEP_SUMMARY is set) appended a fatal block to it.
             // PHPUnit's ExtensionBootstrapper::bootstrap() wraps this call in
@@ -186,6 +190,8 @@ final class OpenApiCoverageExtension implements Extension
             }
         }
 
+        $junitOutput = self::resolveOutputPathParameter($parameters, 'junit_output', $githubSummaryPath);
+
         $consoleOutput = ConsoleOutput::resolve(
             $parameters->has('console_output') ? $parameters->get('console_output') : null,
         );
@@ -217,6 +223,7 @@ final class OpenApiCoverageExtension implements Extension
             minEndpointCoverage: $minEndpointCoverage,
             minResponseCoverage: $minResponseCoverage,
             minCoverageStrict: $minCoverageStrict,
+            junitOutput: $junitOutput,
         ));
     }
 
@@ -272,6 +279,58 @@ final class OpenApiCoverageExtension implements Extension
 
         if (!str_starts_with($raw, '/')) {
             $raw = getcwd() . '/' . $raw;
+        }
+
+        return $raw;
+    }
+
+    /**
+     * Read an optional output-file path parameter (used by `junit_output` and
+     * the JSON / HTML formats added in follow-up work tracked in #116). Empty
+     * or whitespace-only values are FATAL — silently dropping the parameter
+     * would defeat the fail-loud-on-misconfiguration policy this extension
+     * enforces. Parent directory writability is checked here so the failure
+     * surfaces at bootstrap rather than as a runtime WARN after tests ran.
+     *
+     * Returns the absolutised path or `null` when the parameter is absent.
+     */
+    private static function resolveOutputPathParameter(
+        ParameterCollection $parameters,
+        string $name,
+        ?string $githubSummaryPath,
+    ): ?string {
+        if (!$parameters->has($name)) {
+            return null;
+        }
+
+        $raw = trim($parameters->get($name));
+        if ($raw === '') {
+            $reason = sprintf(
+                '%s is set but empty. Either provide an output file path or remove the parameter.',
+                $name,
+            );
+            self::writeStderr("[OpenAPI Coverage] FATAL: {$reason}\n");
+            self::appendGithubStepSummaryFatalBlock($githubSummaryPath, $name, $reason);
+
+            throw new InvalidArgumentException($reason);
+        }
+
+        if (!str_starts_with($raw, '/')) {
+            $raw = getcwd() . '/' . $raw;
+        }
+
+        $parentDir = dirname($raw);
+        if (!is_dir($parentDir) || !is_writable($parentDir)) {
+            $reason = sprintf(
+                '%s=%s: parent directory %s does not exist or is not writable.',
+                $name,
+                $raw,
+                $parentDir,
+            );
+            self::writeStderr("[OpenAPI Coverage] FATAL: {$reason}\n");
+            self::appendGithubStepSummaryFatalBlock($githubSummaryPath, $name, $reason);
+
+            throw new InvalidArgumentException($reason);
         }
 
         return $raw;

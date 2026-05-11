@@ -14,6 +14,7 @@ use Studio\OpenApiContractTesting\Coverage\ConsoleCoverageRenderer;
 use Studio\OpenApiContractTesting\Coverage\CoverageMergeCommand;
 use Studio\OpenApiContractTesting\Coverage\CoverageSidecarWriter;
 use Studio\OpenApiContractTesting\Coverage\CoverageThresholdEvaluator;
+use Studio\OpenApiContractTesting\Coverage\JUnitCoverageRenderer;
 use Studio\OpenApiContractTesting\Coverage\MarkdownCoverageRenderer;
 use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
@@ -63,6 +64,7 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         private ?float $minResponseCoverage = null,
         private bool $minCoverageStrict = false,
         private mixed $exitHandler = null,
+        private ?string $junitOutput = null,
     ) {}
 
     /** @phpcsSuppress SlevomatCodingStandard.Functions.UnusedParameter.UnusedParameter */
@@ -328,6 +330,11 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
                 'label' => 'Markdown',
                 'renderer' => static fn(array $r): string => MarkdownCoverageRenderer::render($r),
                 'outputFile' => $this->outputFile,
+            ],
+            [
+                'label' => 'JUnit XML',
+                'renderer' => static fn(array $r): string => JUnitCoverageRenderer::render($r),
+                'outputFile' => $this->junitOutput,
             ],
         ];
     }
