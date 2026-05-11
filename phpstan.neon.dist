@@ -17,17 +17,23 @@ parameters:
         - tests
     excludePaths:
         - src/Laravel
-        # Pest plugin entrypoint references the Pest\Expectation class and the
-        # global `expect()` function, neither of which is available unless the
-        # downstream consumer installs `pestphp/pest`. The static-analysis job
-        # uses the default require-dev (Pest-free), so analysing this file
-        # would surface false positives. The runtime guard inside the file
-        # (function_exists + class_exists check) makes the symbols safe to
-        # reference at load time. The Pest test bootstrap and integration
-        # tests are excluded for the same reason — once PR2 populates them
-        # with `uses(...)`, `it(...)`, `expect(...)` they will reference Pest
-        # globals that PHPStan cannot resolve without Pest installed.
+        # Pest plugin code references Pest classes (`Pest\Expectation`,
+        # `Pest\Support\HigherOrderTapProxy`) and the global `expect()` /
+        # `test()` functions, none of which are available unless the
+        # downstream consumer installs `pestphp/pest`. The static-analysis
+        # job uses the default require-dev (Pest-free), so analysing these
+        # files would surface false positives. The runtime guards
+        # (function_exists + class_exists checks in Autoload.php; trait
+        # method_exists check in Expectations.php) make the symbols safe to
+        # reference at load time. The Pest bootstrap and integration tests
+        # are excluded for the same reason — they reference Pest globals
+        # PHPStan cannot resolve without Pest installed.
+        #
+        # Issue #189 tracks replacing these exclusions with a Pest stub
+        # file so PHPStan can analyse the closure signatures and the
+        # `$this->value` access inside expect()->extend() callbacks.
         - src/Pest/Autoload.php
+        - src/Pest/Expectations.php
         - tests/Pest.php
         - tests/Integration/Pest
         # EnumScanner fixture dir holds intentionally-unused trait/abstract

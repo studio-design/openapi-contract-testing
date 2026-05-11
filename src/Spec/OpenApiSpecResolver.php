@@ -11,12 +11,17 @@ use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
 /**
  * Resolves which OpenAPI spec name a test case should validate against.
  *
- * The resolver itself evaluates three layers. When a framework adapter (e.g.
- * the Laravel `ValidatesOpenApiSchema` trait) overrides `openApiSpecFallback()`
- * to delegate to its own user-overridable hook, the last layer splits into
- * two — producing the four-layer priority documented in README (highest first;
- * first match wins):
+ * The resolver itself evaluates four layers (highest first; first non-null
+ * match wins). When a framework adapter (e.g. the Laravel
+ * `ValidatesOpenApiSchema` trait) overrides `openApiSpecFallback()` to
+ * delegate to its own user-overridable hook, the last layer splits into two —
+ * producing the five-layer priority documented in README:
  *
+ *   0. Per-call explicit override set via {@see self::withExplicitOpenApiSpec()}.
+ *      Used by the Pest plugin (`expect(...)->toMatchOpenApiResponseSchema(spec: 'X')`)
+ *      to pin a single assertion at a specific spec without touching attributes
+ *      or config. Self-clears after the next `resolveOpenApiSpec()` call so it
+ *      cannot leak into subsequent assertions.
  *   1. Method-level `#[OpenApiSpec]` attribute on the running test method.
  *   2. Class-level `#[OpenApiSpec]` attribute on the test class.
  *   3. Adapter's user-overridable hook. For the Laravel adapter this is
@@ -27,7 +32,7 @@ use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
  *      trait's own `openApiSpec()` implementation when not overridden.
  *
  * Adapters that don't override `openApiSpecFallback()` collapse layers 3 and 4
- * into a single fallback and remain three-layer.
+ * into a single fallback.
  *
  * Attribute layers return the attribute's raw `name` as-is. `#[OpenApiSpec('')]`
  * is still "set" and short-circuits resolution to the empty string — the
@@ -36,6 +41,26 @@ use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
  */
 trait OpenApiSpecResolver
 {
+    /**
+     * Per-assertion explicit spec set by callers that need to bypass the
+     * attribute / fallback chain (Pest plugin's `spec:` argument). Consumed
+     * once by `resolveOpenApiSpec()` so the value cannot leak into the next
+     * assertion in the same test method.
+     */
+    private ?string $explicitOpenApiSpec = null;
+
+    /**
+     * Pin the next `resolveOpenApiSpec()` call to a specific spec, bypassing
+     * attribute and fallback resolution. Used by the Pest expectation
+     * dispatcher to honour the `spec:` argument. Pass `null` to clear.
+     *
+     * @internal Pest plugin / framework adapters only.
+     */
+    public function withExplicitOpenApiSpec(?string $spec): void
+    {
+        $this->explicitOpenApiSpec = $spec;
+    }
+
     protected function openApiSpecFallback(): string
     {
         return '';
@@ -43,6 +68,14 @@ trait OpenApiSpecResolver
 
     private function resolveOpenApiSpec(): string
     {
+        // 0. Per-call explicit override (consumed once).
+        if ($this->explicitOpenApiSpec !== null) {
+            $spec = $this->explicitOpenApiSpec;
+            $this->explicitOpenApiSpec = null;
+
+            return $spec;
+        }
+
         // 1. Method-level #[OpenApiSpec] attribute
         $methodName = $this->name(); // @phpstan-ignore method.notFound
         $refMethod = new ReflectionMethod($this, $methodName);
