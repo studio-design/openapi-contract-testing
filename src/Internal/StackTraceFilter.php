@@ -15,9 +15,11 @@ use function str_contains;
 use function str_replace;
 
 /**
- * Trims this library's own + Laravel test-concern frames out of an
- * assertion-failure trace so a contract-test failure points at the
- * user's test line, not at vendor code.
+ * Trims this library's own frames (and known framework testing-concern
+ * frames) out of an assertion-failure trace so a contract-test failure
+ * points at the user's test line, not at vendor code. Consumed by the
+ * Laravel traits (`ValidatesOpenApiSchema`, `ExploresOpenApiEndpoint`)
+ * and the PHPUnit trait (`AssertsNoEnumDrift`).
  *
  * @internal Not part of the package's public API. Do not use from user code.
  */
@@ -25,13 +27,14 @@ final class StackTraceFilter
 {
     /**
      * Frame `file` substrings (forward-slash form) that mark frames as
-     * library/framework noise and should be dropped from the trace.
+     * library/framework noise and should be dropped from the trace. Each
+     * `/openapi-contract-testing/src/<Subdir>/` entry covers path-repo /
+     * monorepo dev installs where the vendor prefix is absent; the list
+     * mirrors the actual source subdirectories below.
      *
-     * - `studio-design/openapi-contract-testing/src/` covers the composer-installed location.
-     * - `openapi-contract-testing/src/Laravel/`, `…/src/Internal/`, `…/src/PHPUnit/`
-     *   cover path-repo / monorepo dev installs where the vendor prefix is absent.
-     * - The two Laravel entries cover the testing concerns that always sit
-     *   between the trait hook and the user test method.
+     * The two `Illuminate/` entries cover the Laravel testing concerns
+     * that sit between a Laravel trait's hook and the user test method;
+     * they are inert (no-op) on the PHPUnit-only `AssertsNoEnumDrift` path.
      *
      * PHPUnit's own internal frames (Assert, Constraint, TestCase) are
      * filtered by PHPUnit's stack-trace formatter when the default result

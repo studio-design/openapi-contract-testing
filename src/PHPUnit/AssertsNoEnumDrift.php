@@ -18,8 +18,9 @@ use function array_values;
  *
  * `EnumDriftAsserter::assertNoDrift()` is framework-agnostic — it throws on
  * failure and returns void on success, which means PHPUnit's bookkeeping
- * never sees it and tests that "passed" get marked risky under
- * `beStrictAboutTestsThatDoNotTestAnything=true` (PHPUnit 13 default).
+ * never sees it and tests that "passed" get marked risky whenever
+ * `beStrictAboutTestsThatDoNotTestAnything=true` (the PHPUnit 13 default;
+ * opt-in on earlier majors).
  *
  * This trait wraps the same comparison through `Assert::fail()` and bumps
  * the assertion counter so passing drift tests stay green. The static

@@ -11,6 +11,7 @@ use Studio\OpenApiContractTesting\Exception\EnumBindingException;
 use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
 use Studio\OpenApiContractTesting\PHPUnit\AssertsNoEnumDrift;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\IntegerBackedEnum;
 use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\MatchingEnum;
 use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\NotAnEnum;
 use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\PhpExtraEnum;
@@ -57,14 +58,31 @@ class AssertsNoEnumDriftTest extends TestCase
     public function clean_input_with_multiple_enums_still_credits_one_assertion(): void
     {
         // The trait's contract is "one logical assertion per call",
-        // not "one per enum checked". This pins that decision so a future
-        // refactor cannot drift it without an explicit test change.
+        // not "one per enum checked". Two distinct clean fixtures pin
+        // that decision so a future refactor (per-enum counting, fqcn
+        // deduplication, etc.) cannot drift it without an explicit
+        // test change.
         $before = $this->numberOfAssertionsPerformed();
 
-        $this->assertNoEnumDrift([MatchingEnum::class, MatchingEnum::class]);
+        $this->assertNoEnumDrift([MatchingEnum::class, IntegerBackedEnum::class]);
 
         $after = $this->numberOfAssertionsPerformed();
         $this->assertSame($before + 1, $after);
+    }
+
+    #[Test]
+    public function two_consecutive_calls_each_credit_an_assertion(): void
+    {
+        // Fan-in counterpart to the multi-enum test: two separate calls
+        // must each increment the counter, so a future memoization /
+        // short-circuit on subsequent invocations would be caught.
+        $before = $this->numberOfAssertionsPerformed();
+
+        $this->assertNoEnumDrift([MatchingEnum::class]);
+        $this->assertNoEnumDrift([IntegerBackedEnum::class]);
+
+        $after = $this->numberOfAssertionsPerformed();
+        $this->assertSame($before + 2, $after);
     }
 
     #[Test]
@@ -138,6 +156,13 @@ class AssertsNoEnumDriftTest extends TestCase
             $this->assertNoEnumDrift([PhpExtraEnum::class]);
             $this->fail('expected AssertionFailedError');
         } catch (AssertionFailedError $e) {
+            // Disambiguate from the inner $this->fail() sentinel: if a
+            // future regression makes assertNoEnumDrift silently return,
+            // the sentinel would still throw and pass an unrelated trace
+            // through every check below. Insist on the rendered drift
+            // block first.
+            $this->assertStringContainsString('[OpenAPI Enum Drift]', $e->getMessage());
+
             $files = array_column($e->getTrace(), 'file');
             foreach ($files as $file) {
                 $normalized = str_replace('\\', '/', $file);
