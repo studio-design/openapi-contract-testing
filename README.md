@@ -110,6 +110,9 @@ Add the coverage extension to your `phpunit.xml`:
 | `strip_prefixes` | No | `[]` | Comma-separated prefixes to strip from request paths (e.g., `/api`) |
 | `specs` | No | `front` | Comma-separated spec names for coverage tracking |
 | `output_file` | No | — | File path to write Markdown coverage report (relative paths resolve from `getcwd()`) |
+| `junit_output` | No | — | File path to write JUnit XML coverage report (for CI dashboards — GitLab CI, Jenkins, SonarQube, Bitrise). Empty value or unwritable parent directory is FATAL at bootstrap. See [Coverage output formats](#coverage-output-formats) |
+| `json_output` | No | — | File path to write machine-readable JSON coverage report (custom dashboards, analytics, scripted gating). Schema: [`docs/coverage-json-schema.md`](docs/coverage-json-schema.md) |
+| `html_output` | No | — | File path to write self-contained HTML coverage report (PR comments, CI artifact preview, offline review). See [`docs/coverage-html-output.md`](docs/coverage-html-output.md) |
 | `console_output` | No | `default` | Console output mode: `default`, `all`, `uncovered_only`, or `active_only` (overridden by `OPENAPI_CONSOLE_OUTPUT` env var) |
 | `sidecar_dir` | No | `sys_get_temp_dir()/openapi-coverage-sidecars` | Directory paratest workers drop per-worker JSON sidecars into. Used only under parallel test runners — see [Parallel test runners](#parallel-test-runners) below |
 
@@ -1119,6 +1122,9 @@ vendor/bin/openapi-coverage-merge \
 | `--strip-prefixes=<a,b>` | — | Comma-separated request-path prefixes to strip |
 | `--sidecar-dir=<path>` | `sys_get_temp_dir()/openapi-coverage-sidecars` | Where workers wrote sidecars |
 | `--output-file=<path>` | — | Markdown report output path |
+| `--junit-output=<path>` | — | JUnit XML report output path (CI dashboards). See [Coverage output formats](#coverage-output-formats) |
+| `--json-output=<path>` | — | Machine-readable JSON report output path. Schema: [`docs/coverage-json-schema.md`](docs/coverage-json-schema.md) |
+| `--html-output=<path>` | — | Self-contained HTML report output path. See [`docs/coverage-html-output.md`](docs/coverage-html-output.md) |
 | `--github-step-summary=<path>` | `$GITHUB_STEP_SUMMARY` | Append Markdown report to this file |
 | `--console-output=<mode>` | `default` | `default` / `all` / `uncovered_only` |
 | `--min-endpoint-coverage=<pct>` | — | Threshold gate (see [Coverage threshold gate](#coverage-threshold-gate)) |
@@ -1210,6 +1216,54 @@ Example GitHub Actions workflow step to post the report as a PR comment:
   with:
     path: coverage-report.md
 ```
+
+<a id="coverage-output-formats"></a>
+### Coverage output formats
+
+In addition to the Markdown report (`output_file`), the extension can emit
+three additional formats from the same test run. All four are independent:
+setting any combination writes every configured format, and a write failure
+on one format does not block the others (subscriber emits a `WARNING`, the
+merge CLI emits `FATAL` and exits non-zero).
+
+| Format | Parameter / Flag | When to use | Reference |
+|---|---|---|---|
+| Markdown | `output_file` / `--output-file` | PR comments, GitHub Step Summary | (above) |
+| JUnit XML | `junit_output` / `--junit-output` | CI test-report tabs (GitLab CI, Jenkins, SonarQube, Bitrise, CircleCI) | — |
+| JSON | `json_output` / `--json-output` | Custom dashboards, scripted gating, analytics pipelines | [`docs/coverage-json-schema.md`](docs/coverage-json-schema.md) |
+| HTML | `html_output` / `--html-output` | Self-contained artifact for human review (PR comments, CI artifact preview, offline inspection) | [`docs/coverage-html-output.md`](docs/coverage-html-output.md) |
+
+Example: write every format from one PHPUnit run:
+
+```xml
+<extensions>
+    <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+        <parameter name="spec_base_path" value="openapi/bundled"/>
+        <parameter name="specs" value="front,admin"/>
+        <parameter name="output_file" value="build/coverage.md"/>
+        <parameter name="junit_output" value="build/coverage.junit.xml"/>
+        <parameter name="json_output" value="build/coverage.json"/>
+        <parameter name="html_output" value="build/coverage.html"/>
+    </bootstrap>
+</extensions>
+```
+
+Same idea from the paratest merge CLI:
+
+```bash
+vendor/bin/openapi-coverage-merge \
+  --spec-base-path=openapi/bundled \
+  --specs=front,admin \
+  --output-file=build/coverage.md \
+  --junit-output=build/coverage.junit.xml \
+  --json-output=build/coverage.json \
+  --html-output=build/coverage.html
+```
+
+> **Note:** `GITHUB_STEP_SUMMARY` is Markdown-only by design — GitHub renders
+> the file as Markdown, so an HTML/JUnit/JSON payload would be escaped. Use
+> the per-format flags above for artifact uploads and `output_file` /
+> `github_step_summary` for the in-PR summary.
 
 <a id="http-ref-resolution"></a>
 ## HTTP `$ref` resolution (opt-in)
