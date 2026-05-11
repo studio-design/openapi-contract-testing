@@ -14,6 +14,7 @@ use Studio\OpenApiContractTesting\Coverage\ConsoleCoverageRenderer;
 use Studio\OpenApiContractTesting\Coverage\CoverageMergeCommand;
 use Studio\OpenApiContractTesting\Coverage\CoverageSidecarWriter;
 use Studio\OpenApiContractTesting\Coverage\CoverageThresholdEvaluator;
+use Studio\OpenApiContractTesting\Coverage\JUnitCoverageRenderer;
 use Studio\OpenApiContractTesting\Coverage\MarkdownCoverageRenderer;
 use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
@@ -63,6 +64,7 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         private ?float $minResponseCoverage = null,
         private bool $minCoverageStrict = false,
         private mixed $exitHandler = null,
+        private ?string $junitOutput = null,
     ) {}
 
     /** @phpcsSuppress SlevomatCodingStandard.Functions.UnusedParameter.UnusedParameter */
@@ -299,7 +301,11 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
 
             $rendered = ($entry['renderer'])($results);
 
-            if (file_put_contents($entry['outputFile'], $rendered) === false) {
+            // Suppress PHP warning on failure — we surface the error via the
+            // WARNING stderr line below, and the raw PHP warning is redundant
+            // noise that breaks `beStrictAboutOutputDuringTests` test runs.
+            // Mirrors the CLI dispatch loop's @ suppression.
+            if (@file_put_contents($entry['outputFile'], $rendered) === false) {
                 $this->writeStderr(sprintf(
                     "[OpenAPI Coverage] WARNING: Failed to write %s report to %s\n",
                     $entry['label'],
@@ -329,6 +335,11 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
                 'renderer' => static fn(array $r): string => MarkdownCoverageRenderer::render($r),
                 'outputFile' => $this->outputFile,
             ],
+            [
+                'label' => 'JUnit XML',
+                'renderer' => static fn(array $r): string => JUnitCoverageRenderer::render($r),
+                'outputFile' => $this->junitOutput,
+            ],
         ];
     }
 
@@ -348,7 +359,8 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         }
 
         $markdown = MarkdownCoverageRenderer::render($results);
-        $written = file_put_contents($this->githubSummaryPath, $markdown . "\n", FILE_APPEND);
+        // Same @ rationale as writeReports().
+        $written = @file_put_contents($this->githubSummaryPath, $markdown . "\n", FILE_APPEND);
 
         if ($written === false) {
             $this->writeStderr("[OpenAPI Coverage] WARNING: Failed to append Markdown report to GITHUB_STEP_SUMMARY ({$this->githubSummaryPath})\n");

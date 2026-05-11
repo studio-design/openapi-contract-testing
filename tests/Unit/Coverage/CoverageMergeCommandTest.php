@@ -272,6 +272,7 @@ class CoverageMergeCommandTest extends TestCase
             '--strip-prefixes=/api',
             '--sidecar-dir=/tmp/sidecars',
             '--output-file=/tmp/cov.md',
+            '--junit-output=/tmp/cov.junit.xml',
             '--no-cleanup',
         ]);
 
@@ -280,7 +281,83 @@ class CoverageMergeCommandTest extends TestCase
         $this->assertSame(['/api'], $opts['strip_prefixes']);
         $this->assertSame('/tmp/sidecars', $opts['sidecar_dir']);
         $this->assertSame('/tmp/cov.md', $opts['output_file']);
+        $this->assertSame('/tmp/cov.junit.xml', $opts['junit_output']);
         $this->assertFalse($opts['cleanup']);
+    }
+
+    #[Test]
+    public function exits_one_when_junit_output_write_fails(): void
+    {
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        // /proc/0 is unwritable on Linux and nonexistent on macOS — file_put_contents fails closed.
+        $unwritable = '/proc/0/forbidden/coverage.junit.xml';
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'junit_output' => $unwritable,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('JUnit XML', $stderr);
+    }
+
+    #[Test]
+    public function writes_junit_xml_to_configured_path(): void
+    {
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $junitPath = dirname($this->sidecarDir) . '/coverage.junit.xml';
+
+        $command = new CoverageMergeCommand(stdoutWriter: static fn(string $msg): null => null);
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'output_file' => $this->outputFile,
+            'junit_output' => $junitPath,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertFileExists($junitPath);
+        $this->assertFileExists($this->outputFile, 'Markdown output should still be written when JUnit is enabled');
+
+        $junitContents = (string) file_get_contents($junitPath);
+        $this->assertStringStartsWith('<?xml version="1.0" encoding="UTF-8"', $junitContents);
+        $this->assertStringContainsString('<testsuites', $junitContents);
+        $this->assertStringContainsString('openapi.coverage.petstore-3.0', $junitContents);
+        $this->assertStringContainsString('GET /v1/pets [200 application/json]', $junitContents);
+
+        @unlink($junitPath);
     }
 
     #[Test]

@@ -12,6 +12,7 @@ use PHPUnit\Runner\Extension\Extension;
 use PHPUnit\Runner\Extension\Facade;
 use PHPUnit\Runner\Extension\ParameterCollection;
 use PHPUnit\TextUI\Configuration\Configuration;
+use Studio\OpenApiContractTesting\Coverage\InvalidCoverageOutputPathException;
 use Studio\OpenApiContractTesting\Coverage\InvalidThresholdConfigurationException;
 use Studio\OpenApiContractTesting\Exception\EnumBindingException;
 use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
@@ -26,6 +27,7 @@ use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use function array_filter;
 use function array_map;
 use function array_values;
+use function dirname;
 use function explode;
 use function fflush;
 use function file_put_contents;
@@ -34,7 +36,9 @@ use function getcwd;
 use function getenv;
 use function implode;
 use function in_array;
+use function is_dir;
 use function is_numeric;
+use function is_writable;
 use function sprintf;
 use function str_starts_with;
 use function sys_get_temp_dir;
@@ -87,7 +91,7 @@ final class OpenApiCoverageExtension implements Extension
     {
         try {
             $this->setupExtension($facade, $parameters, getenv('GITHUB_STEP_SUMMARY') ?: null);
-        } catch (EnumBindingException|EnumDriftException|InvalidOpenApiSpecException|InvalidThresholdConfigurationException|SpecFileNotFoundException) {
+        } catch (EnumBindingException|EnumDriftException|InvalidCoverageOutputPathException|InvalidOpenApiSpecException|InvalidThresholdConfigurationException|SpecFileNotFoundException) {
             // setupExtension() has already written a FATAL line to stderr and
             // (if GITHUB_STEP_SUMMARY is set) appended a fatal block to it.
             // PHPUnit's ExtensionBootstrapper::bootstrap() wraps this call in
@@ -186,6 +190,8 @@ final class OpenApiCoverageExtension implements Extension
             }
         }
 
+        $junitOutput = self::resolveOutputPathParameter($parameters, 'junit_output', $githubSummaryPath);
+
         $consoleOutput = ConsoleOutput::resolve(
             $parameters->has('console_output') ? $parameters->get('console_output') : null,
         );
@@ -217,6 +223,7 @@ final class OpenApiCoverageExtension implements Extension
             minEndpointCoverage: $minEndpointCoverage,
             minResponseCoverage: $minResponseCoverage,
             minCoverageStrict: $minCoverageStrict,
+            junitOutput: $junitOutput,
         ));
     }
 
@@ -272,6 +279,64 @@ final class OpenApiCoverageExtension implements Extension
 
         if (!str_starts_with($raw, '/')) {
             $raw = getcwd() . '/' . $raw;
+        }
+
+        return $raw;
+    }
+
+    /**
+     * Generic helper for output-file-path parameters (currently `junit_output`;
+     * reusable for other formats added under #116). Empty or whitespace-only
+     * values are FATAL — silently dropping the parameter would defeat the
+     * fail-loud-on-misconfiguration policy this extension enforces. Parent
+     * directory writability is checked here so misconfigurations surface at
+     * bootstrap rather than as a runtime WARN after tests ran.
+     *
+     * Note the bootstrap-vs-runtime severity asymmetry: the parent-dir check
+     * here hard-fails the run, but a `dirname()` that disappears mid-run will
+     * trip the dispatch loop's existing `file_put_contents() === false` branch,
+     * which only emits a WARN in subscriber mode (FATAL+exit in the merge CLI).
+     * Don't read "validated at bootstrap" as "guaranteed at write".
+     *
+     * Returns the absolutised path or `null` when the parameter is absent.
+     */
+    private static function resolveOutputPathParameter(
+        ParameterCollection $parameters,
+        string $name,
+        ?string $githubSummaryPath,
+    ): ?string {
+        if (!$parameters->has($name)) {
+            return null;
+        }
+
+        $raw = trim($parameters->get($name));
+        if ($raw === '') {
+            $reason = sprintf(
+                '%s is set but empty. Either provide an output file path or remove the parameter.',
+                $name,
+            );
+            self::writeStderr("[OpenAPI Coverage] FATAL: {$reason}\n");
+            self::appendGithubStepSummaryFatalBlock($githubSummaryPath, $name, $reason);
+
+            throw new InvalidCoverageOutputPathException($name, $reason);
+        }
+
+        if (!str_starts_with($raw, '/')) {
+            $raw = getcwd() . '/' . $raw;
+        }
+
+        $parentDir = dirname($raw);
+        if (!is_dir($parentDir) || !is_writable($parentDir)) {
+            $reason = sprintf(
+                '%s=%s: parent directory %s does not exist or is not writable.',
+                $name,
+                $raw,
+                $parentDir,
+            );
+            self::writeStderr("[OpenAPI Coverage] FATAL: {$reason}\n");
+            self::appendGithubStepSummaryFatalBlock($githubSummaryPath, $name, $reason);
+
+            throw new InvalidCoverageOutputPathException($name, $reason);
         }
 
         return $raw;

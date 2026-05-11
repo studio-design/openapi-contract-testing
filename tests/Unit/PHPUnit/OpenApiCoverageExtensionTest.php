@@ -9,6 +9,7 @@ use const E_USER_WARNING;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Runner\Extension\ParameterCollection;
+use Studio\OpenApiContractTesting\Coverage\InvalidCoverageOutputPathException;
 use Studio\OpenApiContractTesting\Coverage\InvalidThresholdConfigurationException;
 use Studio\OpenApiContractTesting\Exception\EnumBindingException;
 use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
@@ -884,6 +885,54 @@ class OpenApiCoverageExtensionTest extends TestCase
         $this->expectException(EnumDriftException::class);
 
         $extension->setupExtension(null, $parameters, null);
+    }
+
+    #[Test]
+    public function bootstrap_fatal_when_junit_output_is_empty(): void
+    {
+        // <parameter name="junit_output" value=""/> would otherwise coerce to
+        // getcwd() and silently overwrite a directory listing as a file.
+        // Mirror the enum_spec_base_path policy: empty → FATAL.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => 'refs-valid',
+            'junit_output' => '',
+        ]);
+
+        try {
+            $extension->setupExtension(null, $parameters, null);
+            $this->fail('expected InvalidCoverageOutputPathException');
+        } catch (InvalidCoverageOutputPathException $e) {
+            $this->assertSame('junit_output', $e->parameterName);
+            $this->assertStringContainsString('empty', $e->getMessage());
+        }
+
+        $this->assertStringContainsString('FATAL', $this->readStderr());
+    }
+
+    #[Test]
+    public function bootstrap_fatal_when_junit_output_parent_dir_not_writable(): void
+    {
+        // Surface the misconfiguration at bootstrap rather than as a runtime
+        // file_put_contents() WARN after every test ran. /proc/0 does not
+        // exist on macOS and is unwritable on Linux — fails closed either way.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => 'refs-valid',
+            'junit_output' => '/proc/0/nonexistent/coverage.junit.xml',
+        ]);
+
+        try {
+            $extension->setupExtension(null, $parameters, null);
+            $this->fail('expected InvalidCoverageOutputPathException');
+        } catch (InvalidCoverageOutputPathException $e) {
+            $this->assertSame('junit_output', $e->parameterName);
+            $this->assertStringContainsString('not writable', $e->getMessage());
+        }
+
+        $this->assertStringContainsString('FATAL', $this->readStderr());
     }
 
     private function readStderr(): string

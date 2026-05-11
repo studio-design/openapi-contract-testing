@@ -98,6 +98,7 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
             consoleOutput: ConsoleOutput::DEFAULT,
             githubSummaryPath: null,
             sidecarDir: $this->tmpDir,
+            junitOutput: $this->tmpDir . '/coverage.junit.xml',
         );
 
         ob_start();
@@ -106,6 +107,10 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
 
         $this->assertSame('', $stdout, 'worker mode must not emit console output');
         $this->assertFileDoesNotExist($this->tmpDir . '/coverage-report.md', 'worker mode must not write output_file');
+        $this->assertFileDoesNotExist(
+            $this->tmpDir . '/coverage.junit.xml',
+            'worker mode must not write junit_output (merge CLI is the canonical paratest renderer)',
+        );
 
         $loaded = CoverageSidecarReader::readDir($this->tmpDir);
         $this->assertCount(1, $loaded);
@@ -168,6 +173,87 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
         $this->assertNotSame('', $stdout, 'sequential mode must render to stdout');
         $this->assertFileExists($outputFile, 'sequential mode must write output_file');
         $this->assertSame([], CoverageSidecarReader::readDir($this->tmpDir));
+    }
+
+    #[Test]
+    public function sequential_mode_writes_junit_output_when_configured(): void
+    {
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        mkdir($this->tmpDir, 0o755, recursive: true);
+        $junitPath = $this->tmpDir . '/coverage.junit.xml';
+
+        $subscriber = new CoverageReportSubscriber(
+            specs: ['petstore-3.0'],
+            outputFile: null,
+            consoleOutput: ConsoleOutput::DEFAULT,
+            githubSummaryPath: null,
+            sidecarDir: $this->tmpDir,
+            junitOutput: $junitPath,
+        );
+
+        ob_start();
+        $subscriber->notify($this->fakeExecutionFinished());
+        ob_get_clean();
+
+        $this->assertFileExists($junitPath, 'sequential mode must write junit_output when configured');
+        $contents = (string) file_get_contents($junitPath);
+        $this->assertStringStartsWith('<?xml version="1.0" encoding="UTF-8"', $contents);
+        $this->assertStringContainsString('<testsuites', $contents);
+        $this->assertStringContainsString('openapi.coverage.petstore-3.0', $contents);
+    }
+
+    #[Test]
+    public function sequential_mode_warns_and_continues_when_junit_write_fails(): void
+    {
+        // Severity asymmetry from PR #206: a subscriber-side write failure
+        // emits a WARN and keeps going (no exit). The merge CLI's contract is
+        // FATAL+exit-1 (pinned by CoverageMergeCommandTest). This test pins
+        // the subscriber half so the asymmetry can't drift unnoticed.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        mkdir($this->tmpDir, 0o755, recursive: true);
+        // Unwritable target — parent dir exists check passes (we are not
+        // exercising the bootstrap-time gate), but the actual write will fail
+        // because the path is a directory rather than a regular file.
+        $junitPath = $this->tmpDir . '/coverage.junit.xml';
+        mkdir($junitPath, 0o755, recursive: true);
+
+        $stderrLog = '';
+        $subscriber = new CoverageReportSubscriber(
+            specs: ['petstore-3.0'],
+            outputFile: null,
+            consoleOutput: ConsoleOutput::DEFAULT,
+            githubSummaryPath: null,
+            stderrWriter: static function (string $msg) use (&$stderrLog): void {
+                $stderrLog .= $msg;
+            },
+            sidecarDir: $this->tmpDir,
+            junitOutput: $junitPath,
+        );
+
+        ob_start();
+        $subscriber->notify($this->fakeExecutionFinished());
+        ob_get_clean();
+
+        @rmdir($junitPath);
+
+        $this->assertStringContainsString('WARNING', $stderrLog);
+        $this->assertStringContainsString('JUnit XML', $stderrLog);
     }
 
     #[Test]

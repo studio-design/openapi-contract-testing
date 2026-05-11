@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="openapi-contract-coverage" time="0" tests="6" failures="2" skipped="1">
+  <testsuite name="petstore" time="0" tests="6" failures="2" skipped="1">
+    <testcase classname="openapi.coverage.petstore" name="GET /v1/pets [200 application/json]" time="0">
+      <system-out>hits=12 operationId=listPets</system-out>
+    </testcase>
+    <testcase classname="openapi.coverage.petstore" name="POST /v1/pets [201 application/json]" time="0">
+      <system-out>hits=3 operationId=createPet</system-out>
+    </testcase>
+    <testcase classname="openapi.coverage.petstore" name="POST /v1/pets [422 application/problem+json]" time="0">
+      <failure type="UncoveredResponse" message="Response 422 application/problem+json on POST /v1/pets not exercised by any test"/>
+      <system-out>hits=0 operationId=createPet</system-out>
+    </testcase>
+    <testcase classname="openapi.coverage.petstore" name="POST /v1/pets [unexpected 418 application/json]" time="0">
+      <failure type="UnexpectedObservation" message="Observed 418 application/json on POST /v1/pets but spec declares no such response"/>
+      <system-out>hits=0 operationId=createPet</system-out>
+    </testcase>
+    <testcase classname="openapi.coverage.petstore" name="DELETE /v1/pets/{petId} [204 *]" time="0">
+      <system-out>hits=1 operationId=deletePet</system-out>
+    </testcase>
+    <testcase classname="openapi.coverage.petstore" name="DELETE /v1/pets/{petId} [503 application/json]" time="0">
+      <skipped message="status 503 matched skip pattern 5\d\d"/>
+      <system-out>hits=1 operationId=deletePet</system-out>
+    </testcase>
+  </testsuite>
+</testsuites>
