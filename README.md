@@ -562,6 +562,8 @@ Notes:
 - **Never overrides user values**: if the test already set an `Authorization` header (in any case), the user's value wins.
 - **Requires `auto_validate_request=true`** — the inject is a sub-feature of request validation. Setting the inject flag alone has no effect.
 
+<a id="pest-plugin-laravel"></a>
+
 ## Pest plugin (Laravel)
 
 Pest tests can use the same validator pipeline as PHPUnit through a custom-expectation plugin that ships in this package. The library runtime stays Pest-free — install Pest as a dev dependency in your project to activate the expectations.
@@ -631,7 +633,7 @@ it('accepts a documented request body shape', function () {
 });
 ```
 
-The same `spec: / method: / path:` keyword arguments are accepted. The request bridge always runs (it bypasses the `auto_validate_request` config gate and `#[SkipOpenApi]`) because the explicit expectation reads as the user's direct intent.
+The same `spec: / method: / path:` keyword arguments are accepted. The request bridge always runs (it bypasses the `auto_validate_request` config gate and `#[SkipOpenApi]`) because the explicit expectation reads as the user's direct intent. The response side warns when `#[SkipOpenApi]` and an explicit `assertResponseMatchesOpenApiSchema()` collide; the request side has no auto-vs-explicit advisory pattern to mirror, so silence on `expect($request)->toMatchOpenApiRequestSchema()` is the deliberate behaviour.
 
 ### Constraints (v1)
 

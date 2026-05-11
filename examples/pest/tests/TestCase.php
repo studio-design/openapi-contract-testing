@@ -19,10 +19,18 @@ use function dirname;
  * installed: extend the framework harness, mix in `ValidatesOpenApiSchema`,
  * and configure the spec loader + default spec in `setUp()`.
  *
- * Real projects will already have most of this — the only library-specific
- * bits are `use ValidatesOpenApiSchema;`, the `OpenApiSpecLoader::configure`
- * call, and the `default_spec` config line. The Pest plugin layers on top
- * of this trait without further setup.
+ * Library-specific lines for a real project to copy:
+ *  - `use ValidatesOpenApiSchema;` on the class.
+ *  - `OpenApiSpecLoader::configure(...)` once at boot (here in setUp; in a
+ *    real project typically driven by the PHPUnit extension's
+ *    `spec_base_path` parameter — see phpunit.xml.dist).
+ *  - `config('openapi-contract-testing.default_spec', '...')`.
+ *  - The static-state resets in `setUp()` / `tearDown()`
+ *    (`OpenApiSpecLoader::reset`, `OpenApiCoverageTracker::reset`,
+ *    `self::resetValidatorCache()`). Orchestra Testbench shares these
+ *    statics across every `it(...)` in the file, so a real project running
+ *    on a fresh per-test process boundary may not need them — but they
+ *    are defensive defaults a copy-paste user is unlikely to regret.
  */
 class TestCase extends TestbenchTestCase
 {
@@ -66,6 +74,14 @@ class TestCase extends TestbenchTestCase
         Route::post('/v1/pets', static fn() => response()->json(
             ['data' => ['id' => 42, 'name' => request()->json('name'), 'tag' => null]],
             201,
+        ));
+
+        // /v1/health is documented in petstore.json with a 200 response only.
+        // The route deliberately returns 503 so the example can demonstrate
+        // the skipResponseCodes named argument on toMatchOpenApiResponseSchema().
+        Route::get('/v1/health', static fn() => response()->json(
+            ['error' => 'service unavailable'],
+            503,
         ));
     }
 }
