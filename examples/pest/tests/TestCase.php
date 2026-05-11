@@ -45,6 +45,11 @@ class TestCase extends TestbenchTestCase
         OpenApiCoverageTracker::reset();
 
         config()->set('openapi-contract-testing.default_spec', 'petstore');
+        // `auto_assert` and `auto_validate_request` are deliberately left at
+        // their package defaults (false) so the example showcases the
+        // explicit `expect(...)->toMatchOpenApi*Schema()` form. Set either to
+        // true in your real project to validate every Laravel HTTP helper
+        // call automatically — the Pest expectations still work alongside.
     }
 
     protected function tearDown(): void
