@@ -14,6 +14,7 @@ use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
 use Studio\OpenApiContractTesting\PHPUnit\CoverageReportSubscriber;
 use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Throwable;
 
 use function array_filter;
 use function array_map;
@@ -30,6 +31,7 @@ use function sprintf;
 use function str_contains;
 use function str_replace;
 use function str_starts_with;
+use function strlen;
 use function substr;
 use function unlink;
 
@@ -344,16 +346,45 @@ final class CoverageMergeCommand
                 continue;
             }
 
-            $rendered = ($entry['renderer'])($results);
+            try {
+                $rendered = ($entry['renderer'])($results);
+            } catch (Throwable $e) {
+                $this->writeStderr(sprintf(
+                    "[OpenAPI Coverage] FATAL: Failed to render %s report: %s\n",
+                    $entry['label'],
+                    $e->getMessage(),
+                ));
+                $writeFailures++;
+
+                continue;
+            }
 
             // Suppress PHP warning on failure — we surface the error
             // ourselves via stderr + exit code so the warning is redundant
             // noise that breaks `beStrictAboutOutputDuringTests` test runs.
-            if (@file_put_contents($entry['outputFile'], $rendered) === false) {
+            $bytes = @file_put_contents($entry['outputFile'], $rendered);
+            if ($bytes === false) {
                 $this->writeStderr(sprintf(
                     "[OpenAPI Coverage] FATAL: Failed to write %s report to %s\n",
                     $entry['label'],
                     $entry['outputFile'],
+                ));
+                $writeFailures++;
+
+                continue;
+            }
+
+            $expected = strlen($rendered);
+            if ($bytes !== $expected) {
+                // Partial write — disk full / quota exceeded mid-write leaves
+                // a truncated file. Surface explicitly so downstream consumers
+                // don't parse half a document several CI steps later.
+                $this->writeStderr(sprintf(
+                    "[OpenAPI Coverage] FATAL: Truncated %s report at %s (%d of %d bytes written)\n",
+                    $entry['label'],
+                    $entry['outputFile'],
+                    $bytes,
+                    $expected,
                 ));
                 $writeFailures++;
             }
@@ -363,12 +394,11 @@ final class CoverageMergeCommand
     }
 
     /**
-     * Renderer dispatch table. Follow-up work tracked in #116 appends JUnit
-     * XML, JSON, and HTML entries here; the loop in {@see self::writeReports()}
-     * does not need to change. The PHPUnit subscriber keeps a parallel table
-     * in {@see CoverageReportSubscriber},
-     * so any new format must be added to both in lockstep — note the severity
-     * asymmetry (subscriber warns; CLI counts failures toward exit code).
+     * Renderer dispatch table. Adding a new format here does not require
+     * changes to the loop in {@see self::writeReports()}. The PHPUnit subscriber
+     * keeps a parallel table in {@see CoverageReportSubscriber}, so any new
+     * format must be added to both in lockstep — note the severity asymmetry
+     * (subscriber warns; CLI counts failures toward exit code).
      *
      * @return list<CoverageReportEntry>
      */

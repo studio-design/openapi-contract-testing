@@ -297,6 +297,48 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
     }
 
     #[Test]
+    public function sequential_mode_warns_and_continues_when_json_write_fails(): void
+    {
+        // Parity with sequential_mode_warns_and_continues_when_junit_write_fails
+        // — the JSON dispatch path must obey the same WARN-and-continue
+        // contract so the asymmetry is consistent across all formats.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        mkdir($this->tmpDir, 0o755, recursive: true);
+        $jsonPath = $this->tmpDir . '/coverage.json';
+        mkdir($jsonPath, 0o755, recursive: true);
+
+        $stderrLog = '';
+        $subscriber = new CoverageReportSubscriber(
+            specs: ['petstore-3.0'],
+            outputFile: null,
+            consoleOutput: ConsoleOutput::DEFAULT,
+            githubSummaryPath: null,
+            stderrWriter: static function (string $msg) use (&$stderrLog): void {
+                $stderrLog .= $msg;
+            },
+            sidecarDir: $this->tmpDir,
+            jsonOutput: $jsonPath,
+        );
+
+        ob_start();
+        $subscriber->notify($this->fakeExecutionFinished());
+        ob_get_clean();
+
+        @rmdir($jsonPath);
+
+        $this->assertStringContainsString('WARNING', $stderrLog);
+        $this->assertStringContainsString('JSON', $stderrLog);
+    }
+
+    #[Test]
     public function worker_mode_keeps_running_when_sidecar_write_fails(): void
     {
         // The contract assertion that triggered notify() must never be

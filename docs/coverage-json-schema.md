@@ -14,7 +14,7 @@ A sample document is committed at [`samples/coverage.json`](samples/coverage.jso
 |-------|------|-------------|
 | `schema_version` | `integer` | Bumped on incompatible structural changes. The current version is `1`. Consumers SHOULD reject unknown values. |
 | `generated_at` | `string` | ISO-8601 timestamp (`DateTimeImmutable::ATOM`) for when the document was rendered. |
-| `tool` | `object` | `{ "name": "studio-design/openapi-contract-testing", "version": "<composer version or 'unknown'>" }`. Useful for downstream consumers diagnosing format drift. |
+| `tool` | `object` | `{ "name": "studio-design/openapi-contract-testing", "version": "<composer version or 'unknown'>" }`. Useful for downstream consumers diagnosing format drift. `"unknown"` is emitted when Composer's `InstalledVersions` metadata is unavailable (e.g. running from a vendored checkout without `composer install`, or `replace`d in a parent project); the field is always a string so downstream JSON schema validators do not need a nullable type. |
 | `aggregate` | `object` | Rollup across every spec in the document. Lets consumers read one "total" without re-summing. See [aggregate fields](#aggregate-fields). |
 | `specs` | `object` | Keyed by spec name. Each value is `{ "aggregates": …, "endpoints": [...] }`. |
 

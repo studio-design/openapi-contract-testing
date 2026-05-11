@@ -12,6 +12,7 @@ use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
 use Studio\OpenApiContractTesting\Coverage\JsonCoverageRenderer;
 use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
 
+use function array_keys;
 use function explode;
 use function is_array;
 use function json_decode;
@@ -243,6 +244,112 @@ class JsonCoverageRendererTest extends TestCase
         // close to current time so we don't depend on clock injection here.
         $parsed = DateTimeImmutable::createFromFormat(DateTimeImmutable::ATOM, $payload['generated_at']);
         $this->assertNotFalse($parsed);
+    }
+
+    #[Test]
+    public function render_serialises_request_only_endpoint_state(): void
+    {
+        // RequestOnly represents endpoints that received traffic but reconciled
+        // only to unexpected observations. Pin the enum value-string so a
+        // regression in the enum value or in $endpoint['state']->value would
+        // surface here rather than as a silent schema drift.
+        $results = [
+            'front' => self::coverage(
+                endpoints: [
+                    self::endpoint(
+                        'POST /v1/pets',
+                        'request-only',
+                        requestReached: true,
+                        responses: [
+                            self::row('201', 'application/json', 'uncovered'),
+                        ],
+                        totalResponseCount: 1,
+                        unexpectedObservations: [
+                            ['statusKey' => '418', 'contentTypeKey' => 'application/json'],
+                        ],
+                    ),
+                ],
+                endpointTotal: 1,
+                endpointRequestOnly: 1,
+                responseTotal: 1,
+                responseUncovered: 1,
+            ),
+        ];
+
+        $payload = $this->decode(JsonCoverageRenderer::render($results, $this->fixedNow()));
+
+        $this->assertSame('request-only', $payload['specs']['front']['endpoints'][0]['endpoint_state']);
+    }
+
+    #[Test]
+    public function render_emits_unescaped_slashes_in_paths(): void
+    {
+        // JSON_UNESCAPED_SLASHES is part of the documented output contract.
+        // The raw string assertion catches a regression that drops the flag
+        // (decoded values look identical, so this is the only sound pin).
+        $output = $this->renderOneValidated();
+
+        $this->assertStringContainsString('"/v1/pets"', $output);
+        $this->assertStringNotContainsString('\/v1\/pets', $output);
+    }
+
+    #[Test]
+    public function render_emits_unescaped_unicode_in_skip_reasons(): void
+    {
+        // JSON_UNESCAPED_UNICODE keeps non-ASCII content readable for human
+        // consumers and downstream tools that don't decode \uXXXX sequences
+        // back to UTF-8.
+        $results = [
+            'front' => self::coverage(
+                endpoints: [
+                    self::endpoint('DELETE /v1/pets/{petId}', 'partial', responses: [
+                        self::row(
+                            '503',
+                            'application/json',
+                            'skipped',
+                            hits: 1,
+                            skipReason: 'ステータス 503 はスキップ対象です',
+                        ),
+                    ], skippedResponseCount: 1, totalResponseCount: 1),
+                ],
+                endpointTotal: 1,
+                endpointPartial: 1,
+                responseTotal: 1,
+                responseSkipped: 1,
+            ),
+        ];
+
+        $output = JsonCoverageRenderer::render($results, $this->fixedNow());
+
+        // Raw UTF-8 must round-trip through the output verbatim. The negative
+        // assertion catches a regression that drops JSON_UNESCAPED_UNICODE
+        // (which would surface \uXXXX escapes instead of the original chars).
+        $this->assertStringContainsString('ステータス 503 はスキップ対象です', $output);
+        $this->assertStringNotContainsString('\\u', $output);
+    }
+
+    #[Test]
+    public function render_aggregate_has_documented_nine_field_shape(): void
+    {
+        // Shape-pin against docs/coverage-json-schema.md. A regression that
+        // adds a field without bumping schema_version, or drops a documented
+        // field, surfaces here.
+        $payload = $this->decode($this->renderOneValidated());
+
+        $expectedKeys = [
+            'endpoint_total',
+            'endpoint_fully_covered',
+            'endpoint_partial',
+            'endpoint_uncovered',
+            'endpoint_request_only',
+            'response_total',
+            'response_covered',
+            'response_skipped',
+            'response_uncovered',
+        ];
+
+        $this->assertSame($expectedKeys, array_keys($payload['aggregate']));
+        $this->assertSame($expectedKeys, array_keys($payload['specs']['front']['aggregates']));
     }
 
     /**

@@ -21,12 +21,14 @@ use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Throwable;
 
 use function fflush;
 use function file_put_contents;
 use function getenv;
 use function is_callable;
 use function sprintf;
+use function strlen;
 use function trim;
 
 /**
@@ -286,9 +288,10 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
     }
 
     /**
-     * Dispatch each configured renderer to its output target. Per-entry write
-     * failures emit a WARNING and continue — one format's broken path must not
-     * suppress the others or block the threshold gate that runs after this.
+     * Dispatch each configured renderer to its output target. Per-entry render
+     * or write failures emit a WARNING and continue — one format's broken path
+     * must not suppress the others or block the threshold gate that runs after
+     * this.
      *
      * GITHUB_STEP_SUMMARY is Markdown-only by design and handled separately.
      *
@@ -301,17 +304,44 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
                 continue;
             }
 
-            $rendered = ($entry['renderer'])($results);
+            try {
+                $rendered = ($entry['renderer'])($results);
+            } catch (Throwable $e) {
+                $this->writeStderr(sprintf(
+                    "[OpenAPI Coverage] WARNING: Failed to render %s report: %s\n",
+                    $entry['label'],
+                    $e->getMessage(),
+                ));
+
+                continue;
+            }
 
             // Suppress PHP warning on failure — we surface the error via the
             // WARNING stderr line below, and the raw PHP warning is redundant
             // noise that breaks `beStrictAboutOutputDuringTests` test runs.
             // Mirrors the CLI dispatch loop's @ suppression.
-            if (@file_put_contents($entry['outputFile'], $rendered) === false) {
+            $bytes = @file_put_contents($entry['outputFile'], $rendered);
+            if ($bytes === false) {
                 $this->writeStderr(sprintf(
                     "[OpenAPI Coverage] WARNING: Failed to write %s report to %s\n",
                     $entry['label'],
                     $entry['outputFile'],
+                ));
+
+                continue;
+            }
+
+            $expected = strlen($rendered);
+            if ($bytes !== $expected) {
+                // Partial write — disk full / quota exceeded mid-write leaves
+                // a truncated file. Surface explicitly so consumers don't
+                // parse half a document several CI steps later.
+                $this->writeStderr(sprintf(
+                    "[OpenAPI Coverage] WARNING: Truncated %s report at %s (%d of %d bytes written)\n",
+                    $entry['label'],
+                    $entry['outputFile'],
+                    $bytes,
+                    $expected,
                 ));
             }
         }
@@ -320,12 +350,11 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
     }
 
     /**
-     * Renderer dispatch table. Follow-up work tracked in #116 appends JUnit
-     * XML, JSON, and HTML entries here; the loop in {@see self::writeReports()}
-     * does not need to change. The merge CLI keeps a parallel table in
-     * {@see CoverageMergeCommand}, so
-     * any new format must be added to both in lockstep — note the severity
-     * asymmetry (subscriber warns; CLI counts failures toward exit code).
+     * Renderer dispatch table. Adding a new format here does not require
+     * changes to the loop in {@see self::writeReports()}. The merge CLI keeps
+     * a parallel table in {@see CoverageMergeCommand}, so any new format must
+     * be added to both in lockstep — note the severity asymmetry (subscriber
+     * warns; CLI counts failures toward exit code).
      *
      * @return list<CoverageReportEntry>
      */

@@ -10,10 +10,12 @@ use const JSON_UNESCAPED_UNICODE;
 
 use Composer\InstalledVersions;
 use DateTimeImmutable;
-use OutOfBoundsException;
 use RuntimeException;
+use Throwable;
 
 use function json_encode;
+use function json_last_error_msg;
+use function sprintf;
 
 /**
  * Render coverage results as a JSON document for downstream consumers
@@ -38,6 +40,46 @@ use function json_encode;
  * @phpstan-import-type CoverageResult from OpenApiCoverageTracker
  * @phpstan-import-type EndpointSummary from OpenApiCoverageTracker
  * @phpstan-import-type ResponseRow from OpenApiCoverageTracker
+ *
+ * @phpstan-type JsonAggregate array{
+ *     endpoint_total: int,
+ *     endpoint_fully_covered: int,
+ *     endpoint_partial: int,
+ *     endpoint_uncovered: int,
+ *     endpoint_request_only: int,
+ *     response_total: int,
+ *     response_covered: int,
+ *     response_skipped: int,
+ *     response_uncovered: int,
+ * }
+ * @phpstan-type JsonResponseRow array{
+ *     status_key: string,
+ *     content_type_key: string,
+ *     response_state: string,
+ *     hits: int,
+ *     skip_reason: ?string,
+ * }
+ * @phpstan-type JsonUnexpected array{
+ *     status_key: string,
+ *     content_type_key: string,
+ * }
+ * @phpstan-type JsonEndpoint array{
+ *     endpoint: string,
+ *     method: string,
+ *     path: string,
+ *     operation_id: ?string,
+ *     endpoint_state: string,
+ *     request_reached: bool,
+ *     responses: list<JsonResponseRow>,
+ *     covered_response_count: int,
+ *     skipped_response_count: int,
+ *     total_response_count: int,
+ *     unexpected_observations: list<JsonUnexpected>,
+ * }
+ * @phpstan-type JsonSpec array{
+ *     aggregates: JsonAggregate,
+ *     endpoints: list<JsonEndpoint>,
+ * }
  */
 final class JsonCoverageRenderer
 {
@@ -46,8 +88,12 @@ final class JsonCoverageRenderer
 
     /**
      * @param array<string, CoverageResult> $results
-     * @param null|DateTimeImmutable $generatedAt Test seam for the timestamp.
-     *                                            Defaults to "now" in production.
+     * @param null|DateTimeImmutable $generatedAt Override the document timestamp.
+     *                                            Defaults to the current time.
+     *
+     * @return string Empty string when `$results` is empty so callers can
+     *                short-circuit a no-coverage run; otherwise a pretty-printed
+     *                JSON document terminated by a single `"\n"`.
      */
     public static function render(array $results, ?DateTimeImmutable $generatedAt = null): string
     {
@@ -71,7 +117,10 @@ final class JsonCoverageRenderer
             // Unreachable for the tracker's output (no resources, no NAN, no
             // unsupported types) but surface a clear error instead of an
             // empty file if the upstream shape changes unexpectedly.
-            throw new RuntimeException('Failed to encode coverage results as JSON');
+            throw new RuntimeException(sprintf(
+                'Failed to encode coverage results as JSON: %s',
+                json_last_error_msg(),
+            ));
         }
 
         return $encoded . "\n";
@@ -80,7 +129,7 @@ final class JsonCoverageRenderer
     /**
      * @param array<string, CoverageResult> $results
      *
-     * @return array<string, int>
+     * @return JsonAggregate
      */
     private static function aggregate(array $results): array
     {
@@ -114,7 +163,7 @@ final class JsonCoverageRenderer
     /**
      * @param array<string, CoverageResult> $results
      *
-     * @return array<string, array{aggregates: array<string, int>, endpoints: list<array<string, mixed>>}>
+     * @return array<string, JsonSpec>
      */
     private static function serialiseSpecs(array $results): array
     {
@@ -132,7 +181,7 @@ final class JsonCoverageRenderer
     /**
      * @param list<EndpointSummary> $endpoints
      *
-     * @return list<array<string, mixed>>
+     * @return list<JsonEndpoint>
      */
     private static function serialiseEndpoints(array $endpoints): array
     {
@@ -195,14 +244,20 @@ final class JsonCoverageRenderer
         return $rows;
     }
 
+    /**
+     * Resolve the running tool version. The field is cosmetic — any failure
+     * here must never abort the report, so the catch is intentionally broad:
+     * `OutOfBoundsException` is the documented Composer 2.x "package not
+     * installed" path, but corrupted `installed.php`, Composer 1.x/2.x metadata
+     * mismatches, or stripped vendor directories can surface as other throwables.
+     * Silent by design — `'unknown'` is the documented sentinel and the schema
+     * forbids null, so emitting a string is enough.
+     */
     private static function resolveToolVersion(): string
     {
         try {
             $version = InstalledVersions::getVersion(self::TOOL_NAME);
-        } catch (OutOfBoundsException) {
-            // Package metadata unavailable — e.g. running from a vendored
-            // checkout without composer install. The schema requires a
-            // string, so surface an explicit sentinel rather than null.
+        } catch (Throwable) {
             return 'unknown';
         }
 
