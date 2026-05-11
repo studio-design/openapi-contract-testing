@@ -6,6 +6,7 @@ namespace Studio\OpenApiContractTesting\Coverage;
 
 use DOMDocument;
 use DOMElement;
+use RuntimeException;
 
 use function implode;
 use function sprintf;
@@ -18,14 +19,19 @@ use function sprintf;
  *  - {@see ResponseCoverageState::Validated}: `<testcase>` with no child element (CI green)
  *  - {@see ResponseCoverageState::Skipped}:   `<testcase>` with `<skipped>` (CI yellow)
  *  - {@see ResponseCoverageState::Uncovered}: `<testcase>` with `<failure type="UncoveredResponse">` (CI red)
- *  - Endpoint with no spec response definitions: one synthetic `<testcase>` with `<skipped>`
  *  - Unexpected observation (status / content-type not in spec): `<testcase>` with `<failure type="UnexpectedObservation">`
+ *  - Endpoint with neither declared responses nor unexpected observations recorded:
+ *    one synthetic `<testcase>` with `<skipped>` so the structural gap stays visible
+ *    in CI dashboards instead of the endpoint disappearing entirely.
  *
  * Structural decisions documented in issue #116 plan:
- *  - Wrap in `<testsuites>` root even for one spec (Jenkins-strict parsers reject bare `<testsuite>`).
+ *  - Wrap in `<testsuites>` root even for one spec (some Jenkins-strict
+ *    parsers and CI integrations reject a bare `<testsuite>` at root).
  *  - `classname="openapi.coverage.{specName}"` for SonarQube tree-view compatibility.
- *  - Emit `time="0"` on every element (some parsers throw without it).
- *  - Build via {@see DOMDocument} so attribute / text escaping is automatic.
+ *  - Emit `time="0"` on every element (some parsers warn or refuse to parse
+ *    a `<testcase>` / `<testsuite>` without a `time` attribute).
+ *  - Build via {@see DOMDocument} so attribute / text escaping is automatic —
+ *    avoids the entire class of hand-rolled-concat XML bugs.
  *
  * @phpstan-import-type CoverageResult from OpenApiCoverageTracker
  * @phpstan-import-type EndpointSummary from OpenApiCoverageTracker
@@ -70,7 +76,17 @@ final class JUnitCoverageRenderer
         $root->setAttribute('failures', (string) $totalFailures);
         $root->setAttribute('skipped', (string) $totalSkipped);
 
-        return (string) $doc->saveXML();
+        $xml = $doc->saveXML();
+        if ($xml === false) {
+            // saveXML() rarely fails for the elements we build (no entities, no
+            // XSLT, no surrogate halves reach createTextNode under normal
+            // tracker output), but the empty-string fallback would be a silent
+            // CI dashboard regression. Surface the failure so the dispatch
+            // loop's existing write-failure handling can report it.
+            throw new RuntimeException('Failed to serialize JUnit XML document');
+        }
+
+        return $xml;
     }
 
     /**
@@ -132,9 +148,9 @@ final class JUnitCoverageRenderer
         }
 
         if ($cases === []) {
-            // No declared responses and no unexpected observations — emit one
-            // synthetic <skipped> so the endpoint still contributes to the
-            // testsuite count and "structural gap" stays visible in CI.
+            // Without this, an endpoint that declares no responses and saw no
+            // unexpected observations would disappear from JUnit entirely —
+            // CI dashboards would silently under-report the spec surface.
             $cases[] = self::renderSyntheticCase($doc, $classname, $endpoint);
         }
 

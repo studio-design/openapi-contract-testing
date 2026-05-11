@@ -8,11 +8,11 @@ use const FILE_APPEND;
 use const PHP_EOL;
 use const STDERR;
 
-use InvalidArgumentException;
 use PHPUnit\Runner\Extension\Extension;
 use PHPUnit\Runner\Extension\Facade;
 use PHPUnit\Runner\Extension\ParameterCollection;
 use PHPUnit\TextUI\Configuration\Configuration;
+use Studio\OpenApiContractTesting\Coverage\InvalidCoverageOutputPathException;
 use Studio\OpenApiContractTesting\Coverage\InvalidThresholdConfigurationException;
 use Studio\OpenApiContractTesting\Exception\EnumBindingException;
 use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
@@ -91,7 +91,7 @@ final class OpenApiCoverageExtension implements Extension
     {
         try {
             $this->setupExtension($facade, $parameters, getenv('GITHUB_STEP_SUMMARY') ?: null);
-        } catch (EnumBindingException|EnumDriftException|InvalidArgumentException|InvalidOpenApiSpecException|InvalidThresholdConfigurationException|SpecFileNotFoundException) {
+        } catch (EnumBindingException|EnumDriftException|InvalidCoverageOutputPathException|InvalidOpenApiSpecException|InvalidThresholdConfigurationException|SpecFileNotFoundException) {
             // setupExtension() has already written a FATAL line to stderr and
             // (if GITHUB_STEP_SUMMARY is set) appended a fatal block to it.
             // PHPUnit's ExtensionBootstrapper::bootstrap() wraps this call in
@@ -285,12 +285,18 @@ final class OpenApiCoverageExtension implements Extension
     }
 
     /**
-     * Read an optional output-file path parameter (used by `junit_output` and
-     * the JSON / HTML formats added in follow-up work tracked in #116). Empty
-     * or whitespace-only values are FATAL — silently dropping the parameter
-     * would defeat the fail-loud-on-misconfiguration policy this extension
-     * enforces. Parent directory writability is checked here so the failure
-     * surfaces at bootstrap rather than as a runtime WARN after tests ran.
+     * Generic helper for output-file-path parameters (currently `junit_output`;
+     * reusable for other formats added under #116). Empty or whitespace-only
+     * values are FATAL — silently dropping the parameter would defeat the
+     * fail-loud-on-misconfiguration policy this extension enforces. Parent
+     * directory writability is checked here so misconfigurations surface at
+     * bootstrap rather than as a runtime WARN after tests ran.
+     *
+     * Note the bootstrap-vs-runtime severity asymmetry: the parent-dir check
+     * here hard-fails the run, but a `dirname()` that disappears mid-run will
+     * trip the dispatch loop's existing `file_put_contents() === false` branch,
+     * which only emits a WARN in subscriber mode (FATAL+exit in the merge CLI).
+     * Don't read "validated at bootstrap" as "guaranteed at write".
      *
      * Returns the absolutised path or `null` when the parameter is absent.
      */
@@ -312,7 +318,7 @@ final class OpenApiCoverageExtension implements Extension
             self::writeStderr("[OpenAPI Coverage] FATAL: {$reason}\n");
             self::appendGithubStepSummaryFatalBlock($githubSummaryPath, $name, $reason);
 
-            throw new InvalidArgumentException($reason);
+            throw new InvalidCoverageOutputPathException($name, $reason);
         }
 
         if (!str_starts_with($raw, '/')) {
@@ -330,7 +336,7 @@ final class OpenApiCoverageExtension implements Extension
             self::writeStderr("[OpenAPI Coverage] FATAL: {$reason}\n");
             self::appendGithubStepSummaryFatalBlock($githubSummaryPath, $name, $reason);
 
-            throw new InvalidArgumentException($reason);
+            throw new InvalidCoverageOutputPathException($name, $reason);
         }
 
         return $raw;

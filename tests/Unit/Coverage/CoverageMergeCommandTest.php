@@ -286,6 +286,43 @@ class CoverageMergeCommandTest extends TestCase
     }
 
     #[Test]
+    public function exits_one_when_junit_output_write_fails(): void
+    {
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        // /proc/0 is unwritable on Linux and nonexistent on macOS — file_put_contents fails closed.
+        $unwritable = '/proc/0/forbidden/coverage.junit.xml';
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'junit_output' => $unwritable,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('JUnit XML', $stderr);
+    }
+
+    #[Test]
     public function writes_junit_xml_to_configured_path(): void
     {
         OpenApiCoverageTracker::recordResponse(

@@ -64,7 +64,7 @@ class JUnitCoverageRendererTest extends TestCase
 
         $sx = $this->parse($xml);
         $failures = $sx->xpath('//testcase/failure');
-        $this->assertNotEmpty($failures);
+        $this->assertCount(1, $failures);
         $this->assertSame('UncoveredResponse', (string) $failures[0]['type']);
         $this->assertStringContainsString('200 application/json', (string) $failures[0]['message']);
         $this->assertStringContainsString('GET /v1/health', (string) $failures[0]['message']);
@@ -92,7 +92,7 @@ class JUnitCoverageRendererTest extends TestCase
 
         $sx = $this->parse($xml);
         $skipped = $sx->xpath('//testcase/skipped');
-        $this->assertNotEmpty($skipped);
+        $this->assertCount(1, $skipped);
         $this->assertStringContainsString('5\d\d', (string) $skipped[0]['message']);
     }
 
@@ -110,7 +110,7 @@ class JUnitCoverageRendererTest extends TestCase
         $testcases = $sx->xpath('//testcase');
         $this->assertCount(1, $testcases);
         $skipped = $testcases[0]->xpath('skipped');
-        $this->assertNotEmpty($skipped);
+        $this->assertCount(1, $skipped);
         $this->assertStringContainsString('no response definitions', (string) $skipped[0]['message']);
     }
 
@@ -132,7 +132,7 @@ class JUnitCoverageRendererTest extends TestCase
 
         $sx = $this->parse($xml);
         $failures = $sx->xpath('//testcase/failure[@type="UnexpectedObservation"]');
-        $this->assertNotEmpty($failures);
+        $this->assertCount(1, $failures);
         $this->assertStringContainsString('418', (string) $failures[0]['message']);
     }
 
@@ -152,7 +152,7 @@ class JUnitCoverageRendererTest extends TestCase
 
         $sx = $this->parse($xml);
         $systemOut = $sx->xpath('//testcase/system-out');
-        $this->assertNotEmpty($systemOut);
+        $this->assertCount(1, $systemOut);
         $text = (string) $systemOut[0];
         $this->assertStringContainsString('hits=7', $text);
         $this->assertStringContainsString('operationId=listPets', $text);
@@ -174,7 +174,7 @@ class JUnitCoverageRendererTest extends TestCase
 
         $sx = $this->parse($xml);
         $systemOut = $sx->xpath('//testcase/system-out');
-        $this->assertNotEmpty($systemOut);
+        $this->assertCount(1, $systemOut);
         $this->assertStringNotContainsString('operationId=', (string) $systemOut[0]);
     }
 
