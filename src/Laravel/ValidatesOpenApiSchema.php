@@ -33,12 +33,10 @@ use Symfony\Component\HttpFoundation\Response;
 use WeakMap;
 
 use function array_key_first;
-use function array_map;
 use function array_merge;
 use function filter_var;
 use function fwrite;
 use function get_debug_type;
-use function implode;
 use function is_array;
 use function is_int;
 use function is_numeric;
@@ -199,7 +197,7 @@ trait ValidatesOpenApiSchema
                 'toMatchOpenApiRequestSchema received a Request with unrecognised HTTP method %s. '
                 . 'Supported methods: %s.',
                 var_export($request->getMethod(), true),
-                implode(', ', array_map(static fn(HttpMethod $m): string => $m->value, HttpMethod::cases())),
+                HttpMethod::listOfValues(),
             ));
         }
 

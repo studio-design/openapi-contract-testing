@@ -13,8 +13,6 @@ use Symfony\Component\HttpFoundation\Request;
 
 use function function_exists;
 use function get_debug_type;
-use function implode;
-use function in_array;
 use function method_exists;
 use function sprintf;
 use function strtoupper;
@@ -178,22 +176,10 @@ final class Expectations
                 '%s() received unsupported method: %s. Allowed: %s.',
                 $expectationName,
                 $method,
-                self::supportedMethodList(),
+                HttpMethod::listOfValues(),
             ));
         }
 
         return $resolved;
-    }
-
-    private static function supportedMethodList(): string
-    {
-        $names = [];
-        foreach (HttpMethod::cases() as $case) {
-            if (!in_array($case->value, $names, true)) {
-                $names[] = $case->value;
-            }
-        }
-
-        return implode(', ', $names);
     }
 }
