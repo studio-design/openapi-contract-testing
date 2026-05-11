@@ -14,6 +14,7 @@ use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
 use Studio\OpenApiContractTesting\PHPUnit\CoverageReportSubscriber;
 use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Throwable;
 
 use function array_filter;
 use function array_map;
@@ -30,6 +31,7 @@ use function sprintf;
 use function str_contains;
 use function str_replace;
 use function str_starts_with;
+use function strlen;
 use function substr;
 use function unlink;
 
@@ -53,6 +55,7 @@ use function unlink;
  *     strip_prefixes?: list<string>,
  *     output_file?: string,
  *     junit_output?: string,
+ *     json_output?: string,
  *     github_step_summary?: string,
  *     console_output?: string,
  *     cleanup?: bool,
@@ -163,6 +166,8 @@ final class CoverageMergeCommand
               --output-file=<path>          Markdown report output path.
               --junit-output=<path>         JUnit XML report output path (for CI dashboards
                                             like GitLab CI test reports, Jenkins, SonarQube).
+              --json-output=<path>          JSON report output path (machine-readable; see
+                                            docs/coverage-json-schema.md for the schema).
               --github-step-summary=<path>  Append Markdown report to this file (also
                                             consults GITHUB_STEP_SUMMARY env var).
               --console-output=<mode>       default | all | uncovered_only.
@@ -208,6 +213,9 @@ final class CoverageMergeCommand
             : null;
         $junitOutput = isset($options['junit_output']) && $options['junit_output'] !== ''
             ? $this->absolutise($options['junit_output'])
+            : null;
+        $jsonOutput = isset($options['json_output']) && $options['json_output'] !== ''
+            ? $this->absolutise($options['json_output'])
             : null;
         $githubSummaryPath = isset($options['github_step_summary']) && $options['github_step_summary'] !== ''
             ? $options['github_step_summary']
@@ -306,7 +314,7 @@ final class CoverageMergeCommand
 
         $this->writeStdout(ConsoleCoverageRenderer::render($results, $consoleOutput));
 
-        $writeFailures = $this->writeReports($results, $outputFile, $junitOutput);
+        $writeFailures = $this->writeReports($results, $outputFile, $junitOutput, $jsonOutput);
         $this->appendGithubStepSummary($results, $githubSummaryPath);
 
         $thresholdFailure = $this->evaluateThresholdGate($results, $minEndpointPct, $minResponsePct, $minStrict);
@@ -329,25 +337,54 @@ final class CoverageMergeCommand
      *
      * @return int Number of format outputs that failed to write
      */
-    private function writeReports(array $results, ?string $outputFile, ?string $junitOutput): int
+    private function writeReports(array $results, ?string $outputFile, ?string $junitOutput, ?string $jsonOutput): int
     {
         $writeFailures = 0;
 
-        foreach ($this->buildReportEntries($outputFile, $junitOutput) as $entry) {
+        foreach ($this->buildReportEntries($outputFile, $junitOutput, $jsonOutput) as $entry) {
             if ($entry['outputFile'] === null) {
                 continue;
             }
 
-            $rendered = ($entry['renderer'])($results);
+            try {
+                $rendered = ($entry['renderer'])($results);
+            } catch (Throwable $e) {
+                $this->writeStderr(sprintf(
+                    "[OpenAPI Coverage] FATAL: Failed to render %s report: %s\n",
+                    $entry['label'],
+                    $e->getMessage(),
+                ));
+                $writeFailures++;
+
+                continue;
+            }
 
             // Suppress PHP warning on failure — we surface the error
             // ourselves via stderr + exit code so the warning is redundant
             // noise that breaks `beStrictAboutOutputDuringTests` test runs.
-            if (@file_put_contents($entry['outputFile'], $rendered) === false) {
+            $bytes = @file_put_contents($entry['outputFile'], $rendered);
+            if ($bytes === false) {
                 $this->writeStderr(sprintf(
                     "[OpenAPI Coverage] FATAL: Failed to write %s report to %s\n",
                     $entry['label'],
                     $entry['outputFile'],
+                ));
+                $writeFailures++;
+
+                continue;
+            }
+
+            $expected = strlen($rendered);
+            if ($bytes !== $expected) {
+                // Partial write — disk full / quota exceeded mid-write leaves
+                // a truncated file. Surface explicitly so downstream consumers
+                // don't parse half a document several CI steps later.
+                $this->writeStderr(sprintf(
+                    "[OpenAPI Coverage] FATAL: Truncated %s report at %s (%d of %d bytes written)\n",
+                    $entry['label'],
+                    $entry['outputFile'],
+                    $bytes,
+                    $expected,
                 ));
                 $writeFailures++;
             }
@@ -357,16 +394,15 @@ final class CoverageMergeCommand
     }
 
     /**
-     * Renderer dispatch table. Follow-up work tracked in #116 appends JUnit
-     * XML, JSON, and HTML entries here; the loop in {@see self::writeReports()}
-     * does not need to change. The PHPUnit subscriber keeps a parallel table
-     * in {@see CoverageReportSubscriber},
-     * so any new format must be added to both in lockstep — note the severity
-     * asymmetry (subscriber warns; CLI counts failures toward exit code).
+     * Renderer dispatch table. Adding a new format here does not require
+     * changes to the loop in {@see self::writeReports()}. The PHPUnit subscriber
+     * keeps a parallel table in {@see CoverageReportSubscriber}, so any new
+     * format must be added to both in lockstep — note the severity asymmetry
+     * (subscriber warns; CLI counts failures toward exit code).
      *
      * @return list<CoverageReportEntry>
      */
-    private function buildReportEntries(?string $outputFile, ?string $junitOutput): array
+    private function buildReportEntries(?string $outputFile, ?string $junitOutput, ?string $jsonOutput): array
     {
         return [
             [
@@ -378,6 +414,11 @@ final class CoverageMergeCommand
                 'label' => 'JUnit XML',
                 'renderer' => static fn(array $r): string => JUnitCoverageRenderer::render($r),
                 'outputFile' => $junitOutput,
+            ],
+            [
+                'label' => 'JSON',
+                'renderer' => static fn(array $r): string => JsonCoverageRenderer::render($r),
+                'outputFile' => $jsonOutput,
             ],
         ];
     }

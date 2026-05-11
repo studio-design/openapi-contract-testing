@@ -1,0 +1,90 @@
+{
+    "schema_version": 1,
+    "generated_at": "2026-05-11T12:34:56+00:00",
+    "tool": {
+        "name": "studio-design/openapi-contract-testing",
+        "version": "dev-main"
+    },
+    "aggregate": {
+        "endpoint_total": 2,
+        "endpoint_fully_covered": 1,
+        "endpoint_partial": 1,
+        "endpoint_uncovered": 0,
+        "endpoint_request_only": 0,
+        "response_total": 3,
+        "response_covered": 2,
+        "response_skipped": 0,
+        "response_uncovered": 1
+    },
+    "specs": {
+        "petstore": {
+            "aggregates": {
+                "endpoint_total": 2,
+                "endpoint_fully_covered": 1,
+                "endpoint_partial": 1,
+                "endpoint_uncovered": 0,
+                "endpoint_request_only": 0,
+                "response_total": 3,
+                "response_covered": 2,
+                "response_skipped": 0,
+                "response_uncovered": 1
+            },
+            "endpoints": [
+                {
+                    "endpoint": "GET /v1/pets",
+                    "method": "GET",
+                    "path": "/v1/pets",
+                    "operation_id": "listPets",
+                    "endpoint_state": "all-covered",
+                    "request_reached": true,
+                    "responses": [
+                        {
+                            "status_key": "200",
+                            "content_type_key": "application/json",
+                            "response_state": "validated",
+                            "hits": 12,
+                            "skip_reason": null
+                        }
+                    ],
+                    "covered_response_count": 1,
+                    "skipped_response_count": 0,
+                    "total_response_count": 1,
+                    "unexpected_observations": []
+                },
+                {
+                    "endpoint": "POST /v1/pets",
+                    "method": "POST",
+                    "path": "/v1/pets",
+                    "operation_id": "createPet",
+                    "endpoint_state": "partial",
+                    "request_reached": true,
+                    "responses": [
+                        {
+                            "status_key": "201",
+                            "content_type_key": "application/json",
+                            "response_state": "validated",
+                            "hits": 3,
+                            "skip_reason": null
+                        },
+                        {
+                            "status_key": "422",
+                            "content_type_key": "application/problem+json",
+                            "response_state": "uncovered",
+                            "hits": 0,
+                            "skip_reason": null
+                        }
+                    ],
+                    "covered_response_count": 1,
+                    "skipped_response_count": 0,
+                    "total_response_count": 2,
+                    "unexpected_observations": [
+                        {
+                            "status_key": "418",
+                            "content_type_key": "application/json"
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}

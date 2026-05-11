@@ -99,6 +99,7 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
             githubSummaryPath: null,
             sidecarDir: $this->tmpDir,
             junitOutput: $this->tmpDir . '/coverage.junit.xml',
+            jsonOutput: $this->tmpDir . '/coverage.json',
         );
 
         ob_start();
@@ -110,6 +111,10 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
         $this->assertFileDoesNotExist(
             $this->tmpDir . '/coverage.junit.xml',
             'worker mode must not write junit_output (merge CLI is the canonical paratest renderer)',
+        );
+        $this->assertFileDoesNotExist(
+            $this->tmpDir . '/coverage.json',
+            'worker mode must not write json_output (merge CLI is the canonical paratest renderer)',
         );
 
         $loaded = CoverageSidecarReader::readDir($this->tmpDir);
@@ -211,6 +216,41 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
     }
 
     #[Test]
+    public function sequential_mode_writes_json_output_when_configured(): void
+    {
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        mkdir($this->tmpDir, 0o755, recursive: true);
+        $jsonPath = $this->tmpDir . '/coverage.json';
+
+        $subscriber = new CoverageReportSubscriber(
+            specs: ['petstore-3.0'],
+            outputFile: null,
+            consoleOutput: ConsoleOutput::DEFAULT,
+            githubSummaryPath: null,
+            sidecarDir: $this->tmpDir,
+            jsonOutput: $jsonPath,
+        );
+
+        ob_start();
+        $subscriber->notify($this->fakeExecutionFinished());
+        ob_get_clean();
+
+        $this->assertFileExists($jsonPath, 'sequential mode must write json_output when configured');
+        $decoded = json_decode((string) file_get_contents($jsonPath), true);
+        $this->assertIsArray($decoded);
+        $this->assertSame(1, $decoded['schema_version']);
+        $this->assertArrayHasKey('petstore-3.0', $decoded['specs']);
+    }
+
+    #[Test]
     public function sequential_mode_warns_and_continues_when_junit_write_fails(): void
     {
         // Severity asymmetry from PR #206: a subscriber-side write failure
@@ -254,6 +294,48 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
 
         $this->assertStringContainsString('WARNING', $stderrLog);
         $this->assertStringContainsString('JUnit XML', $stderrLog);
+    }
+
+    #[Test]
+    public function sequential_mode_warns_and_continues_when_json_write_fails(): void
+    {
+        // Parity with sequential_mode_warns_and_continues_when_junit_write_fails
+        // — the JSON dispatch path must obey the same WARN-and-continue
+        // contract so the asymmetry is consistent across all formats.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        mkdir($this->tmpDir, 0o755, recursive: true);
+        $jsonPath = $this->tmpDir . '/coverage.json';
+        mkdir($jsonPath, 0o755, recursive: true);
+
+        $stderrLog = '';
+        $subscriber = new CoverageReportSubscriber(
+            specs: ['petstore-3.0'],
+            outputFile: null,
+            consoleOutput: ConsoleOutput::DEFAULT,
+            githubSummaryPath: null,
+            stderrWriter: static function (string $msg) use (&$stderrLog): void {
+                $stderrLog .= $msg;
+            },
+            sidecarDir: $this->tmpDir,
+            jsonOutput: $jsonPath,
+        );
+
+        ob_start();
+        $subscriber->notify($this->fakeExecutionFinished());
+        ob_get_clean();
+
+        @rmdir($jsonPath);
+
+        $this->assertStringContainsString('WARNING', $stderrLog);
+        $this->assertStringContainsString('JSON', $stderrLog);
     }
 
     #[Test]

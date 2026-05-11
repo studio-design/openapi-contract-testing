@@ -17,6 +17,7 @@ use function file_get_contents;
 use function file_put_contents;
 use function glob;
 use function is_dir;
+use function json_decode;
 use function mkdir;
 use function rmdir;
 use function substr_count;
@@ -273,6 +274,7 @@ class CoverageMergeCommandTest extends TestCase
             '--sidecar-dir=/tmp/sidecars',
             '--output-file=/tmp/cov.md',
             '--junit-output=/tmp/cov.junit.xml',
+            '--json-output=/tmp/cov.json',
             '--no-cleanup',
         ]);
 
@@ -282,6 +284,7 @@ class CoverageMergeCommandTest extends TestCase
         $this->assertSame('/tmp/sidecars', $opts['sidecar_dir']);
         $this->assertSame('/tmp/cov.md', $opts['output_file']);
         $this->assertSame('/tmp/cov.junit.xml', $opts['junit_output']);
+        $this->assertSame('/tmp/cov.json', $opts['json_output']);
         $this->assertFalse($opts['cleanup']);
     }
 
@@ -320,6 +323,78 @@ class CoverageMergeCommandTest extends TestCase
         $this->assertSame(1, $exit);
         $this->assertStringContainsString('FATAL', $stderr);
         $this->assertStringContainsString('JUnit XML', $stderr);
+    }
+
+    #[Test]
+    public function writes_json_to_configured_path(): void
+    {
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $jsonPath = dirname($this->sidecarDir) . '/coverage.json';
+
+        $command = new CoverageMergeCommand(stdoutWriter: static fn(string $msg): null => null);
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'json_output' => $jsonPath,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertFileExists($jsonPath);
+
+        $decoded = json_decode((string) file_get_contents($jsonPath), true);
+        $this->assertIsArray($decoded);
+        $this->assertSame(1, $decoded['schema_version']);
+        $this->assertSame('studio-design/openapi-contract-testing', $decoded['tool']['name']);
+        $this->assertArrayHasKey('petstore-3.0', $decoded['specs']);
+
+        @unlink($jsonPath);
+    }
+
+    #[Test]
+    public function exits_one_when_json_output_write_fails(): void
+    {
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $unwritable = '/proc/0/forbidden/coverage.json';
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'json_output' => $unwritable,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('JSON', $stderr);
     }
 
     #[Test]

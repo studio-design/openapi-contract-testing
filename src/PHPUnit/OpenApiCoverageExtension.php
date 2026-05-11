@@ -191,6 +191,7 @@ final class OpenApiCoverageExtension implements Extension
         }
 
         $junitOutput = self::resolveOutputPathParameter($parameters, 'junit_output', $githubSummaryPath);
+        $jsonOutput = self::resolveOutputPathParameter($parameters, 'json_output', $githubSummaryPath);
 
         $consoleOutput = ConsoleOutput::resolve(
             $parameters->has('console_output') ? $parameters->get('console_output') : null,
@@ -224,6 +225,7 @@ final class OpenApiCoverageExtension implements Extension
             minResponseCoverage: $minResponseCoverage,
             minCoverageStrict: $minCoverageStrict,
             junitOutput: $junitOutput,
+            jsonOutput: $jsonOutput,
         ));
     }
 
