@@ -25,11 +25,17 @@ use function strtolower;
  *  - `<details>`/`<summary>` for per-spec collapsible detail — works without
  *    JavaScript across every modern browser.
  *  - In-page anchor links navigate from the top-level endpoint list down to
- *    per-endpoint detail sections.
+ *    per-endpoint detail sections. Anchors are deduplicated within a single
+ *    render — see {@see self::renderEndpointList()} / {@see self::makeAnchorAllocator()}.
  *  - All user-controlled strings pass through `htmlspecialchars` with
  *    `ENT_QUOTES | ENT_SUBSTITUTE` and explicit `'UTF-8'` so a hostile spec
  *    (path containing `<script>`, operationId with quotes, skip reason with
- *    ampersands) cannot inject markup or trip mojibake.
+ *    ampersands) cannot inject markup or trip mojibake. `ENT_SUBSTITUTE`
+ *    (not `ENT_HTML5`) is load-bearing: invalid UTF-8 byte sequences are
+ *    replaced with U+FFFD instead of causing `htmlspecialchars` to silently
+ *    return an empty string and dropping spec content from the report.
+ *  - HTML is intentionally excluded from `GITHUB_STEP_SUMMARY` (Markdown-only
+ *    by design); see {@see CoverageReportSubscriber::appendGithubStepSummary()}.
  *
  * @phpstan-import-type CoverageResult from OpenApiCoverageTracker
  * @phpstan-import-type EndpointSummary from OpenApiCoverageTracker
@@ -37,6 +43,12 @@ use function strtolower;
  */
 final class HtmlCoverageRenderer
 {
+    /**
+     * Static-only utility — no instances. Matches the established
+     * {@see OpenApiCoverageTracker} pattern.
+     */
+    private function __construct() {}
+
     /**
      * @param array<string, CoverageResult> $results
      *
@@ -68,8 +80,10 @@ final class HtmlCoverageRenderer
             '</header>',
         ];
 
+        $allocateAnchor = self::makeAnchorAllocator();
+
         foreach ($results as $specName => $result) {
-            $lines[] = self::renderSpec($specName, $result);
+            $lines[] = self::renderSpec($specName, $result, $allocateAnchor);
         }
 
         $lines[] = '</body>';
@@ -152,8 +166,9 @@ final class HtmlCoverageRenderer
 
     /**
      * @param CoverageResult $result
+     * @param callable(string, string): string $allocateAnchor
      */
-    private static function renderSpec(string $specName, array $result): string
+    private static function renderSpec(string $specName, array $result, callable $allocateAnchor): string
     {
         $endpointPct = self::percent($result['endpointFullyCovered'], $result['endpointTotal']);
         $responsePct = self::percent($result['responseCovered'], $result['responseTotal']);
@@ -173,9 +188,17 @@ final class HtmlCoverageRenderer
         ];
 
         if ($result['endpoints'] !== []) {
-            $lines[] = self::renderEndpointList($specName, $result['endpoints']);
+            // Resolve every anchor up front so the list and detail sections
+            // emit byte-for-byte identical IDs without recomputing (which
+            // would risk allocator divergence on collision-suffix runs).
+            $anchors = [];
             foreach ($result['endpoints'] as $endpoint) {
-                $lines[] = self::renderEndpointDetail($specName, $endpoint);
+                $anchors[] = $allocateAnchor($specName, $endpoint['endpoint']);
+            }
+
+            $lines[] = self::renderEndpointList($result['endpoints'], $anchors);
+            foreach ($result['endpoints'] as $i => $endpoint) {
+                $lines[] = self::renderEndpointDetail($endpoint, $anchors[$i]);
             }
         }
 
@@ -186,16 +209,17 @@ final class HtmlCoverageRenderer
 
     /**
      * @param list<EndpointSummary> $endpoints
+     * @param list<string> $anchors Pre-resolved anchor IDs, one per endpoint
+     *                              (parallel to `$endpoints`).
      */
-    private static function renderEndpointList(string $specName, array $endpoints): string
+    private static function renderEndpointList(array $endpoints, array $anchors): string
     {
         $lines = ['<ul class="endpoint-list">'];
-        foreach ($endpoints as $endpoint) {
-            $anchor = self::anchorId($specName, $endpoint['endpoint']);
+        foreach ($endpoints as $i => $endpoint) {
             $lines[] = sprintf(
                 '<li class="state-%s"><a href="#%s">%s</a> <span class="state-label">%s</span></li>',
                 self::escape($endpoint['state']->value),
-                self::escape($anchor),
+                self::escape($anchors[$i]),
                 self::escape($endpoint['endpoint']),
                 self::escape($endpoint['state']->value),
             );
@@ -208,9 +232,8 @@ final class HtmlCoverageRenderer
     /**
      * @param EndpointSummary $endpoint
      */
-    private static function renderEndpointDetail(string $specName, array $endpoint): string
+    private static function renderEndpointDetail(array $endpoint, string $anchor): string
     {
-        $anchor = self::anchorId($specName, $endpoint['endpoint']);
         $stateClass = self::escape($endpoint['state']->value);
 
         $lines = [
@@ -274,15 +297,48 @@ final class HtmlCoverageRenderer
         return htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
-    private static function anchorId(string $specName, string $endpoint): string
+    /**
+     * Build a closure that allocates unique anchor IDs across one render.
+     *
+     * The slug pipeline is `rawurlencode` → `%XX → -` → `strtolower`. The
+     * two-step encode/collapse yields a readable kebab-case fragment instead
+     * of leaving `%XX` sequences in the URL bar; `rawurlencode` is the
+     * cheapest way to enumerate "every character that's not safe in a
+     * fragment". The collapse is lossy by construction, so two distinct
+     * `(specName, endpoint)` inputs can map to the same slug (e.g. a slash
+     * vs. a literal `-`). When that happens, suffix with `-2`, `-3`, … so
+     * each `<details id="…">` stays unique within the document.
+     *
+     * `?? $slug` guards against a future `preg_replace` failure (regex error
+     * or PCRE backtracking limit) silently producing empty anchor IDs.
+     *
+     * The `"endpoint-"` prefix prevents collisions with browser-reserved
+     * anchors (e.g. `top`).
+     *
+     * @return callable(string, string): string Receives `(specName, endpoint)`
+     *                                          and returns a unique anchor ID
+     *                                          for this render.
+     */
+    private static function makeAnchorAllocator(): callable
     {
-        // rawurlencode neutralises slashes / braces / spaces so the resulting
-        // id stays a valid URL fragment. The "endpoint-" prefix prevents
-        // collisions with browser-reserved anchors (e.g. `top`).
-        $slug = rawurlencode($specName . '-' . $endpoint);
-        $slug = (string) preg_replace('/%[0-9A-Fa-f]{2}/', '-', $slug);
+        /** @var array<string, int> $seen */
+        $seen = [];
 
-        return 'endpoint-' . strtolower($slug);
+        return static function (string $specName, string $endpoint) use (&$seen): string {
+            $encoded = rawurlencode($specName . '-' . $endpoint);
+            $slug = preg_replace('/%[0-9A-Fa-f]{2}/', '-', $encoded) ?? $encoded;
+            $base = 'endpoint-' . strtolower($slug);
+
+            if (!isset($seen[$base])) {
+                $seen[$base] = 1;
+
+                return $base;
+            }
+
+            $seen[$base]++;
+
+            return $base . '-' . $seen[$base];
+        };
     }
 
     private static function percent(int $covered, int $total): float
@@ -302,8 +358,11 @@ final class HtmlCoverageRenderer
     private static function stylesheet(): string
     {
         // Kept terse intentionally — the goal is readable CI output, not a
-        // design system. Class names match emitted state values so future
-        // marker tweaks need only touch one place.
+        // design system. The `.state-<value>` selectors below must mirror
+        // the enum case values from {@see EndpointCoverageState} and
+        // {@see ResponseCoverageState}; renaming a case requires updating
+        // the matching selector here. The
+        // `every_enum_case_has_a_matching_state_class` test pins this.
         return implode('', [
             'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#222;margin:0;padding:2rem;max-width:1100px;line-height:1.5;}',
             'h1{margin-top:0;}',

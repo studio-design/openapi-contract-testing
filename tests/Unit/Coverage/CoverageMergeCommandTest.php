@@ -400,6 +400,53 @@ class CoverageMergeCommandTest extends TestCase
     }
 
     #[Test]
+    public function writes_all_four_formats_simultaneously(): void
+    {
+        // The "multiple format outputs are independent" contract is
+        // documented in docs/coverage-json-schema.md and docs/coverage-html-output.md.
+        // Pin that setting every output path writes every file — a regression
+        // where one format's loop entry suppresses another would surface here.
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $base = dirname($this->sidecarDir);
+        $mdPath = $base . '/coverage.md';
+        $junitPath = $base . '/coverage.junit.xml';
+        $jsonPath = $base . '/coverage.json';
+        $htmlPath = $base . '/coverage.html';
+
+        $command = new CoverageMergeCommand(stdoutWriter: static fn(string $msg): null => null);
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'output_file' => $mdPath,
+            'junit_output' => $junitPath,
+            'json_output' => $jsonPath,
+            'html_output' => $htmlPath,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertFileExists($mdPath);
+        $this->assertFileExists($junitPath);
+        $this->assertFileExists($jsonPath);
+        $this->assertFileExists($htmlPath);
+
+        @unlink($mdPath);
+        @unlink($junitPath);
+        @unlink($jsonPath);
+        @unlink($htmlPath);
+    }
+
+    #[Test]
     public function writes_html_to_configured_path(): void
     {
         OpenApiCoverageTracker::recordResponse(

@@ -19,10 +19,12 @@ A sample document is committed at [`samples/coverage.html`](samples/coverage.htm
   reasons, content types) pass through
   `htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')` so hostile
   spec content cannot inject markup.
-- **State markers.** Each endpoint and response row carries a `state-<value>`
-  CSS class (`state-all-covered`, `state-partial`, `state-uncovered`,
-  `state-request-only`, `state-validated`, `state-skipped`) so styling can be
-  customised without changing the renderer.
+- **State markers.** Each endpoint or response row carries a `state-<value>`
+  CSS class so styling can be customised without changing the renderer.
+  Endpoint-level classes mirror `EndpointCoverageState`: `state-all-covered`,
+  `state-partial`, `state-uncovered`, `state-request-only`. Response-row
+  classes mirror `ResponseCoverageState`: `state-validated`, `state-skipped`,
+  `state-uncovered`. Only `state-uncovered` is shared between the two enums.
 
 ## Generating the file
 
@@ -51,6 +53,12 @@ vendor/bin/openapi-coverage-merge \
 setting any combination writes all configured formats. A write failure on one
 format does not block the others. Severity follows the existing convention:
 subscriber WARN-and-continue, CLI FATAL + exit 1.
+
+**Note on `GITHUB_STEP_SUMMARY`.** The HTML output is *not* appended to
+`GITHUB_STEP_SUMMARY` (which is Markdown-only by design; GitHub renders the
+file as Markdown, so an HTML payload would be escaped). Use `html_output` for
+artifact uploads and `output_file` / `github_step_summary` for the Markdown
+summary.
 
 ## Future extensions
 

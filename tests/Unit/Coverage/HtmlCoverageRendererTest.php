@@ -10,7 +10,10 @@ use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
 use Studio\OpenApiContractTesting\Coverage\HtmlCoverageRenderer;
 use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
 
+use function array_unique;
 use function explode;
+use function preg_match_all;
+use function sort;
 use function substr_count;
 
 class HtmlCoverageRendererTest extends TestCase
@@ -88,16 +91,255 @@ class HtmlCoverageRendererTest extends TestCase
     }
 
     #[Test]
+    public function render_escapes_operation_id(): void
+    {
+        // operationId is spec-author-controlled; an OpenAPI document with a
+        // hostile operationId must not inject markup. Pinning the escape on
+        // this path explicitly because the existing escape test for paths
+        // happens to not exercise this branch.
+        $html = $this->renderOne(
+            'front',
+            self::endpoint(
+                'GET /v1/pets',
+                'all-covered',
+                operationId: 'list<script>Pets</script>',
+                responses: [self::row('200', 'application/json', 'validated', hits: 1)],
+                coveredResponseCount: 1,
+                totalResponseCount: 1,
+            ),
+            endpointTotal: 1,
+            endpointFullyCovered: 1,
+            responseTotal: 1,
+            responseCovered: 1,
+        );
+
+        $this->assertStringNotContainsString('<script>Pets</script>', $html);
+        $this->assertStringContainsString('list&lt;script&gt;Pets&lt;/script&gt;', $html);
+    }
+
+    #[Test]
+    public function render_escapes_response_status_and_content_type(): void
+    {
+        // Content types in OpenAPI specs can carry quoted parameters; status
+        // keys can be spec-author-defined ranges. Both must escape.
+        $html = $this->renderOne(
+            'front',
+            self::endpoint('GET /v1/pets', 'all-covered', responses: [
+                self::row('2<x>0', 'application/<bad>+json', 'validated', hits: 1),
+            ], coveredResponseCount: 1, totalResponseCount: 1),
+            endpointTotal: 1,
+            endpointFullyCovered: 1,
+            responseTotal: 1,
+            responseCovered: 1,
+        );
+
+        $this->assertStringNotContainsString('<x>', $html);
+        $this->assertStringNotContainsString('<bad>', $html);
+        $this->assertStringContainsString('2&lt;x&gt;0', $html);
+        $this->assertStringContainsString('application/&lt;bad&gt;+json', $html);
+    }
+
+    #[Test]
+    public function render_escapes_unexpected_observation_fields(): void
+    {
+        // unexpected_observations come from runtime traffic that did not
+        // match any declared response — values are attacker-controllable in
+        // a misbehaving backend, so escape applies here too.
+        $html = $this->renderOne(
+            'front',
+            self::endpoint('POST /v1/pets', 'partial', responses: [
+                self::row('201', 'application/json', 'validated', hits: 1),
+            ], coveredResponseCount: 1, totalResponseCount: 1, unexpectedObservations: [
+                ['statusKey' => '4<x>8', 'contentTypeKey' => 'application/<bad>+json'],
+            ]),
+            endpointTotal: 1,
+            endpointFullyCovered: 1,
+            responseTotal: 1,
+            responseCovered: 1,
+        );
+
+        $this->assertStringNotContainsString('<x>', $html);
+        $this->assertStringNotContainsString('<bad>', $html);
+        $this->assertStringContainsString('4&lt;x&gt;8', $html);
+        $this->assertStringContainsString('application/&lt;bad&gt;+json', $html);
+    }
+
+    #[Test]
+    public function render_escapes_spec_name_in_heading(): void
+    {
+        // Spec keys come from PHPUnit Extension config — typically clean,
+        // but the renderer's threat model covers "all user-controlled
+        // strings", so a hostile spec name must not break the page.
+        $results = [
+            'front<script>' => self::coverage(
+                endpoints: [
+                    self::endpoint('GET /v1/pets', 'all-covered', responses: [
+                        self::row('200', 'application/json', 'validated', hits: 1),
+                    ], coveredResponseCount: 1, totalResponseCount: 1),
+                ],
+                endpointTotal: 1,
+                endpointFullyCovered: 1,
+                responseTotal: 1,
+                responseCovered: 1,
+            ),
+        ];
+
+        $html = HtmlCoverageRenderer::render($results);
+
+        $this->assertStringNotContainsString('<script>', $html);
+        $this->assertStringContainsString('front&lt;script&gt;', $html);
+    }
+
+    #[Test]
     public function render_includes_aggregate_summary_with_counts(): void
     {
-        // The page header must surface aggregate counts so a reviewer can
-        // gauge coverage health at-a-glance without scrolling per-spec
-        // sections.
+        // Tight assertions on the aggregate header so a percent-formula or
+        // argument-order regression in renderAggregateSummary() trips the
+        // test. The renderOneValidated() fixture has 1/1 endpoints fully
+        // covered and 1/1 responses covered.
         $html = $this->renderOneValidated();
 
-        $this->assertStringContainsString('1', $html);
-        $this->assertStringContainsString('endpoints', $html);
-        $this->assertStringContainsString('responses', $html);
+        $this->assertStringContainsString('<strong>1 / 1</strong> endpoints fully covered (100%)', $html);
+        $this->assertStringContainsString('<strong>1 / 1</strong> responses covered (100%)', $html);
+    }
+
+    #[Test]
+    public function render_handles_endpoint_with_no_responses_or_unexpected(): void
+    {
+        // A request-only endpoint with neither declared responses nor
+        // unexpected observations must still close its <details> block
+        // cleanly. Guards the empty-list branches in renderEndpointDetail.
+        $html = $this->renderOne(
+            'front',
+            self::endpoint('GET /v1/health', 'request-only', requestReached: true),
+            endpointTotal: 1,
+            endpointRequestOnly: 1,
+        );
+
+        $this->assertStringContainsString('<details', $html);
+        $this->assertStringContainsString('</details>', $html);
+        $this->assertSame(
+            substr_count($html, '<details'),
+            substr_count($html, '</details>'),
+            'unbalanced <details> tags',
+        );
+    }
+
+    #[Test]
+    public function render_handles_spec_with_zero_endpoints(): void
+    {
+        // A spec loaded but with no declared endpoints (or fully filtered
+        // out) should still render its <h2> + summary, not silently
+        // disappear from the report.
+        $html = HtmlCoverageRenderer::render([
+            'empty-spec' => self::coverage(endpoints: []),
+        ]);
+
+        $this->assertStringContainsString('empty-spec', $html);
+        $this->assertStringContainsString('endpoints: 0 / 0', $html);
+    }
+
+    #[Test]
+    public function render_has_balanced_structural_tags(): void
+    {
+        // Single <head>, single <body>, single <style>, no leftover open
+        // tags — catches a copy/paste accident in the template emit code.
+        $html = $this->renderOneValidated();
+
+        $this->assertSame(1, substr_count($html, '<head>'));
+        $this->assertSame(1, substr_count($html, '</head>'));
+        $this->assertSame(1, substr_count($html, '<body>'));
+        $this->assertSame(1, substr_count($html, '</body>'));
+        $this->assertSame(1, substr_count($html, '<style>'));
+        $this->assertSame(1, substr_count($html, '</style>'));
+    }
+
+    #[Test]
+    public function render_anchors_resolve_to_existing_targets(): void
+    {
+        // Every href="#X" must point at an id="X" that actually exists.
+        // The list section and detail section both call into the same
+        // allocator; this test pins that the two stay in sync.
+        $html = $this->renderOne(
+            'front',
+            self::endpoint('GET /v1/pets', 'all-covered', responses: [
+                self::row('200', 'application/json', 'validated', hits: 1),
+            ], coveredResponseCount: 1, totalResponseCount: 1),
+            endpointTotal: 1,
+            endpointFullyCovered: 1,
+            responseTotal: 1,
+            responseCovered: 1,
+        );
+
+        preg_match_all('/id="(endpoint-[^"]+)"/', $html, $idMatches);
+        preg_match_all('/href="#(endpoint-[^"]+)"/', $html, $hrefMatches);
+
+        sort($idMatches[1]);
+        sort($hrefMatches[1]);
+
+        $this->assertNotEmpty($idMatches[1], 'renderer emitted no anchor IDs');
+        $this->assertSame($idMatches[1], $hrefMatches[1], 'href / id sets diverged');
+    }
+
+    #[Test]
+    public function render_disambiguates_collision_prone_anchor_keys(): void
+    {
+        // Two endpoints whose (specName, endpoint) tuples collapse to the
+        // same kebab slug under rawurlencode + %XX→- must still produce
+        // unique anchor IDs so the in-page navigation works.
+        $results = [
+            'front' => self::coverage(
+                endpoints: [
+                    self::endpoint('GET /a/b', 'all-covered', responses: [
+                        self::row('200', 'application/json', 'validated', hits: 1),
+                    ], coveredResponseCount: 1, totalResponseCount: 1),
+                    self::endpoint('GET /a-b', 'all-covered', responses: [
+                        self::row('200', 'application/json', 'validated', hits: 1),
+                    ], coveredResponseCount: 1, totalResponseCount: 1),
+                ],
+                endpointTotal: 2,
+                endpointFullyCovered: 2,
+                responseTotal: 2,
+                responseCovered: 2,
+            ),
+        ];
+
+        $html = HtmlCoverageRenderer::render($results);
+
+        preg_match_all('/id="(endpoint-[^"]+)"/', $html, $idMatches);
+        $this->assertCount(2, $idMatches[1]);
+        $this->assertCount(2, array_unique($idMatches[1]), 'anchor IDs collided across endpoints');
+    }
+
+    #[Test]
+    public function every_endpoint_enum_case_has_a_matching_state_css_rule(): void
+    {
+        // Renderer derives `state-<value>` classes from enum case values.
+        // If a new enum case is added, the stylesheet must gain a matching
+        // selector — otherwise the new state silently has no styling.
+        $html = $this->renderOneValidated();
+
+        foreach (EndpointCoverageState::cases() as $case) {
+            $this->assertStringContainsString(
+                '.state-' . $case->value,
+                $html,
+                "stylesheet missing rule for endpoint state '{$case->value}'",
+            );
+        }
+    }
+
+    #[Test]
+    public function every_response_enum_case_has_a_matching_state_css_rule(): void
+    {
+        $html = $this->renderOneValidated();
+
+        foreach (ResponseCoverageState::cases() as $case) {
+            $this->assertStringContainsString(
+                '.state-' . $case->value,
+                $html,
+                "stylesheet missing rule for response state '{$case->value}'",
+            );
+        }
     }
 
     #[Test]

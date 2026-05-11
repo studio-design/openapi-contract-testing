@@ -24,7 +24,7 @@ use function sprintf;
  *    one synthetic `<testcase>` with `<skipped>` so the structural gap stays visible
  *    in CI dashboards instead of the endpoint disappearing entirely.
  *
- * Structural decisions documented in issue #116 plan:
+ * Structural decisions:
  *  - Wrap in `<testsuites>` root even for one spec (some Jenkins-strict
  *    parsers and CI integrations reject a bare `<testsuite>` at root).
  *  - `classname="openapi.coverage.{specName}"` for SonarQube tree-view compatibility.
