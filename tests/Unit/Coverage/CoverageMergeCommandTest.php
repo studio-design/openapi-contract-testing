@@ -275,6 +275,7 @@ class CoverageMergeCommandTest extends TestCase
             '--output-file=/tmp/cov.md',
             '--junit-output=/tmp/cov.junit.xml',
             '--json-output=/tmp/cov.json',
+            '--html-output=/tmp/cov.html',
             '--no-cleanup',
         ]);
 
@@ -285,6 +286,7 @@ class CoverageMergeCommandTest extends TestCase
         $this->assertSame('/tmp/cov.md', $opts['output_file']);
         $this->assertSame('/tmp/cov.junit.xml', $opts['junit_output']);
         $this->assertSame('/tmp/cov.json', $opts['json_output']);
+        $this->assertSame('/tmp/cov.html', $opts['html_output']);
         $this->assertFalse($opts['cleanup']);
     }
 
@@ -395,6 +397,77 @@ class CoverageMergeCommandTest extends TestCase
         $this->assertSame(1, $exit);
         $this->assertStringContainsString('FATAL', $stderr);
         $this->assertStringContainsString('JSON', $stderr);
+    }
+
+    #[Test]
+    public function writes_html_to_configured_path(): void
+    {
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $htmlPath = dirname($this->sidecarDir) . '/coverage.html';
+
+        $command = new CoverageMergeCommand(stdoutWriter: static fn(string $msg): null => null);
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'html_output' => $htmlPath,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertFileExists($htmlPath);
+
+        $contents = (string) file_get_contents($htmlPath);
+        $this->assertStringStartsWith('<!DOCTYPE html>', $contents);
+        $this->assertStringContainsString('petstore-3.0', $contents);
+        $this->assertStringContainsString('GET /v1/pets', $contents);
+
+        @unlink($htmlPath);
+    }
+
+    #[Test]
+    public function exits_one_when_html_output_write_fails(): void
+    {
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $unwritable = '/proc/0/forbidden/coverage.html';
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['petstore-3.0'],
+            'html_output' => $unwritable,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('HTML', $stderr);
     }
 
     #[Test]

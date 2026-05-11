@@ -960,6 +960,54 @@ class OpenApiCoverageExtensionTest extends TestCase
     }
 
     #[Test]
+    public function bootstrap_fatal_when_html_output_is_empty(): void
+    {
+        // Reuses resolveOutputPathParameter() helper validated for junit_output;
+        // pin the parameter name so a future helper rewrite that drops
+        // html_output wiring is caught.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => 'refs-valid',
+            'html_output' => '',
+        ]);
+
+        try {
+            $extension->setupExtension(null, $parameters, null);
+            $this->fail('expected InvalidCoverageOutputPathException');
+        } catch (InvalidCoverageOutputPathException $e) {
+            $this->assertSame('html_output', $e->parameterName);
+            $this->assertStringContainsString('empty', $e->getMessage());
+        }
+
+        $this->assertStringContainsString('FATAL', $this->readStderr());
+    }
+
+    #[Test]
+    public function bootstrap_fatal_when_html_output_parent_dir_not_writable(): void
+    {
+        // Parity with the junit_output / json_output checks — the shared
+        // resolveOutputPathParameter() helper should fail closed for
+        // html_output too.
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => 'refs-valid',
+            'html_output' => '/proc/0/nonexistent/coverage.html',
+        ]);
+
+        try {
+            $extension->setupExtension(null, $parameters, null);
+            $this->fail('expected InvalidCoverageOutputPathException');
+        } catch (InvalidCoverageOutputPathException $e) {
+            $this->assertSame('html_output', $e->parameterName);
+            $this->assertStringContainsString('not writable', $e->getMessage());
+        }
+
+        $this->assertStringContainsString('FATAL', $this->readStderr());
+    }
+
+    #[Test]
     public function bootstrap_fatal_when_json_output_parent_dir_not_writable(): void
     {
         // Parity with the junit_output check — the shared

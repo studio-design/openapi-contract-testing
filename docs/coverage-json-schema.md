@@ -97,4 +97,4 @@ vendor/bin/openapi-coverage-merge \
   --json-output=build/coverage.json
 ```
 
-Multiple format outputs are independent: setting `output_file`, `junit_output`, and `json_output` simultaneously writes all three. A write failure on one does not block the others; severity follows the existing convention (subscriber WARN, CLI FATAL+exit 1).
+Multiple format outputs are independent: setting `output_file`, `junit_output`, `json_output`, and `html_output` simultaneously writes all four. A write failure on one does not block the others; severity follows the existing convention (subscriber WARN, CLI FATAL+exit 1).
