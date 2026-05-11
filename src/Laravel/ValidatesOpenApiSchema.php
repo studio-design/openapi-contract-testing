@@ -148,19 +148,36 @@ trait ValidatesOpenApiSchema
         ?string $path = null,
         array $extraSkipResponseCodes = [],
     ): void {
-        if ($spec !== null) {
-            $this->withExplicitOpenApiSpec($spec);
+        if ($spec === null) {
+            $this->assertResponseMatchesOpenApiSchema($response, $method, $path, $extraSkipResponseCodes);
+
+            return;
         }
-        $this->assertResponseMatchesOpenApiSchema($response, $method, $path, $extraSkipResponseCodes);
+
+        // try/finally guards against the override leaking into the next
+        // assertion if assertResponseMatchesOpenApiSchema throws BEFORE
+        // resolveOpenApiSpec consumes the override. The resolver also
+        // self-clears on read, so the finally is a no-op on the success
+        // path — it only matters when an early throw catches the override
+        // mid-flight.
+        $this->withExplicitOpenApiSpec($spec);
+
+        try {
+            $this->assertResponseMatchesOpenApiSchema($response, $method, $path, $extraSkipResponseCodes);
+        } finally {
+            $this->withExplicitOpenApiSpec(null);
+        }
     }
 
     /**
      * Public bridge for the Pest expectation `expect($request)->toMatchOpenApiRequestSchema()`.
      * Always runs (bypasses the `auto_validate_request` config gate) because
-     * the user explicitly opted in by writing the expectation. `#[SkipOpenApi]`
-     * is also bypassed for the same reason — the explicit call wins, mirroring
-     * the response-side {@see self::assertResponseMatchesOpenApiSchema()}
-     * convention.
+     * the user explicitly opted in by writing the expectation. The
+     * `#[SkipOpenApi]` attribute is NOT consulted here — the request side has
+     * no auto-vs-explicit advisory pattern to mirror (unlike the response
+     * side, where `assertResponseMatchesOpenApiSchema()` warns when both
+     * signals are present), so silence on the explicit request bridge is
+     * the deliberate behaviour, not a bug.
      *
      * @internal Pest plugin only — see src/Pest/Expectations.php.
      */
@@ -170,10 +187,12 @@ trait ValidatesOpenApiSchema
         ?HttpMethod $method = null,
         ?string $path = null,
     ): void {
-        if ($spec !== null) {
-            $this->withExplicitOpenApiSpec($spec);
-        }
-
+        // Coerce the HTTP method BEFORE setting the explicit spec override.
+        // failOpenApi() throws AssertionFailedError, which a downstream test
+        // can intentionally catch (`expect(static fn () => ...)->toThrow(...)`).
+        // If the override were already set, the leak would carry into the
+        // next assertion in the same test method — exactly the invariant
+        // the resolver's single-shot consumption is meant to prevent.
         $resolvedMethod = $method ?? HttpMethod::tryFrom(strtoupper($request->getMethod()));
         if ($resolvedMethod === null) {
             $this->failOpenApi(sprintf(
@@ -184,7 +203,23 @@ trait ValidatesOpenApiSchema
             ));
         }
 
-        $this->runRequestAssertion($request, $resolvedMethod, $path, null);
+        if ($spec === null) {
+            $this->runRequestAssertion($request, $resolvedMethod, $path, null);
+
+            return;
+        }
+
+        // Same try/finally rationale as runOpenApiResponseAssertion above —
+        // protects the override against an early throw in runRequestAssertion
+        // (e.g. failOpenApi from an empty spec name) that would otherwise
+        // leak into the next assertion in the same test method.
+        $this->withExplicitOpenApiSpec($spec);
+
+        try {
+            $this->runRequestAssertion($request, $resolvedMethod, $path, null);
+        } finally {
+            $this->withExplicitOpenApiSpec(null);
+        }
     }
 
     /**

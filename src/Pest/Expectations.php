@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Pest;
 
 use Illuminate\Testing\TestResponse;
+use Pest\PendingCalls\TestCall;
 use Pest\Support\HigherOrderTapProxy;
 use RuntimeException;
 use Studio\OpenApiContractTesting\HttpMethod;
@@ -98,11 +99,20 @@ final class Expectations
      * test class is missing the `ValidatesOpenApiSchema` trait — almost
      * always a `tests/Pest.php` `uses(...)` misconfiguration.
      *
-     * Pest can wrap the current TestCase in a `HigherOrderTapProxy` when
-     * `test()` is called from inside an `expect()->extend()` closure (the
-     * proxy lets method chaining feel natural in test bodies). We unwrap
-     * it so `method_exists()` checks land on the real TestCase rather than
-     * the proxy, which intentionally exposes only `__call` / `__get`.
+     * Pest's `test()` returns `HigherOrderTapProxy` whenever called with no
+     * description argument while a TestCase is active — the proxy forwards
+     * to the underlying TestCase via `__call` / `__get` so user code can
+     * write `test()->skip(...)` or `test()->throws(...)`. We unwrap it
+     * here because `method_exists()` against the proxy would resolve the
+     * proxy's `__call` rather than the real bridge method, returning
+     * false unconditionally.
+     *
+     * Pest can also return a `Pest\PendingCalls\TestCall` when `test()` is
+     * resolved before any `it(...)` body has been entered (e.g., from a
+     * dataset closure or `beforeEach` initialiser). The TestCall has its
+     * own method surface and would surface as the misleading "missing
+     * trait" message; we detect it explicitly and report the actual
+     * environmental cause instead.
      */
     private static function resolveTestCase(string $expectationName): object
     {
@@ -119,6 +129,17 @@ final class Expectations
         if ($testCase instanceof HigherOrderTapProxy) {
             /** @var object $testCase */
             $testCase = $testCase->target;
+        }
+
+        if ($testCase instanceof TestCall) {
+            throw new RuntimeException(sprintf(
+                '%s() must be called from inside an it(...) / test(...) body. '
+                . '`test()` returned a pending TestCall, which means no PHPUnit '
+                . 'TestCase is currently executing (most often this happens when '
+                . 'the expectation is invoked from a dataset closure or beforeEach '
+                . 'initialiser before any test body has been entered).',
+                $expectationName,
+            ));
         }
 
         $bridge = $expectationName === 'toMatchOpenApiResponseSchema'

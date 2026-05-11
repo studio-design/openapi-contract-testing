@@ -11,11 +11,14 @@ use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
 /**
  * Resolves which OpenAPI spec name a test case should validate against.
  *
- * The resolver itself evaluates four layers (highest first; first non-null
+ * The resolver evaluates the layers below (highest first; first non-null
  * match wins). When a framework adapter (e.g. the Laravel
  * `ValidatesOpenApiSchema` trait) overrides `openApiSpecFallback()` to
- * delegate to its own user-overridable hook, the last layer splits into two —
- * producing the five-layer priority documented in README:
+ * delegate to its own user-overridable hook, the last layer splits into two,
+ * giving the chain a fifth slot. The README's "Spec resolution" section
+ * documents layers 1–4; layer 0 is the Pest-plugin-only override added in
+ * the same series as this hook (#109's PR2) — README integration lands in
+ * the Pest documentation PR.
  *
  *   0. Per-call explicit override set via {@see self::withExplicitOpenApiSpec()}.
  *      Used by the Pest plugin (`expect(...)->toMatchOpenApiResponseSchema(spec: 'X')`)
@@ -32,7 +35,7 @@ use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
  *      trait's own `openApiSpec()` implementation when not overridden.
  *
  * Adapters that don't override `openApiSpecFallback()` collapse layers 3 and 4
- * into a single fallback.
+ * into a single fallback (so the resolution chain becomes 0, 1, 2, fallback).
  *
  * Attribute layers return the attribute's raw `name` as-is. `#[OpenApiSpec('')]`
  * is still "set" and short-circuits resolution to the empty string — the

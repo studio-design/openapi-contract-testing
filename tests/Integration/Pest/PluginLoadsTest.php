@@ -11,8 +11,9 @@ declare(strict_types=1);
 |
 |  1. composer.json `autoload.files` actually loads `src/Pest/Autoload.php`
 |     when the Pest binary boots.
-|  2. The `function_exists('expect') || class_exists(\Pest\Expectation::class)`
-|     guard does NOT short-circuit when Pest is present.
+|  2. The two-symbol guard in src/Pest/Autoload.php (`function_exists('expect')`
+|     AND `class_exists(\Pest\Expectation::class)`) does NOT short-circuit when
+|     Pest is present.
 |  3. expect()->extend() registered the two expectations under the names
 |     ExpectationsTest.php (and downstream user tests) dispatch on
 |     (toMatchOpenApiResponseSchema / toMatchOpenApiRequestSchema).

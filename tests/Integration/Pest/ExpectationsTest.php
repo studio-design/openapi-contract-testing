@@ -52,6 +52,26 @@ it('honours the spec: argument as a per-call override', function (): void {
         ->and($covered)->not->toHaveKey('petstore-3.0');
 });
 
+it('clears the per-call spec override after a single assertion', function (): void {
+    // Pin the documented "self-clears after the next resolveOpenApiSpec()
+    // call" invariant: one explicit `spec:` followed by an implicit call must
+    // route to the configured default, not the previous override. Removing the
+    // single-shot reset in OpenApiSpecResolver, or losing the try/finally
+    // guard in the trait bridges, would let petstore-3.1 leak into the
+    // second assertion and this test would fail.
+    $first = $this->get('/v1/pets');
+    expect($first)->toMatchOpenApiResponseSchema(spec: 'petstore-3.1');
+
+    $second = $this->get('/v1/pets');
+    expect($second)->toMatchOpenApiResponseSchema();
+
+    $covered = OpenApiCoverageTracker::getCovered();
+    expect($covered)
+        ->toHaveKey('petstore-3.1')
+        ->and($covered)
+        ->toHaveKey('petstore-3.0');
+});
+
 it('honours the skipResponseCodes argument for per-call skip', function (): void {
     // /v1/health returns 503; the spec only documents 200, so a strict
     // assertion would fail with "Status code 503 not defined". Passing
@@ -103,8 +123,10 @@ it('does not double-record coverage when explicit assert follows auto-assert', f
 it('chains expectations after the schema match', function (): void {
     $response = $this->get('/v1/pets');
 
-    // Returning $this from the closure (verified at registration in
-    // PluginLoadsTest) lets the result chain into other expectations.
+    // The `expect()->extend()` closures in src/Pest/Autoload.php return $this,
+    // letting the result chain into other expectations. PluginLoadsTest only
+    // proves the closures are registered; this assertion proves they actually
+    // return the Expectation instance.
     expect($response)
         ->toMatchOpenApiResponseSchema()
         ->toBeInstanceOf(\Illuminate\Testing\TestResponse::class);
