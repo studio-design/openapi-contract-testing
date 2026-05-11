@@ -59,21 +59,31 @@ jobs:
         run: vendor/bin/phpunit
 
   pest:
-    name: Pest plugin smoke
+    name: Pest plugin smoke (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
-    # Pest 3 requires PHPUnit ^11; mainline matrix also runs PHPUnit 12/13
-    # for which Pest has no compatible major yet. Keeping this job on the
-    # PHPUnit 11 floor isolates the Pest plugin without forcing the rest of
-    # the matrix to drop newer PHPUnit versions. Pest is added on demand
-    # rather than to require-dev so the regular composer install used by
-    # the matrix above stays Pest-free.
+    # Pest 3 requires PHPUnit ^11; the mainline matrix also runs PHPUnit
+    # 12/13 for which Pest has no compatible major yet. Keeping this job on
+    # the PHPUnit 11 floor isolates the Pest plugin without forcing the rest
+    # of the matrix to drop newer PHPUnit versions. Pest is added on demand
+    # rather than to require-dev so the regular composer install used by the
+    # matrix above stays Pest-free.
+    #
+    # The 2-cell matrix (PHP 8.3 + 8.4) catches PHP-version regressions on
+    # the Pest internals the dispatcher depends on (HigherOrderTapProxy,
+    # PendingCalls\TestCall, dynamic property access). PHP 8.2 is excluded
+    # because Pest 3 dropped PHP 8.2 support around v3.5; bumping the upper
+    # Pest version (Pest 4 / PHPUnit ^12) is tracked separately.
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
     steps:
       - uses: actions/checkout@v6
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: ${{ matrix.php }}
           coverage: none
 
       - name: Install dependencies (with Pest 3)
