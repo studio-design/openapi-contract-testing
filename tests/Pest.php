@@ -20,4 +20,13 @@ use Studio\OpenApiContractTesting\Tests\Helpers\PestLaravelTestCase;
 | filter directories — the script's path argument already does.
 */
 
-uses(PestLaravelTestCase::class)->in('Integration/Pest');
+// Bind the Orchestra Testbench harness explicitly to the Laravel-flavoured
+// test files. NegativePathsTest covers boundary errors that can be triggered
+// without booting Laravel, and MissingTraitTest deliberately runs against
+// vanilla PHPUnit\Framework\TestCase to exercise the dispatch's "missing
+// trait" guidance message — both are excluded so they don't pick up the
+// trait that would short-circuit those checks.
+uses(PestLaravelTestCase::class)->in(
+    'Integration/Pest/PluginLoadsTest.php',
+    'Integration/Pest/ExpectationsTest.php',
+);

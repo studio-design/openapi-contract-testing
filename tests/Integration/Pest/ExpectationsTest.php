@@ -131,3 +131,44 @@ it('chains expectations after the schema match', function (): void {
         ->toMatchOpenApiResponseSchema()
         ->toBeInstanceOf(\Illuminate\Testing\TestResponse::class);
 });
+
+/*
+|--------------------------------------------------------------------------
+| Negative-path coverage
+|--------------------------------------------------------------------------
+|
+| Pin the dispatch's input-validation error paths so a future rewording or
+| accidental removal of a guard surfaces in CI rather than at downstream
+| user reports. The "missing trait" path lives in MissingTraitTest.php
+| because it requires a test class WITHOUT ValidatesOpenApiSchema and the
+| harness here always provides it.
+*/
+
+it('rejects unsupported HTTP methods on toMatchOpenApiResponseSchema', function (): void {
+    $response = $this->get('/v1/pets');
+
+    expect(static fn () => expect($response)->toMatchOpenApiResponseSchema(method: 'CONNECT'))
+        ->toThrow(\RuntimeException::class, 'received unsupported method: CONNECT');
+});
+
+it('round-trips lowercase HTTP method strings via strtoupper', function (): void {
+    // Removing the strtoupper in resolveHttpMethod would silently break the
+    // (probably common) case where users write `method: 'get'`. Pin it.
+    $response = $this->get('/v1/pets');
+    $response->assertOk();
+
+    expect($response)->toMatchOpenApiResponseSchema(method: 'get');
+});
+
+it('fails loudly when spec: is an empty string', function (): void {
+    // Layer-0 explicit override accepts the empty string as a valid value
+    // (it short-circuits resolution to ''), then assertResponseMatchesOpenApiSchema
+    // surfaces the standard "openApiSpec() must return a non-empty spec name"
+    // error from the trait. Real footgun for users null-coalescing optional
+    // config; pin the current behaviour so a future change doesn't silently
+    // shift the surface.
+    $response = $this->get('/v1/pets');
+
+    expect(static fn () => expect($response)->toMatchOpenApiResponseSchema(spec: ''))
+        ->toThrow(AssertionFailedError::class, 'openApiSpec() must return a non-empty spec name');
+});
