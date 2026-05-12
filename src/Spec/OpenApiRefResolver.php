@@ -36,21 +36,60 @@ final class OpenApiRefResolver
 {
     /**
      * Keys whose value is opaque user data per OpenAPI 3.x and JSON Schema —
-     * a `$ref` literal inside one of these positions is a data field, not a
+     * a `$ref` literal nested under one of these keys is a data field, not a
      * Reference Object. The walker MUST NOT descend into them.
      *
-     * The list is structural (key-name-based) rather than parent-aware
-     * because every position where these keys appear (Schema Object,
-     * Parameter / Header / MediaType / Server Variable Object) treats them
-     * the same way: opaque sample / default data.
+     * The match is by key name only; the surrounding parent object's type is
+     * not consulted. That works because wherever these keys legitimately
+     * appear in a 3.x spec (Schema Object, Parameter Object, Header Object,
+     * MediaType Object, Server Variable Object) their value is opaque sample
+     * or default data. Spec-typed-as-string positions (e.g. Server Variable's
+     * `default`) are unaffected — the carve-out is safe-by-default there
+     * because a scalar value isn't an array and is never walked anyway; the
+     * pinning test (`preserves_ref_key_inside_server_variable_default`)
+     * exercises the malformed-but-array-shaped case to lock the structural
+     * detection in place against future refactors.
      *
      * `examples` is handled separately because it is two-shaped: a list of
-     * opaque values at Schema 3.1, or a map of Example Objects (which MAY
-     * be Reference Objects) at Parameter / Header / MediaType.
+     * opaque values for the Schema Object 3.1 form, or a map of Example
+     * Objects (which MAY themselves be Reference Objects) for the Parameter,
+     * Header, MediaType, RequestBody, and Response forms.
      *
      * @var list<string>
      */
     private const ALWAYS_OPAQUE_KEYS = ['default', 'example', 'enum', 'const'];
+
+    /**
+     * Keys whose value is a map of USER-DEFINED names → entries — i.e. keys
+     * inside this map are arbitrary strings the spec author chose, not OAS
+     * keywords. The walker treats them just like the existing `properties`
+     * carve-out: keys at this level are names, not directives, and the
+     * opaque-key carve-out must NOT fire here (a schema named `default`
+     * inside `components.schemas` is just a schema name, and a property
+     * named `default` inside `properties` is just a property name).
+     *
+     * Includes the historical `properties` / `patternProperties` for which
+     * the carve-out was originally introduced. Expanding the set covers the
+     * other OAS-defined user-named maps so behavior is consistent across
+     * all of them.
+     *
+     * @var list<string>
+     */
+    private const USER_NAMED_MAP_KEYS = [
+        'properties',
+        'patternProperties',
+        'schemas',
+        'responses',
+        'parameters',
+        'requestBodies',
+        'headers',
+        'securitySchemes',
+        'links',
+        'callbacks',
+        'pathItems',
+        'paths',
+        'definitions',
+    ];
 
     /**
      * Resolve every `$ref` entry in the spec in place and return the same
@@ -125,30 +164,28 @@ final class OpenApiRefResolver
      * @param array<int|string, mixed> $node
      * @param array<string, mixed> $root currently-walked document's root
      * @param list<string> $chain canonical pointer-refs already on the resolution stack — used to detect cycles
-     * @param bool $insidePropertiesMap true when `$node` is the direct children dict of
-     *                                  a `properties` / `patternProperties` map, where keys are property names
-     *                                  rather than schema keywords. The flag resets one level deeper, because
-     *                                  each named entry is itself a schema.
+     * @param bool $insideUserNamedMap true when `$node` is the direct children
+     *                                 dict of a user-named map (`properties`,
+     *                                 `components.schemas`, `paths`, etc. —
+     *                                 see {@see self::USER_NAMED_MAP_KEYS}).
+     *                                 At this level the keys are arbitrary
+     *                                 user-chosen names — not OAS keywords —
+     *                                 so neither the `$ref`-at-top guard nor
+     *                                 the opaque-key carve-out fire. The flag
+     *                                 resets one level deeper, where each
+     *                                 named entry is itself an OAS object.
      * @param array<string, array<string, mixed>> $documentCache external document cache for this resolution
      */
     private static function walk(
         array &$node,
         array $root,
         array $chain,
-        bool $insidePropertiesMap,
+        bool $insideUserNamedMap,
         RefResolutionContext $context,
         array &$documentCache,
     ): void {
-        if (!$insidePropertiesMap && array_key_exists('$ref', $node)) {
-            $ref = $node['$ref'];
-
-            if (!is_string($ref)) {
-                throw new InvalidOpenApiSpecException(
-                    InvalidOpenApiSpecReason::NonStringRef,
-                    sprintf('Invalid $ref: expected string, got %s', get_debug_type($ref)),
-                );
-            }
-
+        if (!$insideUserNamedMap && array_key_exists('$ref', $node)) {
+            $ref = self::assertStringRef($node['$ref']);
             self::resolveRef($node, $ref, $root, $chain, $context, $documentCache);
 
             return;
@@ -159,55 +196,86 @@ final class OpenApiRefResolver
                 continue;
             }
 
-            // Opaque user data per OAS 3.x / JSON Schema (`default`, `example`,
-            // `enum` items, `const`): the value is literal sample / default
-            // data and a `$ref` key inside it is a data field, not a
-            // Reference Object. Skipping descent entirely preserves the data
-            // verbatim — the safe direction, since the previous behavior
-            // (silently rewriting these values to whatever the ref pointed at)
-            // is an SSRF risk when allowRemoteRefs:true and is plain data
-            // corruption otherwise.
-            if (in_array($key, self::ALWAYS_OPAQUE_KEYS, true)) {
-                continue;
-            }
-
-            // `examples` is shape-dependent:
-            //  - Schema 3.1 array form: a list of opaque values (all elements
-            //    are sample data, never Reference Objects).
-            //  - Parameter / Header / MediaType / RequestBody / Response form:
-            //    a map keyed by example name, where each entry is an Example
-            //    Object OR a Reference Object pointing at one. Inside an
-            //    Example Object, only the `value` field is opaque; the
-            //    sibling fields (`summary`, `description`, `externalValue`)
-            //    are strings or simple scalars.
-            // Disambiguating by shape rather than by parent context keeps the
-            // walker stateless: Schema 3.1 examples is required to be a list
-            // per OAS 3.1 §4.7.24, and Parameter/Header/MediaType examples is
-            // required to be a map per §4.7.10.
-            if ($key === 'examples') {
-                if (array_is_list($child)) {
+            // Inside a user-named map, keys are arbitrary names chosen by
+            // the spec author — a property literally named `default` is a
+            // property, not a JSON Schema default-value declaration. Skip
+            // both the opaque-key carve-out and the `examples` dispatch
+            // here; both only make sense when the key is being treated as
+            // an OAS keyword.
+            if (!$insideUserNamedMap) {
+                // Opaque user data per OAS 3.x / JSON Schema (`default`,
+                // `example`, `enum` items, `const`): the value is literal
+                // sample data and a `$ref` key nested inside is a data
+                // field, not a Reference Object. Resolving it would corrupt
+                // the data, and — if remote refs are enabled — fetch
+                // attacker-controlled URLs as a side effect. The invariant
+                // is "opaque means opaque": no descent, no ref
+                // interpretation, ever.
+                if (in_array($key, self::ALWAYS_OPAQUE_KEYS, true)) {
                     continue;
                 }
 
-                self::walkExamplesMap($child, $root, $chain, $context, $documentCache);
+                // `examples` is shape-dependent. The two OAS uses disagree:
+                //  - Schema Object 3.1: an array of opaque sample values.
+                //  - Parameter / Header / MediaType / RequestBody / Response:
+                //    a map keyed by example name, where each entry is an
+                //    Example Object (or a Reference Object pointing at one).
+                // Disambiguate by shape — the two valid containers are
+                // required to be a list and a map respectively, so
+                // `array_is_list` is a sufficient discriminator that keeps
+                // the walker stateless.
+                if ($key === 'examples') {
+                    if (array_is_list($child)) {
+                        // List form = Schema 3.1 array of opaque values; skip.
+                        continue;
+                    }
 
-                continue;
+                    // Map form = Example Object entries; dispatch to the
+                    // helper that preserves Reference Object semantics at
+                    // the entry root while treating each entry's `value`
+                    // field as opaque.
+                    self::walkExamplesMap($child, $root, $chain, $context, $documentCache);
+
+                    continue;
+                }
             }
 
             // additionalProperties is intentionally excluded: its value is a single
             // schema (not a dict of schemas), so a direct $ref under it is a
             // legitimate Reference Object that must resolve.
-            $childInsidePropertiesMap = $key === 'properties' || $key === 'patternProperties';
-            self::walk($child, $root, $chain, $childInsidePropertiesMap, $context, $documentCache);
+            $childInsideUserNamedMap = in_array($key, self::USER_NAMED_MAP_KEYS, true);
+            self::walk($child, $root, $chain, $childInsideUserNamedMap, $context, $documentCache);
         }
         unset($child);
     }
 
     /**
+     * Narrow a `$ref` value to a string or throw `NonStringRef`. Centralized
+     * so the main walker and the examples-map helper produce identical
+     * diagnostics — drift between the two sites would let a non-string
+     * `$ref` in a Parameter/Header/MediaType `examples` entry surface a less
+     * informative error than one in any other position.
+     */
+    private static function assertStringRef(mixed $ref): string
+    {
+        if (!is_string($ref)) {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::NonStringRef,
+                sprintf('Invalid $ref: expected string, got %s', get_debug_type($ref)),
+            );
+        }
+
+        return $ref;
+    }
+
+    /**
      * Walk the map form of `examples` (Parameter / Header / MediaType /
      * RequestBody / Response). Each entry is either an Example Object or a
-     * Reference Object. Reference Objects resolve normally; Example Objects'
-     * `value` field is opaque user data and is NOT walked further.
+     * Reference Object pointing at one. Reference Objects resolve normally;
+     * Example Objects' `value` field is opaque user data and is NOT walked.
+     * Non-array entries (a malformed scalar in the map) are passed through
+     * unchanged — consistent with how the main `walk()` treats non-array
+     * children; spec-shape validation is not the resolver's responsibility.
      *
      * Kept as a dedicated helper because the inner shape — "$ref at entry
      * root MAY be a Reference Object, but `value` underneath an entry is
@@ -226,7 +294,7 @@ final class OpenApiRefResolver
         RefResolutionContext $context,
         array &$documentCache,
     ): void {
-        foreach ($map as $name => &$entry) {
+        foreach ($map as &$entry) {
             if (!is_array($entry)) {
                 continue;
             }
@@ -234,29 +302,26 @@ final class OpenApiRefResolver
             // Reference Object case: an examples-map entry MAY be `{$ref: ...}`
             // per OAS 3.x to share a definition from `components.examples`.
             if (array_key_exists('$ref', $entry)) {
-                $ref = $entry['$ref'];
-                if (!is_string($ref)) {
-                    throw new InvalidOpenApiSpecException(
-                        InvalidOpenApiSpecReason::NonStringRef,
-                        sprintf('Invalid $ref: expected string, got %s', get_debug_type($ref)),
-                    );
-                }
-
+                $ref = self::assertStringRef($entry['$ref']);
                 self::resolveRef($entry, $ref, $root, $chain, $context, $documentCache);
 
                 continue;
             }
 
             // Example Object: walk children EXCEPT `value` (opaque). The
-            // sibling fields `summary` / `description` / `externalValue` are
-            // strings and are naturally skipped by the is_array guard.
+            // `$insidePropertiesMap` argument is deliberately false here —
+            // an Example Object's children are not a properties map, so a
+            // child literally named `$ref` (unusual, but legal in a vendor
+            // extension like `x-shared: { $ref: '#/...' }`) is a real
+            // Reference Object that must resolve.
             foreach ($entry as $childKey => &$child) {
+                if (!is_array($child)) {
+                    continue;
+                }
                 if ($childKey === 'value') {
                     continue;
                 }
-                if (is_array($child)) {
-                    self::walk($child, $root, $chain, false, $context, $documentCache);
-                }
+                self::walk($child, $root, $chain, false, $context, $documentCache);
             }
             unset($child);
         }
