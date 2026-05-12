@@ -256,6 +256,33 @@ final class OpenApiSchemaConverter
         if (isset($schema['not']) && is_array($schema['not'])) {
             self::convertInPlace($schema['not'], $version, $context);
         }
+
+        // Single-schema subschema positions opis Draft 07 honours
+        // (`if`/`then`/`else`, `propertyNames`, `contains`) plus
+        // `dependentSchemas` values (2019-09 keyword; opis Draft 07 ignores
+        // the outer keyword but the inner schemas are recursed for hygiene
+        // and to stay symmetric with peer positions). Without this descent
+        // (#214), OAS-only keywords (nullable, readOnly/writeOnly) and
+        // 2020-12-only keywords (prefixItems, const) nested inside these
+        // positions survive untouched into the validator — opis Draft 07
+        // then silently ignores them, the same silent-bypass class fixed
+        // by #213 for `prefixItems` siblings.
+        foreach (['if', 'then', 'else', 'propertyNames', 'contains'] as $key) {
+            if (isset($schema[$key]) && is_array($schema[$key])) {
+                self::convertInPlace($schema[$key], $version, $context);
+            }
+        }
+
+        foreach (['patternProperties', 'dependentSchemas'] as $mapKey) {
+            if (isset($schema[$mapKey]) && is_array($schema[$mapKey])) {
+                foreach ($schema[$mapKey] as &$sub) {
+                    if (is_array($sub)) {
+                        self::convertInPlace($sub, $version, $context);
+                    }
+                }
+                unset($sub);
+            }
+        }
     }
 
     /**

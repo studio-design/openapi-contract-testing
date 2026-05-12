@@ -11,6 +11,8 @@ use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\SchemaContext;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
+use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
+use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 
 use function implode;
 use function restore_error_handler;
@@ -1708,6 +1710,404 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $this->assertArrayNotHasKey('const', $result['items']);
         $this->assertSame(['fixed'], $result['items']['enum']);
+    }
+
+    // ========================================
+    // Recursion: extended subschema positions (#214)
+    // ----------------------------------------
+    // convertInPlace must descend into every JSON-Schema subschema position
+    // opis Draft 07 honours — otherwise OAS-only / 2020-12-only keywords
+    // (nullable, readOnly/writeOnly, prefixItems, const, …) nested inside
+    // them survive untouched and opis silently ignores them. Issue #214
+    // identified five gaps: if/then/else, patternProperties, propertyNames,
+    // contains, and dependentSchemas. The tests below pin each gap closed.
+    // ========================================
+
+    #[Test]
+    public function v30_nullable_inside_pattern_properties_is_lowered(): void
+    {
+        $schema = [
+            'type' => 'object',
+            'patternProperties' => [
+                '^x-' => ['type' => 'string', 'nullable' => true],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
+
+        $this->assertSame(['string', 'null'], $result['patternProperties']['^x-']['type']);
+        $this->assertArrayNotHasKey('nullable', $result['patternProperties']['^x-']);
+    }
+
+    #[Test]
+    public function v30_nullable_inside_property_names_is_lowered(): void
+    {
+        // propertyNames values are always string schemas; the practical use
+        // case here is a `format: emial` typo or `discriminator` slip that
+        // the warning helpers should still detect at depth.
+        $schema = [
+            'type' => 'object',
+            'propertyNames' => ['type' => 'string', 'nullable' => true],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
+
+        $this->assertSame(['string', 'null'], $result['propertyNames']['type']);
+        $this->assertArrayNotHasKey('nullable', $result['propertyNames']);
+    }
+
+    #[Test]
+    public function v30_nullable_inside_if_branch_is_lowered(): void
+    {
+        // The `if` schema drives branch selection; an unconverted nullable
+        // here would fail opis Draft 07 type matching and silently choose
+        // the wrong branch.
+        $schema = [
+            'if' => ['type' => 'string', 'nullable' => true],
+            'then' => ['type' => 'object'],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
+
+        $this->assertSame(['string', 'null'], $result['if']['type']);
+        $this->assertArrayNotHasKey('nullable', $result['if']);
+    }
+
+    #[Test]
+    public function v31_prefix_items_inside_then_is_lowered_to_tuple_items(): void
+    {
+        // Bug 1 from issue #214: prefixItems nested inside `then` was not
+        // recognised by opis Draft 07 (which only registers prefixItems on
+        // Draft 2020-12). The lowering must happen at every depth.
+        $schema = [
+            'if' => ['properties' => ['kind' => ['const' => 'tuple']], 'required' => ['kind']],
+            'then' => [
+                'properties' => [
+                    'data' => [
+                        'type' => 'array',
+                        'prefixItems' => [['type' => 'string'], ['type' => 'integer']],
+                    ],
+                ],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertArrayNotHasKey(
+            'prefixItems',
+            $result['then']['properties']['data'],
+        );
+        $this->assertSame(
+            [['type' => 'string'], ['type' => 'integer']],
+            $result['then']['properties']['data']['items'],
+        );
+    }
+
+    #[Test]
+    public function v31_prefix_items_inside_contains_is_lowered(): void
+    {
+        $schema = [
+            'type' => 'array',
+            'contains' => [
+                'type' => 'array',
+                'prefixItems' => [['type' => 'string']],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertArrayNotHasKey('prefixItems', $result['contains']);
+        $this->assertSame([['type' => 'string']], $result['contains']['items']);
+    }
+
+    #[Test]
+    public function v31_const_inside_else_is_lowered_to_enum(): void
+    {
+        $schema = [
+            'if' => ['properties' => ['kind' => ['const' => 'a']]],
+            'then' => ['type' => 'object'],
+            'else' => [
+                'properties' => [
+                    'fallback' => ['type' => 'string', 'const' => 'use-default'],
+                ],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertArrayNotHasKey('const', $result['else']['properties']['fallback']);
+        $this->assertSame(['use-default'], $result['else']['properties']['fallback']['enum']);
+    }
+
+    #[Test]
+    public function v31_const_lowered_inside_dependent_schemas(): void
+    {
+        // dependentSchemas is a 2019-09 keyword; opis Draft 07 ignores the
+        // outer keyword entirely, but the inner schemas should still be
+        // lowered for hygiene and to stay symmetric with peer positions.
+        $schema = [
+            'type' => 'object',
+            'dependentSchemas' => [
+                'creditCard' => [
+                    'properties' => [
+                        'currency' => ['type' => 'string', 'const' => 'USD'],
+                    ],
+                ],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertArrayNotHasKey(
+            'const',
+            $result['dependentSchemas']['creditCard']['properties']['currency'],
+        );
+        $this->assertSame(
+            ['USD'],
+            $result['dependentSchemas']['creditCard']['properties']['currency']['enum'],
+        );
+    }
+
+    #[Test]
+    public function response_context_write_only_inside_pattern_properties_property_becomes_false(): void
+    {
+        // Bug 2 from issue #214: a writeOnly subproperty nested inside a
+        // patternProperties entry must be replaced with boolean `false`
+        // (forbidden) in Response context, the same way top-level
+        // writeOnly properties are.
+        $schema = [
+            'type' => 'object',
+            'patternProperties' => [
+                '^x-' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'secret' => ['type' => 'string', 'writeOnly' => true],
+                        'public' => ['type' => 'string'],
+                    ],
+                ],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert(
+            $schema,
+            OpenApiVersion::V3_0,
+            SchemaContext::Response,
+        );
+
+        $this->assertFalse($result['patternProperties']['^x-']['properties']['secret']);
+        $this->assertSame(
+            ['type' => 'string'],
+            $result['patternProperties']['^x-']['properties']['public'],
+        );
+    }
+
+    #[Test]
+    public function response_context_write_only_inside_then_property_becomes_false(): void
+    {
+        $schema = [
+            'if' => ['properties' => ['kind' => ['enum' => ['admin']]], 'required' => ['kind']],
+            'then' => [
+                'properties' => [
+                    'admin_secret' => ['type' => 'string', 'writeOnly' => true],
+                ],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert(
+            $schema,
+            OpenApiVersion::V3_0,
+            SchemaContext::Response,
+        );
+
+        $this->assertFalse($result['then']['properties']['admin_secret']);
+    }
+
+    #[Test]
+    public function prefix_items_inside_then_actually_rejects_tuple_violation(): void
+    {
+        // End-to-end regression guard for the silent contract bypass from
+        // issue #214: feed the converted schema through opis via the runner
+        // and confirm a violating payload is actually surfaced as an error.
+        $runner = new SchemaValidatorRunner(20);
+        $schema = OpenApiSchemaConverter::convert(
+            [
+                'type' => 'object',
+                'properties' => [
+                    'kind' => ['type' => 'string'],
+                    'data' => ['type' => 'array'],
+                ],
+                'if' => ['properties' => ['kind' => ['const' => 'tuple']], 'required' => ['kind']],
+                'then' => [
+                    'properties' => [
+                        'data' => [
+                            'type' => 'array',
+                            'prefixItems' => [['type' => 'string'], ['type' => 'integer']],
+                        ],
+                    ],
+                ],
+            ],
+            OpenApiVersion::V3_1,
+        );
+
+        $errors = $runner->validate(
+            ObjectConverter::convert($schema),
+            ObjectConverter::convert((object) ['kind' => 'tuple', 'data' => [123, 'oops']]),
+        );
+
+        $this->assertNotSame([], $errors, 'tuple ordering must be enforced inside `then`');
+    }
+
+    #[Test]
+    public function write_only_inside_pattern_properties_actually_rejects_response_leak(): void
+    {
+        $runner = new SchemaValidatorRunner(20);
+        $schema = OpenApiSchemaConverter::convert(
+            [
+                'type' => 'object',
+                'patternProperties' => [
+                    '^x-' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'secret' => ['type' => 'string', 'writeOnly' => true],
+                            'public' => ['type' => 'string'],
+                        ],
+                    ],
+                ],
+            ],
+            OpenApiVersion::V3_0,
+            SchemaContext::Response,
+        );
+
+        $errors = $runner->validate(
+            ObjectConverter::convert($schema),
+            ObjectConverter::convert((object) [
+                'x-meta' => (object) ['secret' => 'leaked', 'public' => 'ok'],
+            ]),
+        );
+
+        $this->assertNotSame([], $errors, 'writeOnly leak inside patternProperties must surface in Response');
+    }
+
+    #[Test]
+    public function const_inside_pattern_properties_actually_rejects_wrong_value(): void
+    {
+        $runner = new SchemaValidatorRunner(20);
+        $schema = OpenApiSchemaConverter::convert(
+            [
+                'type' => 'object',
+                'patternProperties' => [
+                    '^x-' => ['type' => 'string', 'const' => 'frozen'],
+                ],
+            ],
+            OpenApiVersion::V3_1,
+        );
+
+        $errors = $runner->validate(
+            ObjectConverter::convert($schema),
+            ObjectConverter::convert((object) ['x-locale' => 'not-frozen']),
+        );
+
+        $this->assertNotSame([], $errors, 'const constraint inside patternProperties must be enforced');
+    }
+
+    #[Test]
+    public function convert_does_not_mutate_input_schema_with_recursion_into_pattern_properties(): void
+    {
+        // Mirror the #213 immutability pin (line 845) for the newly added
+        // recursion sites: writing through &$sub references must not leak
+        // back into the caller's input array.
+        $schema = [
+            'type' => 'object',
+            'patternProperties' => [
+                '^x-' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'secret' => ['type' => 'string', 'writeOnly' => true],
+                    ],
+                ],
+            ],
+        ];
+        $original = $schema;
+
+        OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response);
+
+        $this->assertSame($original, $schema);
+    }
+
+    #[Test]
+    public function convert_does_not_mutate_input_schema_with_recursion_into_if_then_else(): void
+    {
+        $schema = [
+            'if' => ['type' => 'string', 'nullable' => true],
+            'then' => [
+                'properties' => [
+                    'data' => [
+                        'type' => 'array',
+                        'prefixItems' => [['type' => 'string']],
+                    ],
+                ],
+            ],
+            'else' => [
+                'properties' => [
+                    'fallback' => ['type' => 'string', 'const' => 'x'],
+                ],
+            ],
+        ];
+        $original = $schema;
+
+        OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertSame($original, $schema);
+    }
+
+    #[Test]
+    public function unknown_format_inside_pattern_properties_warns(): void
+    {
+        // warnIfUnknownFormat already dedups by format value across the
+        // process; confirming it fires at depth is enough.
+        $warnings = $this->captureWarnings(static function (): void {
+            OpenApiSchemaConverter::convert(
+                [
+                    'type' => 'object',
+                    'patternProperties' => [
+                        '^x-' => ['type' => 'string', 'format' => 'emial'],
+                    ],
+                ],
+                OpenApiVersion::V3_0,
+            );
+        });
+
+        $this->assertNotSame([], $warnings, 'unknown format inside patternProperties must warn');
+        $this->assertTrue(
+            str_contains($warnings[0], "format 'emial'"),
+            'warning must name the offending format value',
+        );
+    }
+
+    #[Test]
+    public function discriminator_mapping_inside_then_warns(): void
+    {
+        $warnings = $this->captureWarnings(static function (): void {
+            OpenApiSchemaConverter::convert(
+                [
+                    'if' => ['properties' => ['kind' => ['type' => 'string']]],
+                    'then' => [
+                        'discriminator' => [
+                            'propertyName' => 'kind',
+                            'mapping' => ['a' => '#/components/schemas/A'],
+                        ],
+                        'oneOf' => [['type' => 'object']],
+                    ],
+                ],
+                OpenApiVersion::V3_0,
+            );
+        });
+
+        $this->assertNotSame([], $warnings, 'discriminator.mapping inside `then` must warn');
+        $this->assertTrue(
+            str_contains($warnings[0], 'discriminator.mapping'),
+            'warning must mention discriminator.mapping',
+        );
     }
 
     // ========================================
