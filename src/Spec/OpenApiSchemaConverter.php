@@ -227,6 +227,16 @@ final class OpenApiSchemaConverter
             }
         }
 
+        // `additionalItems` is set by handlePrefixItems when a 3.1 spec
+        // declares `items` alongside `prefixItems`. The captured sibling is
+        // a 2020-12 subschema that may itself need lowering (nested
+        // prefixItems, $dynamicRef, etc.). The other Draft 07 recursion
+        // sites (items / properties / combiners / additionalProperties /
+        // not) don't reach it, so route it through convertInPlace here.
+        if (isset($schema['additionalItems']) && is_array($schema['additionalItems'])) {
+            self::convertInPlace($schema['additionalItems'], $version, $context);
+        }
+
         foreach (['allOf', 'oneOf', 'anyOf'] as $combiner) {
             if (isset($schema[$combiner]) && is_array($schema[$combiner])) {
                 foreach ($schema[$combiner] as &$item) {
@@ -532,14 +542,30 @@ final class OpenApiSchemaConverter
     /**
      * Convert Draft 2020-12 prefixItems to Draft 07 items array (tuple validation).
      *
+     * If `items` appears alongside `prefixItems` (2020-12 semantics:
+     * "schema for every element at index >= count(prefixItems)"), preserve
+     * that constraint as Draft 07 `additionalItems`. Overwriting `items`
+     * without preserving its sibling would silently drop the overflow
+     * constraint — a contract bypass (issue #212). `items: true` is the
+     * implicit Draft 07 default and is omitted instead of emitted.
+     *
      * @param array<string, mixed> $schema
      */
     private static function handlePrefixItems(array &$schema): void
     {
-        if (isset($schema['prefixItems']) && is_array($schema['prefixItems'])) {
-            $schema['items'] = $schema['prefixItems'];
-            unset($schema['prefixItems']);
+        if (!isset($schema['prefixItems']) || !is_array($schema['prefixItems'])) {
+            return;
         }
+
+        if (array_key_exists('items', $schema)) {
+            $overflow = $schema['items'];
+            if ($overflow !== true) {
+                $schema['additionalItems'] = $overflow;
+            }
+        }
+
+        $schema['items'] = $schema['prefixItems'];
+        unset($schema['prefixItems']);
     }
 
     /**
