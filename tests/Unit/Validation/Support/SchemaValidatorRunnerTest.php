@@ -1028,6 +1028,34 @@ class SchemaValidatorRunnerTest extends TestCase
     }
 
     #[Test]
+    public function prefix_items_with_items_true_matches_prefix_items_without_sibling_under_opis_draft07(): void
+    {
+        // handlePrefixItems omits `additionalItems` when the sibling is
+        // `items: true`, relying on opis Draft 07 treating absent and
+        // explicit-true identically. That assumption is opis-runtime-
+        // dependent (parallel to the KNOWN_OPIS_FORMATS pin); this test
+        // anchors it so a future opis upgrade that distinguishes the two
+        // surfaces as a failure here rather than as a silent contract
+        // shift in `handlePrefixItems`.
+        $tuple = [['type' => 'string'], ['type' => 'integer']];
+        $body = ObjectConverter::convert(['hello', 42, 'overflow-1', 'overflow-2']);
+        $runner = new SchemaValidatorRunner(0);
+
+        $absentSchema = ObjectConverter::convert(['type' => 'array', 'items' => $tuple]);
+        $explicitTrueSchema = ObjectConverter::convert([
+            'type' => 'array',
+            'items' => $tuple,
+            'additionalItems' => true,
+        ]);
+
+        $this->assertSame(
+            $runner->validate($absentSchema, $body),
+            $runner->validate($explicitTrueSchema, $body),
+            'absent additionalItems must validate the same as additionalItems: true under opis Draft 07',
+        );
+    }
+
+    #[Test]
     public function prefix_items_with_sibling_items_rejects_violating_overflow_after_converter_lowering(): void
     {
         // Issue #212 end-to-end regression: prior to the fix,
