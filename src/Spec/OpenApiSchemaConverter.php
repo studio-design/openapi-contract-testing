@@ -256,6 +256,44 @@ final class OpenApiSchemaConverter
         if (isset($schema['not']) && is_array($schema['not'])) {
             self::convertInPlace($schema['not'], $version, $context);
         }
+
+        // Descend into the remaining subschema positions opis Draft 07
+        // honours (#214). Without this, OAS-only and 2020-12-only keywords
+        // nested inside them survive untouched into the validator and opis
+        // silently ignores them — the same silent-bypass class fixed by
+        // #213 for `prefixItems` siblings. `dependentSchemas` is a 2019-09
+        // keyword whose outer form opis Draft 07 ignores entirely; we still
+        // recurse into its values for hygiene and to stay symmetric with
+        // the other map-of-schemas positions.
+        foreach (['if', 'then', 'else', 'propertyNames', 'contains'] as $key) {
+            if (isset($schema[$key]) && is_array($schema[$key])) {
+                self::convertInPlace($schema[$key], $version, $context);
+            }
+        }
+
+        if (isset($schema['patternProperties']) && is_array($schema['patternProperties'])) {
+            foreach ($schema['patternProperties'] as &$sub) {
+                if (is_array($sub)) {
+                    self::convertInPlace($sub, $version, $context);
+                }
+            }
+            unset($sub);
+        }
+
+        if (isset($schema['dependentSchemas']) && is_array($schema['dependentSchemas'])) {
+            foreach ($schema['dependentSchemas'] as &$sub) {
+                // A list-shaped value here belongs under `dependentRequired`
+                // (an array of property names), not `dependentSchemas` (a
+                // map of schemas). Skip descent so a sibling-keyword misuse
+                // remains a no-op rather than being silently routed through
+                // schema lowering — the same silent-defect class the rest
+                // of this method exists to surface.
+                if (is_array($sub) && !array_is_list($sub)) {
+                    self::convertInPlace($sub, $version, $context);
+                }
+            }
+            unset($sub);
+        }
     }
 
     /**
