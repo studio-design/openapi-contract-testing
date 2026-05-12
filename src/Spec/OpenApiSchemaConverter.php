@@ -15,6 +15,7 @@ use function get_debug_type;
 use function implode;
 use function in_array;
 use function is_array;
+use function is_bool;
 use function is_string;
 use function sprintf;
 use function trigger_error;
@@ -225,6 +226,16 @@ final class OpenApiSchemaConverter
             } else {
                 self::convertInPlace($schema['items'], $version, $context);
             }
+        }
+
+        // Primary trigger: handlePrefixItems hoists a 3.1 sibling `items`
+        // into `additionalItems` (a 2020-12 subschema that may itself need
+        // lowering — nested prefixItems, $dynamicRef, etc.). Also handles
+        // hand-authored Draft-07-style input that declares `additionalItems`
+        // directly. None of the other recursion sites in convertInPlace
+        // descend into it, so route it through here.
+        if (isset($schema['additionalItems']) && is_array($schema['additionalItems'])) {
+            self::convertInPlace($schema['additionalItems'], $version, $context);
         }
 
         foreach (['allOf', 'oneOf', 'anyOf'] as $combiner) {
@@ -532,14 +543,62 @@ final class OpenApiSchemaConverter
     /**
      * Convert Draft 2020-12 prefixItems to Draft 07 items array (tuple validation).
      *
+     * If `items` appears alongside `prefixItems` (2020-12 semantics:
+     * "schema for every element at index >= count(prefixItems)"), preserve
+     * that constraint as Draft 07 `additionalItems`. Overwriting `items`
+     * without preserving its sibling would silently drop the overflow
+     * constraint — a contract bypass (issue #212). `items: true` is the
+     * implicit Draft 07 default and is omitted instead of emitted; this
+     * relies on the validator running under Draft 07, pinned by
+     * SchemaValidatorRunner's `setDefaultDraftVersion('07')` call. Should
+     * that default change, the
+     * `prefix_items_with_items_true_matches_prefix_items_without_sibling_under_opis_draft07`
+     * regression test will fail.
+     *
+     * A non-bool / non-array `items` sibling is a spec defect (JSON Schema
+     * 2020-12 §10.3 requires `Schema | bool`). Hoisting it into
+     * `additionalItems` would surface much later as an opis parse error
+     * with no clue to the source — emit a one-shot E_USER_WARNING and drop
+     * it, matching the pattern used by {@see warnIfUnknownFormat()}.
+     *
      * @param array<string, mixed> $schema
      */
     private static function handlePrefixItems(array &$schema): void
     {
-        if (isset($schema['prefixItems']) && is_array($schema['prefixItems'])) {
-            $schema['items'] = $schema['prefixItems'];
-            unset($schema['prefixItems']);
+        if (!isset($schema['prefixItems']) || !is_array($schema['prefixItems'])) {
+            return;
         }
+
+        if (array_key_exists('items', $schema)) {
+            $overflow = $schema['items'];
+            if (is_array($overflow) || is_bool($overflow)) {
+                if ($overflow !== true) {
+                    $schema['additionalItems'] = $overflow;
+                }
+            } else {
+                self::warnMalformedPrefixItemsSibling($overflow);
+            }
+        }
+
+        $schema['items'] = $schema['prefixItems'];
+        unset($schema['prefixItems']);
+    }
+
+    private static function warnMalformedPrefixItemsSibling(mixed $overflow): void
+    {
+        $dedupKey = 'prefix-items-sibling-malformed:' . get_debug_type($overflow);
+        if (isset(self::$warnedKeywords[$dedupKey])) {
+            return;
+        }
+
+        self::$warnedKeywords[$dedupKey] = true;
+        trigger_error(
+            sprintf(
+                "[OpenAPI Schema] sibling 'items' of 'prefixItems' must be a schema object or boolean per JSON Schema 2020-12 §10.3, got %s. The overflow constraint is silently dropped — any element past the tuple is NOT enforced. Fix the spec.",
+                get_debug_type($overflow),
+            ),
+            E_USER_WARNING,
+        );
     }
 
     /**

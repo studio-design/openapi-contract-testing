@@ -226,6 +226,199 @@ class OpenApiSchemaConverterTest extends TestCase
         $this->assertCount(2, $result['items']);
         $this->assertSame(['type' => 'string'], $result['items'][0]);
         $this->assertSame(['type' => 'integer'], $result['items'][1]);
+        // No sibling `items` declared on input → no `additionalItems` emitted.
+        // Draft 07 defaults to "anything allowed" past the tuple, matching
+        // 2020-12 semantics when `items` is absent alongside `prefixItems`.
+        $this->assertArrayNotHasKey('additionalItems', $result);
+    }
+
+    #[Test]
+    public function v31_prefix_items_with_sibling_items_schema_is_lowered_to_additional_items(): void
+    {
+        // Anchor case for the issue #212 fix: sibling `items` must survive
+        // as `additionalItems`. The handlePrefixItems docblock carries the
+        // full 2020-12 § 10.3 rationale; this test pins the canonical mapping.
+        $schema = [
+            'type' => 'array',
+            'prefixItems' => [
+                ['type' => 'string'],
+                ['type' => 'integer'],
+            ],
+            'items' => ['type' => 'boolean'],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertArrayNotHasKey('prefixItems', $result);
+        $this->assertCount(2, $result['items']);
+        $this->assertSame(['type' => 'string'], $result['items'][0]);
+        $this->assertSame(['type' => 'integer'], $result['items'][1]);
+        $this->assertArrayHasKey('additionalItems', $result);
+        $this->assertSame(['type' => 'boolean'], $result['additionalItems']);
+    }
+
+    #[Test]
+    public function v31_prefix_items_with_items_false_lowers_to_additional_items_false(): void
+    {
+        // Closed-tuple idiom: `prefixItems + items: false` means "exactly N
+        // elements, in this order, nothing more". Draft 07 encodes the same
+        // closure as `additionalItems: false`.
+        $schema = [
+            'type' => 'array',
+            'prefixItems' => [['type' => 'string']],
+            'items' => false,
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertArrayNotHasKey('prefixItems', $result);
+        $this->assertCount(1, $result['items']);
+        $this->assertArrayHasKey('additionalItems', $result);
+        $this->assertFalse($result['additionalItems']);
+    }
+
+    #[Test]
+    public function v31_prefix_items_with_items_true_omits_additional_items(): void
+    {
+        // `items: true` is the 2020-12 explicit form of the implicit default
+        // ("any overflow allowed"). Draft 07's implicit default is the same
+        // under opis's pinned Draft 07 runtime, so the key is omitted rather
+        // than emitted. The opis-equivalence regression test in
+        // SchemaValidatorRunnerTest pins the "absent === true" assumption.
+        $schema = [
+            'type' => 'array',
+            'prefixItems' => [['type' => 'string']],
+            'items' => true,
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertArrayNotHasKey('prefixItems', $result);
+        $this->assertCount(1, $result['items']);
+        $this->assertArrayNotHasKey('additionalItems', $result);
+    }
+
+    #[Test]
+    public function v31_nested_prefix_items_inside_additional_items_converted_recursively(): void
+    {
+        // The schema routed to `additionalItems` may itself be a 2020-12
+        // subschema (here: a nested array with its own `prefixItems`).
+        // Without recursion into `additionalItems`, the inner `prefixItems`
+        // would survive into the lowered output.
+        $schema = [
+            'type' => 'array',
+            'prefixItems' => [['type' => 'string']],
+            'items' => [
+                'type' => 'array',
+                'prefixItems' => [['type' => 'integer']],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertArrayHasKey('additionalItems', $result);
+        $this->assertArrayNotHasKey('prefixItems', $result['additionalItems']);
+        $this->assertArrayHasKey('items', $result['additionalItems']);
+        $this->assertSame([['type' => 'integer']], $result['additionalItems']['items']);
+    }
+
+    #[Test]
+    public function v31_prefix_items_with_sibling_items_inside_one_of_lowers_recursively(): void
+    {
+        // Pins the recursion order: handlePrefixItems must run at the top of
+        // convertInPlace for each frame, so a `prefixItems + items` carried
+        // inside a combiner is lowered on the combiner's own pass. A future
+        // refactor that moved handlePrefixItems below the combiner loop would
+        // silently regress this — the test fails for the right reason.
+        $schema = [
+            'oneOf' => [
+                [
+                    'type' => 'array',
+                    'prefixItems' => [['type' => 'string']],
+                    'items' => ['type' => 'boolean'],
+                ],
+                ['type' => 'string'],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $tupleBranch = $result['oneOf'][0];
+        $this->assertArrayNotHasKey('prefixItems', $tupleBranch);
+        $this->assertSame([['type' => 'string']], $tupleBranch['items']);
+        $this->assertSame(['type' => 'boolean'], $tupleBranch['additionalItems']);
+    }
+
+    #[Test]
+    public function v31_prefix_items_with_sibling_items_inside_additional_properties_lowers_recursively(): void
+    {
+        // additionalProperties is one of the other recursion sites; a
+        // `prefixItems + items` value placed there must lower the same way.
+        $schema = [
+            'type' => 'object',
+            'additionalProperties' => [
+                'type' => 'array',
+                'prefixItems' => [['type' => 'string']],
+                'items' => ['type' => 'boolean'],
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $value = $result['additionalProperties'];
+        $this->assertArrayNotHasKey('prefixItems', $value);
+        $this->assertSame([['type' => 'string']], $value['items']);
+        $this->assertSame(['type' => 'boolean'], $value['additionalItems']);
+    }
+
+    #[Test]
+    public function v31_prefix_items_with_malformed_items_sibling_warns_and_drops(): void
+    {
+        // JSON Schema 2020-12 §10.3 requires `items` to be `Schema | bool`.
+        // A scalar like `items: "string"` is a spec defect; hoisting it
+        // into `additionalItems` would surface as an opis parse error far
+        // from the source. handlePrefixItems must warn and drop it.
+        $schema = [
+            'type' => 'array',
+            'prefixItems' => [['type' => 'string']],
+            'items' => 'boolean',
+        ];
+
+        $captured = $this->captureWarnings(
+            static fn() => OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1),
+        );
+
+        $this->assertCount(1, $captured);
+        $this->assertStringContainsString("sibling 'items' of 'prefixItems'", $captured[0]);
+        $this->assertStringContainsString('string', $captured[0]);
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        $this->assertArrayNotHasKey('additionalItems', $result);
+        $this->assertSame([['type' => 'string']], $result['items']);
+    }
+
+    #[Test]
+    public function v30_literal_additional_items_recursively_lowered_for_nullable(): void
+    {
+        // Draft 04 (which OAS 3.0 inherits) defines `additionalItems` as a
+        // real keyword. A hand-authored 3.0 spec that uses it must still
+        // see its nested 3.0-only keys (nullable, etc.) lowered — the
+        // converter must recurse into additionalItems regardless of
+        // whether handlePrefixItems put it there.
+        $schema = [
+            'type' => 'array',
+            'items' => [['type' => 'string']],
+            'additionalItems' => [
+                'type' => 'string',
+                'nullable' => true,
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
+
+        $this->assertArrayHasKey('additionalItems', $result);
+        $this->assertArrayNotHasKey('nullable', $result['additionalItems']);
+        $this->assertSame(['string', 'null'], $result['additionalItems']['type']);
     }
 
     #[Test]
@@ -640,6 +833,24 @@ class OpenApiSchemaConverterTest extends TestCase
                     '$dynamicRef' => '#meta',
                 ],
             ],
+        ];
+        $original = $schema;
+
+        OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+
+        $this->assertSame($original, $schema);
+    }
+
+    #[Test]
+    public function convert_does_not_mutate_input_schema_v31_with_sibling_items(): void
+    {
+        // handlePrefixItems writes `additionalItems` on the working copy
+        // when `prefixItems + items` is present. Pin that the new write
+        // path doesn't leak back to the caller's input array.
+        $schema = [
+            'type' => 'array',
+            'prefixItems' => [['type' => 'string']],
+            'items' => ['type' => 'boolean'],
         ];
         $original = $schema;
 

@@ -7,6 +7,8 @@ namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Support;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\OpenApiVersion;
+use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 
@@ -1022,6 +1024,67 @@ class SchemaValidatorRunnerTest extends TestCase
             '/',
             $errors,
             'cascade for the slash-bearing declared name must be dropped',
+        );
+    }
+
+    #[Test]
+    public function prefix_items_with_items_true_matches_prefix_items_without_sibling_under_opis_draft07(): void
+    {
+        // handlePrefixItems omits `additionalItems` when the sibling is
+        // `items: true`, relying on opis Draft 07 treating absent and
+        // explicit-true identically. That assumption is opis-runtime-
+        // dependent (parallel to the KNOWN_OPIS_FORMATS pin); this test
+        // anchors it so a future opis upgrade that distinguishes the two
+        // surfaces as a failure here rather than as a silent contract
+        // shift in `handlePrefixItems`.
+        $tuple = [['type' => 'string'], ['type' => 'integer']];
+        $body = ObjectConverter::convert(['hello', 42, 'overflow-1', 'overflow-2']);
+        $runner = new SchemaValidatorRunner(0);
+
+        $absentSchema = ObjectConverter::convert(['type' => 'array', 'items' => $tuple]);
+        $explicitTrueSchema = ObjectConverter::convert([
+            'type' => 'array',
+            'items' => $tuple,
+            'additionalItems' => true,
+        ]);
+
+        $this->assertSame(
+            $runner->validate($absentSchema, $body),
+            $runner->validate($explicitTrueSchema, $body),
+            'absent additionalItems must validate the same as additionalItems: true under opis Draft 07',
+        );
+    }
+
+    #[Test]
+    public function prefix_items_with_sibling_items_rejects_violating_overflow_after_converter_lowering(): void
+    {
+        // Issue #212 end-to-end regression: prior to the fix,
+        // `handlePrefixItems` clobbered the sibling `items` constraint, so a
+        // body whose overflow element violated `items: {type: boolean}`
+        // would validate green — a silent contract bypass. Run the full
+        // converter → validator path and assert the overflow violation
+        // surfaces. Without the fix this assertion fails (errors === []).
+        $converted = OpenApiSchemaConverter::convert(
+            [
+                'type' => 'array',
+                'prefixItems' => [
+                    ['type' => 'string'],
+                    ['type' => 'integer'],
+                ],
+                'items' => ['type' => 'boolean'],
+            ],
+            OpenApiVersion::V3_1,
+        );
+
+        $errors = (new SchemaValidatorRunner(0))->validate(
+            ObjectConverter::convert($converted),
+            ObjectConverter::convert(['hello', 42, 'oops']),
+        );
+
+        $this->assertNotSame(
+            [],
+            $errors,
+            'prefixItems + items: {type: boolean} must reject a string at the overflow index',
         );
     }
 
