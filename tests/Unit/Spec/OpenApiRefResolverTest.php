@@ -984,4 +984,242 @@ class OpenApiRefResolverTest extends TestCase
 
         OpenApiRefResolver::resolve($spec);
     }
+
+    #[Test]
+    public function preserves_ref_key_inside_schema_default_value(): void
+    {
+        // Schema Object's `default` is opaque user data per JSON Schema —
+        // a `$ref` key inside it is a literal data field, not a Reference Object.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Config' => [
+                        'type' => 'object',
+                        'default' => ['$ref' => '#/components/schemas/Other'],
+                    ],
+                    'Other' => ['type' => 'string'],
+                ],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame(
+            ['$ref' => '#/components/schemas/Other'],
+            $resolved['components']['schemas']['Config']['default'],
+        );
+    }
+
+    #[Test]
+    public function preserves_ref_key_inside_schema_example_value(): void
+    {
+        // Schema Object's singular `example` is opaque user data per OAS 3.0.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Doc' => [
+                        'type' => 'object',
+                        'example' => ['$ref' => '#/components/schemas/Other'],
+                    ],
+                    'Other' => ['type' => 'string'],
+                ],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame(
+            ['$ref' => '#/components/schemas/Other'],
+            $resolved['components']['schemas']['Doc']['example'],
+        );
+    }
+
+    #[Test]
+    public function preserves_ref_key_inside_enum_member_object(): void
+    {
+        // JSON Schema permits object-shaped enum members; each is opaque.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Choices' => [
+                        'enum' => [
+                            ['$ref' => '#/components/schemas/Other'],
+                            ['kind' => 'b'],
+                        ],
+                    ],
+                    'Other' => ['type' => 'string'],
+                ],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame(
+            [
+                ['$ref' => '#/components/schemas/Other'],
+                ['kind' => 'b'],
+            ],
+            $resolved['components']['schemas']['Choices']['enum'],
+        );
+    }
+
+    #[Test]
+    public function preserves_ref_key_inside_const_value(): void
+    {
+        // OAS 3.1 `const` is opaque. Object-shaped const is rare but valid.
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Fixed' => [
+                        'const' => ['$ref' => '#/components/schemas/Other'],
+                    ],
+                    'Other' => ['type' => 'string'],
+                ],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame(
+            ['$ref' => '#/components/schemas/Other'],
+            $resolved['components']['schemas']['Fixed']['const'],
+        );
+    }
+
+    #[Test]
+    public function preserves_ref_keys_inside_schema_3_1_examples_list(): void
+    {
+        // OAS 3.1 Schema Object `examples` is a list of opaque values
+        // (distinct from the Parameter/MediaType `examples` MAP).
+        $spec = [
+            'components' => [
+                'schemas' => [
+                    'Doc' => [
+                        'type' => 'object',
+                        'examples' => [
+                            ['$ref' => '#/components/schemas/Other'],
+                            ['plain' => 'data'],
+                        ],
+                    ],
+                    'Other' => ['type' => 'string'],
+                ],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame(
+            [
+                ['$ref' => '#/components/schemas/Other'],
+                ['plain' => 'data'],
+            ],
+            $resolved['components']['schemas']['Doc']['examples'],
+        );
+    }
+
+    #[Test]
+    public function resolves_examples_map_entry_that_is_a_reference_object(): void
+    {
+        // REGRESSION GUARD: when `examples` is a MAP (Parameter / MediaType /
+        // RequestBody shape), each entry MAY itself be a Reference Object —
+        // those must still resolve. This is what distinguishes the map form
+        // from the Schema 3.1 list form (all-opaque).
+        $spec = [
+            'components' => [
+                'examples' => [
+                    'BarExample' => [
+                        'summary' => 'Shared library entry',
+                        'value' => ['greeting' => 'hello'],
+                    ],
+                ],
+            ],
+            'paths' => [
+                '/pets' => [
+                    'get' => [
+                        'parameters' => [
+                            [
+                                'name' => 'tag',
+                                'in' => 'query',
+                                'schema' => ['type' => 'string'],
+                                'examples' => [
+                                    'Foo' => ['$ref' => '#/components/examples/BarExample'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame(
+            [
+                'summary' => 'Shared library entry',
+                'value' => ['greeting' => 'hello'],
+            ],
+            $resolved['paths']['/pets']['get']['parameters'][0]['examples']['Foo'],
+        );
+    }
+
+    #[Test]
+    public function preserves_ref_key_inside_example_object_value_field(): void
+    {
+        // Example Object's `value` field is opaque per OAS 3.x. The Example
+        // Object itself may resolve as a Reference Object (see sibling test
+        // above), but its `value` content is literal data.
+        $spec = [
+            'components' => [
+                'examples' => [
+                    'PatchExample' => [
+                        'summary' => 'A JSON Patch example',
+                        'value' => ['$ref' => '#/components/schemas/Other'],
+                    ],
+                ],
+                'schemas' => [
+                    'Other' => ['type' => 'string'],
+                ],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame(
+            ['$ref' => '#/components/schemas/Other'],
+            $resolved['components']['examples']['PatchExample']['value'],
+        );
+    }
+
+    #[Test]
+    public function preserves_ref_key_inside_server_variable_default(): void
+    {
+        // Server Variable's `default` is documented to be a string, but the
+        // walker is structural — confirm the universal-opaque-key carve-out
+        // really IS universal across all OAS object types, not just Schema.
+        $spec = [
+            'servers' => [
+                [
+                    'url' => 'https://{tenant}.api.example.com',
+                    'variables' => [
+                        'tenant' => [
+                            'default' => ['$ref' => '#/components/schemas/Other'],
+                            'description' => 'Tenant slug',
+                        ],
+                    ],
+                ],
+            ],
+            'components' => [
+                'schemas' => [
+                    'Other' => ['type' => 'string'],
+                ],
+            ],
+        ];
+
+        $resolved = OpenApiRefResolver::resolve($spec);
+
+        $this->assertSame(
+            ['$ref' => '#/components/schemas/Other'],
+            $resolved['servers'][0]['variables']['tenant']['default'],
+        );
+    }
 }

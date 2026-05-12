@@ -11,6 +11,7 @@ use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\Internal\ExternalRefLoader;
 use Studio\OpenApiContractTesting\Internal\HttpRefLoader;
 
+use function array_is_list;
 use function array_key_exists;
 use function array_pop;
 use function explode;
@@ -33,6 +34,24 @@ use function substr;
  */
 final class OpenApiRefResolver
 {
+    /**
+     * Keys whose value is opaque user data per OpenAPI 3.x and JSON Schema —
+     * a `$ref` literal inside one of these positions is a data field, not a
+     * Reference Object. The walker MUST NOT descend into them.
+     *
+     * The list is structural (key-name-based) rather than parent-aware
+     * because every position where these keys appear (Schema Object,
+     * Parameter / Header / MediaType / Server Variable Object) treats them
+     * the same way: opaque sample / default data.
+     *
+     * `examples` is handled separately because it is two-shaped: a list of
+     * opaque values at Schema 3.1, or a map of Example Objects (which MAY
+     * be Reference Objects) at Parameter / Header / MediaType.
+     *
+     * @var list<string>
+     */
+    private const ALWAYS_OPAQUE_KEYS = ['default', 'example', 'enum', 'const'];
+
     /**
      * Resolve every `$ref` entry in the spec in place and return the same
      * array. Any structural problem with a `$ref` throws
@@ -136,15 +155,112 @@ final class OpenApiRefResolver
         }
 
         foreach ($node as $key => &$child) {
-            if (is_array($child)) {
-                // additionalProperties is intentionally excluded: its value is a single
-                // schema (not a dict of schemas), so a direct $ref under it is a
-                // legitimate Reference Object that must resolve.
-                $childInsidePropertiesMap = $key === 'properties' || $key === 'patternProperties';
-                self::walk($child, $root, $chain, $childInsidePropertiesMap, $context, $documentCache);
+            if (!is_array($child)) {
+                continue;
             }
+
+            // Opaque user data per OAS 3.x / JSON Schema (`default`, `example`,
+            // `enum` items, `const`): the value is literal sample / default
+            // data and a `$ref` key inside it is a data field, not a
+            // Reference Object. Skipping descent entirely preserves the data
+            // verbatim — the safe direction, since the previous behavior
+            // (silently rewriting these values to whatever the ref pointed at)
+            // is an SSRF risk when allowRemoteRefs:true and is plain data
+            // corruption otherwise.
+            if (in_array($key, self::ALWAYS_OPAQUE_KEYS, true)) {
+                continue;
+            }
+
+            // `examples` is shape-dependent:
+            //  - Schema 3.1 array form: a list of opaque values (all elements
+            //    are sample data, never Reference Objects).
+            //  - Parameter / Header / MediaType / RequestBody / Response form:
+            //    a map keyed by example name, where each entry is an Example
+            //    Object OR a Reference Object pointing at one. Inside an
+            //    Example Object, only the `value` field is opaque; the
+            //    sibling fields (`summary`, `description`, `externalValue`)
+            //    are strings or simple scalars.
+            // Disambiguating by shape rather than by parent context keeps the
+            // walker stateless: Schema 3.1 examples is required to be a list
+            // per OAS 3.1 §4.7.24, and Parameter/Header/MediaType examples is
+            // required to be a map per §4.7.10.
+            if ($key === 'examples') {
+                if (array_is_list($child)) {
+                    continue;
+                }
+
+                self::walkExamplesMap($child, $root, $chain, $context, $documentCache);
+
+                continue;
+            }
+
+            // additionalProperties is intentionally excluded: its value is a single
+            // schema (not a dict of schemas), so a direct $ref under it is a
+            // legitimate Reference Object that must resolve.
+            $childInsidePropertiesMap = $key === 'properties' || $key === 'patternProperties';
+            self::walk($child, $root, $chain, $childInsidePropertiesMap, $context, $documentCache);
         }
         unset($child);
+    }
+
+    /**
+     * Walk the map form of `examples` (Parameter / Header / MediaType /
+     * RequestBody / Response). Each entry is either an Example Object or a
+     * Reference Object. Reference Objects resolve normally; Example Objects'
+     * `value` field is opaque user data and is NOT walked further.
+     *
+     * Kept as a dedicated helper because the inner shape — "$ref at entry
+     * root MAY be a Reference Object, but `value` underneath an entry is
+     * always opaque" — does not fit the flat key-list carve-out used by the
+     * main walk().
+     *
+     * @param array<int|string, mixed> $map
+     * @param array<string, mixed> $root
+     * @param list<string> $chain
+     * @param array<string, array<string, mixed>> $documentCache
+     */
+    private static function walkExamplesMap(
+        array &$map,
+        array $root,
+        array $chain,
+        RefResolutionContext $context,
+        array &$documentCache,
+    ): void {
+        foreach ($map as $name => &$entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+
+            // Reference Object case: an examples-map entry MAY be `{$ref: ...}`
+            // per OAS 3.x to share a definition from `components.examples`.
+            if (array_key_exists('$ref', $entry)) {
+                $ref = $entry['$ref'];
+                if (!is_string($ref)) {
+                    throw new InvalidOpenApiSpecException(
+                        InvalidOpenApiSpecReason::NonStringRef,
+                        sprintf('Invalid $ref: expected string, got %s', get_debug_type($ref)),
+                    );
+                }
+
+                self::resolveRef($entry, $ref, $root, $chain, $context, $documentCache);
+
+                continue;
+            }
+
+            // Example Object: walk children EXCEPT `value` (opaque). The
+            // sibling fields `summary` / `description` / `externalValue` are
+            // strings and are naturally skipped by the is_array guard.
+            foreach ($entry as $childKey => &$child) {
+                if ($childKey === 'value') {
+                    continue;
+                }
+                if (is_array($child)) {
+                    self::walk($child, $root, $chain, false, $context, $documentCache);
+                }
+            }
+            unset($child);
+        }
+        unset($entry);
     }
 
     /**
