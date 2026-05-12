@@ -161,9 +161,9 @@ final class RequestBodyValidator
         // empty arrays as JSON arrays, so a schema's `type: object` would then
         // reject the body with a misleading "must match the type: object" error.
         // Coerce `[]` → stdClass when the schema explicitly accepts an object so
-        // the empty-object-against-type-object case (very common for "create
-        // with defaults" and acknowledgement bodies) validates. Mirrors the
-        // response-side fix at ResponseBodyValidator::validate() (issue #217).
+        // the empty-object-against-type-object case (very common for
+        // "create with defaults" bodies) validates. Mirrors the response-side
+        // fix at ResponseBodyValidator::validate().
         if ($requestBody === [] && self::schemaAcceptsObject($schema)) {
             $requestBody = new stdClass();
         }
@@ -190,8 +190,8 @@ final class RequestBodyValidator
      * NOT walked — coercion only fires for the unambiguous case so a real
      * type-mismatch error still surfaces for `type: array` schemas where the
      * empty-array body is genuinely correct. Intentional duplicate of the
-     * same-named helper on the response-side body validator (issue #217); if
-     * you change the scope here, change it there too.
+     * same-named helper on the response-side body validator; if you change
+     * the scope here, change it there too.
      *
      * @param array<string, mixed> $schema
      */
