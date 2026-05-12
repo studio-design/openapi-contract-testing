@@ -20,6 +20,7 @@ use Studio\OpenApiContractTesting\Exception\EnumDriftException;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
 use Studio\OpenApiContractTesting\Internal\EnumScanner;
+use Studio\OpenApiContractTesting\Internal\PartialRunDecision;
 use Studio\OpenApiContractTesting\Schema\EnumDriftAsserter;
 use Studio\OpenApiContractTesting\Schema\EnumDriftReport;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
@@ -36,9 +37,12 @@ use function getcwd;
 use function getenv;
 use function implode;
 use function in_array;
+use function is_array;
 use function is_dir;
 use function is_numeric;
+use function is_string;
 use function is_writable;
+use function method_exists;
 use function sprintf;
 use function str_starts_with;
 use function sys_get_temp_dir;
@@ -86,11 +90,15 @@ final class OpenApiCoverageExtension implements Extension
         fwrite(self::$stderrOverride ?? STDERR, $message);
     }
 
-    /** @phpcsSuppress SlevomatCodingStandard.Functions.UnusedParameter.UnusedParameter */
     public function bootstrap(Configuration $configuration, Facade $facade, ParameterCollection $parameters): void
     {
         try {
-            $this->setupExtension($facade, $parameters, getenv('GITHUB_STEP_SUMMARY') ?: null);
+            $this->setupExtension(
+                $facade,
+                $parameters,
+                getenv('GITHUB_STEP_SUMMARY') ?: null,
+                self::detectPartialRun($configuration),
+            );
         } catch (EnumBindingException|EnumDriftException|InvalidCoverageOutputPathException|InvalidOpenApiSpecException|InvalidThresholdConfigurationException|SpecFileNotFoundException) {
             // setupExtension() has already written a FATAL line to stderr and
             // (if GITHUB_STEP_SUMMARY is set) appended a fatal block to it.
@@ -121,8 +129,12 @@ final class OpenApiCoverageExtension implements Extension
      *
      * @internal
      */
-    public function setupExtension(?Facade $facade, ParameterCollection $parameters, ?string $githubSummaryPath): void
-    {
+    public function setupExtension(
+        ?Facade $facade,
+        ParameterCollection $parameters,
+        ?string $githubSummaryPath,
+        ?PartialRunDecision $partialRun = null,
+    ): void {
         // Issue #170: secondary base path used only for
         // #[BoundToOpenApiEnum] resolution. Read independently of
         // spec_base_path so that an orphaned `enum_spec_base_path`
@@ -228,7 +240,89 @@ final class OpenApiCoverageExtension implements Extension
             junitOutput: $junitOutput,
             jsonOutput: $jsonOutput,
             htmlOutput: $htmlOutput,
+            partialRun: $partialRun,
         ));
+    }
+
+    /**
+     * Issue #221: read PHPUnit's selection signals off the
+     * {@see Configuration} object so the subscriber can skip persistent
+     * writes on partial runs. The signal set, rationale, and why the
+     * `TestSuite\Filtered` event is not used are documented on
+     * {@see PartialRunDecision} — keeping that explanation in one place.
+     */
+    private static function detectPartialRun(Configuration $configuration): ?PartialRunDecision
+    {
+        return PartialRunDecision::fromSignals(
+            hasCliArguments: $configuration->hasCliArguments(),
+            hasFilter: $configuration->hasFilter(),
+            hasExcludeFilter: $configuration->hasExcludeFilter(),
+            hasGroups: $configuration->hasGroups(),
+            hasExcludeGroups: $configuration->hasExcludeGroups(),
+            includeTestSuites: self::readTestSuiteList($configuration, 'includeTestSuites', 'includeTestSuite'),
+            excludeTestSuites: self::readTestSuiteList($configuration, 'excludeTestSuites', 'excludeTestSuite'),
+            hasTestsCovering: $configuration->hasTestsCovering(),
+            hasTestsUsing: $configuration->hasTestsUsing(),
+            hasTestsRequiringPhpExtension: $configuration->hasTestsRequiringPhpExtension(),
+        );
+    }
+
+    /**
+     * Cross-version reader for the `--testsuite` / `--exclude-testsuite`
+     * selection. PHPUnit 13 exposes only the plural array form, PHPUnit
+     * 11 exposes only the singular comma-joined string form, and
+     * PHPUnit 12 happens to ship both — so picking one at compile time
+     * would break the matrix CI (PHP 8.2/8.3/8.4 × PHPUnit 11/12/13).
+     * The dynamic method call also avoids a static analysis error on
+     * whichever PHPUnit version PHPStan is resolving against locally.
+     *
+     * @return list<non-empty-string>
+     */
+    private static function readTestSuiteList(
+        Configuration $configuration,
+        string $pluralMethod,
+        string $singularMethod,
+    ): array {
+        // Dynamic method calls deliberately bypass PHPStan's static
+        // resolution against whichever PHPUnit version it happens to be
+        // analysing locally. We narrow the `mixed` result back to
+        // `list<non-empty-string>` via runtime checks rather than `@var`
+        // (the project's PHPStan policy forbids `@var` type overrides).
+        if (method_exists($configuration, $pluralMethod)) {
+            $plural = $configuration->{$pluralMethod}();
+
+            return self::coerceToNonEmptyStringList($plural);
+        }
+
+        $singular = $configuration->{$singularMethod}();
+        if (!is_string($singular) || $singular === '') {
+            return [];
+        }
+
+        return self::coerceToNonEmptyStringList(explode(',', $singular));
+    }
+
+    /**
+     * Filter an arbitrary value down to `list<non-empty-string>` for
+     * `readTestSuiteList()`. Defensive: PHPUnit's contracts already
+     * guarantee strings, but funneling the result through a single
+     * narrowing helper keeps PHPStan happy without resorting to `@var`.
+     *
+     * @return list<non-empty-string>
+     */
+    private static function coerceToNonEmptyStringList(mixed $value): array
+    {
+        if (!is_array($value)) {
+            return [];
+        }
+        $list = [];
+        foreach ($value as $entry) {
+            if (is_string($entry) && $entry !== '') {
+                $list[] = $entry;
+            }
+        }
+
+        return $list;
     }
 
     /**
