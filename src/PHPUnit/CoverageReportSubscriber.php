@@ -77,6 +77,8 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         private ?string $outputFile,
         private ConsoleOutput $consoleOutput,
         private ?string $githubSummaryPath,
+        private ?OpenApiCoverageTracker $coverageTracker = null,
+        private ?StrictRequiredTracker $strictRequiredTracker = null,
         private mixed $stderrWriter = null,
         private ?string $sidecarDir = null,
         private ?float $minEndpointCoverage = null,
@@ -148,6 +150,23 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         }
 
         return $token;
+    }
+
+    /**
+     * Resolve the {@see OpenApiCoverageTracker} this subscriber reports on.
+     * Falls back to {@see OpenApiCoverageTracker::current()} when constructed
+     * without an injected instance — keeps existing test fixtures that pre-date
+     * the DI wiring working unchanged while production code (the extension)
+     * always passes one in.
+     */
+    private function coverageTracker(): OpenApiCoverageTracker
+    {
+        return $this->coverageTracker ?? OpenApiCoverageTracker::current();
+    }
+
+    private function strictRequiredTracker(): StrictRequiredTracker
+    {
+        return $this->strictRequiredTracker ?? StrictRequiredTracker::current();
     }
 
     /**
@@ -337,8 +356,8 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
         // independent of the worker's `strict_required` mode — the merge
         // CLI decides whether to assert (Issue #226).
         $envelope = CoverageSidecarEnvelope::build(
-            OpenApiCoverageTracker::exportState(),
-            StrictRequiredTracker::exportState(),
+            $this->coverageTracker()->exportStateOn(),
+            $this->strictRequiredTracker()->exportStateOn(),
         );
 
         try {
@@ -372,9 +391,11 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
      */
     private function computeAllResults(): array
     {
+        $tracker = $this->coverageTracker();
+
         $hasCoverage = false;
         foreach ($this->specs as $spec) {
-            if (OpenApiCoverageTracker::hasAnyCoverage($spec)) {
+            if ($tracker->hasAnyCoverageOn($spec)) {
                 $hasCoverage = true;
 
                 break;
@@ -389,7 +410,7 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
 
         foreach ($this->specs as $spec) {
             try {
-                $results[$spec] = OpenApiCoverageTracker::computeCoverage($spec);
+                $results[$spec] = $tracker->computeCoverageOn($spec);
             } catch (SpecFileNotFoundException $e) {
                 // Unlike bootstrap (which hard-fails missing files since
                 // issue #134), the subscriber runs after tests finished —

@@ -75,6 +75,15 @@ final class StrictRequiredTracker
     public const STATE_FORMAT_VERSION = 2;
 
     /**
+     * Service-locator slot for the static facade (Issue #229). Symmetric with
+     * {@see OpenApiCoverageTracker::$current}: the Laravel trait and the
+     * {@see OpenApiResponseValidator} reach for the tracker via static call,
+     * and we route those to whichever instance the host installed via
+     * {@see self::setCurrent()}.
+     */
+    private static ?self $current = null;
+
+    /**
      * Per-(spec, endpoint, response key) observations.
      *
      * Endpoint key is `"{METHOD} {path}"` (method upper-cased). Response key
@@ -83,10 +92,34 @@ final class StrictRequiredTracker
      *
      * @var array<string, array<string, array<string, StrictRequiredRow>>>
      */
-    private static array $observations = [];
+    private array $observations = [];
 
-    /** Static-only utility — no instances. */
-    private function __construct() {}
+    public function __construct() {}
+
+    /**
+     * The "current" tracker instance — what the static facade methods
+     * delegate to. The PHPUnit extension installs a fresh instance at
+     * bootstrap so each test run starts clean; the lazy default exists for
+     * unit tests and other host-less call sites that hit the static facade
+     * before any setup ran.
+     *
+     * @internal Refactor seam for the static→instance migration in Issue #229.
+     */
+    public static function current(): self
+    {
+        return self::$current ??= new self();
+    }
+
+    /**
+     * Install the "current" tracker instance. Pass `null` to drop the slot
+     * (the next {@see self::current()} call will mint a fresh default).
+     *
+     * @internal
+     */
+    public static function setCurrent(?self $instance): void
+    {
+        self::$current = $instance;
+    }
 
     /**
      * Record one observed response body's pointer→keys map. The map is
@@ -134,25 +167,7 @@ final class StrictRequiredTracker
         string $contentTypeKey,
         array $pointers,
     ): void {
-        $endpointKey = strtoupper($method) . ' ' . $path;
-        $responseKey = $statusKey . ':' . $contentTypeKey;
-
-        $normalised = self::normalisePointers($specName, $endpointKey, $responseKey, $pointers);
-
-        $existing = self::$observations[$specName][$endpointKey][$responseKey] ?? null;
-        if ($existing === null) {
-            self::$observations[$specName][$endpointKey][$responseKey] = [
-                'hits' => 1,
-                'pointers' => $normalised,
-            ];
-
-            return;
-        }
-
-        self::$observations[$specName][$endpointKey][$responseKey] = [
-            'hits' => $existing['hits'] + 1,
-            'pointers' => self::mergePointers($existing['pointers'], $normalised),
-        ];
+        self::current()->recordOn($specName, $method, $path, $statusKey, $contentTypeKey, $pointers);
     }
 
     /**
@@ -163,7 +178,7 @@ final class StrictRequiredTracker
      */
     public static function reset(): void
     {
-        self::$observations = [];
+        self::current()->resetOn();
     }
 
     /**
@@ -182,7 +197,7 @@ final class StrictRequiredTracker
      */
     public static function getObservations(string $specName): array
     {
-        return self::$observations[$specName] ?? [];
+        return self::current()->getObservationsOn($specName);
     }
 
     /**
@@ -195,7 +210,7 @@ final class StrictRequiredTracker
      */
     public static function recordedSpecs(): array
     {
-        return array_keys(self::$observations);
+        return self::current()->recordedSpecsOn();
     }
 
     /**
@@ -210,10 +225,7 @@ final class StrictRequiredTracker
      */
     public static function exportState(): array
     {
-        return [
-            'version' => self::STATE_FORMAT_VERSION,
-            'observations' => self::$observations,
-        ];
+        return self::current()->exportStateOn();
     }
 
     /**
@@ -235,18 +247,109 @@ final class StrictRequiredTracker
      */
     public static function importState(array $state): void
     {
+        self::current()->importStateOn($state);
+    }
+
+    /**
+     * Instance counterpart of {@see self::record()} (Issue #229).
+     *
+     * @param array<mixed, mixed> $pointers
+     *
+     * @throws InvalidArgumentException when a pointer key or value is malformed
+     */
+    public function recordOn(
+        string $specName,
+        string $method,
+        string $path,
+        string $statusKey,
+        string $contentTypeKey,
+        array $pointers,
+    ): void {
+        $endpointKey = strtoupper($method) . ' ' . $path;
+        $responseKey = $statusKey . ':' . $contentTypeKey;
+
+        $normalised = self::normalisePointers($specName, $endpointKey, $responseKey, $pointers);
+
+        $existing = $this->observations[$specName][$endpointKey][$responseKey] ?? null;
+        if ($existing === null) {
+            $this->observations[$specName][$endpointKey][$responseKey] = [
+                'hits' => 1,
+                'pointers' => $normalised,
+            ];
+
+            return;
+        }
+
+        $this->observations[$specName][$endpointKey][$responseKey] = [
+            'hits' => $existing['hits'] + 1,
+            'pointers' => self::mergePointers($existing['pointers'], $normalised),
+        ];
+    }
+
+    /**
+     * Instance counterpart of {@see self::reset()} (Issue #229). Direct
+     * callers can also just drop the instance — there is no global state
+     * to clear.
+     */
+    public function resetOn(): void
+    {
+        $this->observations = [];
+    }
+
+    /**
+     * Instance counterpart of {@see self::getObservations()} (Issue #229).
+     *
+     * @return array<string, array<string, StrictRequiredRow>>
+     */
+    public function getObservationsOn(string $specName): array
+    {
+        return $this->observations[$specName] ?? [];
+    }
+
+    /**
+     * Instance counterpart of {@see self::recordedSpecs()} (Issue #229).
+     *
+     * @return list<string>
+     */
+    public function recordedSpecsOn(): array
+    {
+        return array_keys($this->observations);
+    }
+
+    /**
+     * Instance counterpart of {@see self::exportState()} (Issue #229).
+     *
+     * @return StrictRequiredStatePayload
+     */
+    public function exportStateOn(): array
+    {
+        return [
+            'version' => self::STATE_FORMAT_VERSION,
+            'observations' => $this->observations,
+        ];
+    }
+
+    /**
+     * Instance counterpart of {@see self::importState()} (Issue #229).
+     *
+     * @param array<string, mixed> $state
+     *
+     * @throws InvalidArgumentException when the payload shape or version is unrecognised
+     */
+    public function importStateOn(array $state): void
+    {
         $normalised = self::validateStatePayload($state);
 
         foreach ($normalised as $specName => $endpoints) {
             foreach ($endpoints as $endpointKey => $responses) {
                 foreach ($responses as $responseKey => $row) {
-                    $existing = self::$observations[$specName][$endpointKey][$responseKey] ?? null;
+                    $existing = $this->observations[$specName][$endpointKey][$responseKey] ?? null;
                     if ($existing === null) {
-                        self::$observations[$specName][$endpointKey][$responseKey] = $row;
+                        $this->observations[$specName][$endpointKey][$responseKey] = $row;
 
                         continue;
                     }
-                    self::$observations[$specName][$endpointKey][$responseKey] = [
+                    $this->observations[$specName][$endpointKey][$responseKey] = [
                         'hits' => $existing['hits'] + $row['hits'],
                         'pointers' => self::mergePointers($existing['pointers'], $row['pointers']),
                     ];

@@ -15,6 +15,7 @@ use PHPUnit\Runner\Extension\ParameterCollection;
 use PHPUnit\TextUI\Configuration\Configuration;
 use Studio\OpenApiContractTesting\Coverage\InvalidCoverageOutputPathException;
 use Studio\OpenApiContractTesting\Coverage\InvalidThresholdConfigurationException;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Exception\EnumBindingException;
 use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
 use Studio\OpenApiContractTesting\Exception\EnumDriftException;
@@ -271,14 +272,24 @@ final class OpenApiCoverageExtension implements Extension
         $minEndpointCoverage = self::resolveThresholdParameter($parameters, 'min_endpoint_coverage', $minCoverageStrict);
         $minResponseCoverage = self::resolveThresholdParameter($parameters, 'min_response_coverage', $minCoverageStrict);
 
-        // Issue #224: schema under-description detection. Reset the tracker
-        // at bootstrap so observations from a previous PHPUnit process (or
-        // a leaked test-class static) do not contaminate this run's
-        // intersection — mirrors `OpenApiCoverageTracker::reset()`'s
-        // bootstrap-reset pattern. Worker observations are aggregated across
-        // paratest workers via the sidecar envelope (Issue #226).
+        // Issue #229: install fresh tracker instances for this run and route
+        // the static facades (used by the Laravel trait that can't take DI)
+        // through them. Replacing the locator instance gives us a clean
+        // start without depending on a process-global ::reset() — this
+        // mirrors what each unit-test fixture now does, just at suite scope.
+        // Worker observations are aggregated across paratest workers via the
+        // sidecar envelope (Issue #226); the run-level instances here are
+        // exactly what the merge CLI's tracker reconstructs from those
+        // sidecars.
+        $coverageTracker = new OpenApiCoverageTracker();
+        $strictRequiredTracker = new StrictRequiredTracker();
+        OpenApiCoverageTracker::setCurrent($coverageTracker);
+        StrictRequiredTracker::setCurrent($strictRequiredTracker);
+
+        // Issue #224: schema under-description detection mode is read from
+        // phpunit.xml here so a misspelled `strict_required=` value
+        // hard-fails bootstrap before any subscriber wiring.
         $strictRequiredMode = self::resolveStrictRequiredMode($parameters, $githubSummaryPath);
-        StrictRequiredTracker::reset();
 
         // Issue #228: per-call strict_required mode. Independent of the
         // run-level parameter above — both gates can be wired in the same
@@ -302,6 +313,8 @@ final class OpenApiCoverageExtension implements Extension
             outputFile: $outputFile,
             consoleOutput: $consoleOutput,
             githubSummaryPath: $githubSummaryPath,
+            coverageTracker: $coverageTracker,
+            strictRequiredTracker: $strictRequiredTracker,
             sidecarDir: $sidecarDir,
             minEndpointCoverage: $minEndpointCoverage,
             minResponseCoverage: $minResponseCoverage,

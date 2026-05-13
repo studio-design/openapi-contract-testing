@@ -307,14 +307,20 @@ final class CoverageMergeCommand
         OpenApiSpecLoader::reset();
         OpenApiSpecLoader::configure($specBasePath, $stripPrefixes);
 
-        OpenApiCoverageTracker::reset();
-        StrictRequiredTracker::reset();
+        // Issue #229: each merge invocation owns its trackers. Installing
+        // them via setCurrent() routes the static facade (used by the
+        // StrictRequiredAsserter helpers) into these same instances, so the
+        // gate evaluates against exactly the state this run aggregated.
+        $coverageTracker = new OpenApiCoverageTracker();
+        $strictRequiredTracker = new StrictRequiredTracker();
+        OpenApiCoverageTracker::setCurrent($coverageTracker);
+        StrictRequiredTracker::setCurrent($strictRequiredTracker);
         foreach ($payloads as $payload) {
             try {
                 $parsed = CoverageSidecarEnvelope::parse($payload);
-                OpenApiCoverageTracker::importState($parsed['coverage']);
+                $coverageTracker->importStateOn($parsed['coverage']);
                 if ($parsed['strictRequired'] !== null) {
-                    StrictRequiredTracker::importState($parsed['strictRequired']);
+                    $strictRequiredTracker->importStateOn($parsed['strictRequired']);
                 }
             } catch (InvalidArgumentException $e) {
                 $this->writeStderr(sprintf("[OpenAPI Coverage] FATAL: invalid sidecar payload: %s\n", $e->getMessage()));
@@ -323,7 +329,7 @@ final class CoverageMergeCommand
             }
         }
 
-        $results = $this->computeResults($specs);
+        $results = $this->computeResults($specs, $coverageTracker);
         if ($results === []) {
             $strictGated = $minStrict && ($minEndpointPct !== null || $minResponsePct !== null);
             $this->writeStderr(sprintf(
@@ -351,7 +357,7 @@ final class CoverageMergeCommand
         // Issue #226: aggregate strict_required across workers and run the
         // gate after the report is rendered so a fatal drift doesn't suppress
         // the coverage output users rely on for triage.
-        $strictFailure = $this->evaluateStrictRequiredGate($strictRequiredMode, $githubSummaryPath);
+        $strictFailure = $this->evaluateStrictRequiredGate($strictRequiredMode, $githubSummaryPath, $strictRequiredTracker);
 
         if ($cleanup) {
             $this->cleanup($sidecarDir);
@@ -533,8 +539,11 @@ final class CoverageMergeCommand
      * Off mode short-circuits before invoking the asserter so unrelated
      * runs do not pay for spec loading and intersection diffing.
      */
-    private function evaluateStrictRequiredGate(StrictRequiredMode $mode, ?string $githubSummaryPath): bool
-    {
+    private function evaluateStrictRequiredGate(
+        StrictRequiredMode $mode,
+        ?string $githubSummaryPath,
+        StrictRequiredTracker $strictRequiredTracker,
+    ): bool {
         if ($mode === StrictRequiredMode::Off) {
             return false;
         }
@@ -545,7 +554,7 @@ final class CoverageMergeCommand
         // the gate cannot evaluate the contract. Silent-pass here would
         // defeat the whole point of opting into fail-fast — symmetric with
         // the threshold gate's no-coverage FATAL in `run()`.
-        if ($mode === StrictRequiredMode::Fail && StrictRequiredTracker::recordedSpecs() === []) {
+        if ($mode === StrictRequiredMode::Fail && $strictRequiredTracker->recordedSpecsOn() === []) {
             $this->writeStderr(
                 '[OpenAPI Strict Required] FATAL: --strict-required=fail requested but '
                 . 'no worker recorded any strict_required observations; the gate cannot '
@@ -640,11 +649,11 @@ final class CoverageMergeCommand
      *
      * @return array<string, array<string, mixed>>
      */
-    private function computeResults(array $specs): array
+    private function computeResults(array $specs, OpenApiCoverageTracker $tracker): array
     {
         $hasCoverage = false;
         foreach ($specs as $spec) {
-            if (OpenApiCoverageTracker::hasAnyCoverage($spec)) {
+            if ($tracker->hasAnyCoverageOn($spec)) {
                 $hasCoverage = true;
 
                 break;
@@ -657,7 +666,7 @@ final class CoverageMergeCommand
         $results = [];
         foreach ($specs as $spec) {
             try {
-                $results[$spec] = OpenApiCoverageTracker::computeCoverage($spec);
+                $results[$spec] = $tracker->computeCoverageOn($spec);
             } catch (SpecFileNotFoundException $e) {
                 $this->writeStderr(sprintf("[OpenAPI Coverage] WARNING: Skipping spec '%s': %s\n", $spec, $e->getMessage()));
             } catch (InvalidOpenApiSpecException $e) {
