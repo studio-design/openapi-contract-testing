@@ -268,9 +268,9 @@ final class OpenApiCoverageExtension implements Extension
         // Issue #224: schema under-description detection. Reset the tracker
         // at bootstrap so observations from a previous PHPUnit process (or
         // a leaked test-class static) do not contaminate this run's
-        // intersection — same lifecycle pattern as
-        // `OpenApiCoverageTracker::reset()` would have if we wanted strict
-        // mode to be parallel-safe; for now (MVP) sequential-only.
+        // intersection — mirrors `OpenApiCoverageTracker::reset()`'s
+        // bootstrap-reset pattern. Worker observations are aggregated across
+        // paratest workers via the sidecar envelope (Issue #226).
         $strictRequiredMode = self::resolveStrictRequiredMode($parameters, $githubSummaryPath);
         StrictRequiredTracker::reset();
 

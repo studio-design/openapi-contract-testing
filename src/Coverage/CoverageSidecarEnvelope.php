@@ -39,7 +39,10 @@ use function sprintf;
  *
  * The envelope intentionally does NOT flatten the inner tracker payloads —
  * each `version` field remains owned by its respective tracker and can
- * evolve independently of the envelope version.
+ * evolve independently of the envelope version. The wrapper key is
+ * `envelopeVersion` (not `version`) precisely so legacy v1 bare coverage
+ * payloads — which already use `version` at the top level — remain
+ * distinguishable; see {@see self::parse()}'s discriminator order.
  *
  * @phpstan-import-type CoverageStatePayload from OpenApiCoverageTracker
  * @phpstan-import-type StrictRequiredStatePayload from StrictRequiredTracker
@@ -67,11 +70,13 @@ final class CoverageSidecarEnvelope
 
     /**
      * Compose a v2 envelope from the two tracker `exportState()` payloads.
+     * Typed `@phpstan-param`s flow the tracker shapes through so PHPStan
+     * catches a tracker-side `exportState()` regression at this boundary.
      *
-     * @param array<string, mixed> $coverageState output of {@see OpenApiCoverageTracker::exportState()}
-     * @param array<string, mixed> $strictRequiredState output of {@see StrictRequiredTracker::exportState()}
+     * @phpstan-param CoverageStatePayload $coverageState
+     * @phpstan-param StrictRequiredStatePayload $strictRequiredState
      *
-     * @return array{envelopeVersion: int, coverage: array<string, mixed>, strictRequired: array<string, mixed>}
+     * @return SidecarEnvelopePayload
      */
     public static function build(array $coverageState, array $strictRequiredState): array
     {
@@ -93,7 +98,7 @@ final class CoverageSidecarEnvelope
      *
      * @param array<string, mixed> $payload
      *
-     * @return array{coverage: array<string, mixed>, strictRequired: null|array<string, mixed>}
+     * @return ParsedEnvelope
      *
      * @throws InvalidArgumentException on unknown envelope version or
      *                                  unrecognised payload shape
@@ -105,6 +110,20 @@ final class CoverageSidecarEnvelope
         }
 
         if (array_key_exists('version', $payload) && array_key_exists('specs', $payload)) {
+            // Forward-compat: a v1 shape must NOT carry a `strictRequired`
+            // half. Accepting it would silently discard observations when
+            // (a) a future writer ships a coverage-only v3 wire that drops
+            // `envelopeVersion`, or (b) a hand-edited sidecar happens to
+            // land in the v1 fast-path. Mirror the strict version check
+            // {@see StrictRequiredTracker::importState()} performs on its
+            // own payload.
+            if (array_key_exists('strictRequired', $payload)) {
+                throw new InvalidArgumentException(
+                    'Legacy v1 sidecar payload must not contain a top-level "strictRequired" key; '
+                    . 'expected an envelopeVersion=2 envelope when strict_required data is present.',
+                );
+            }
+
             // Legacy v1 bare coverage payload. Hand it back as the coverage
             // half so OpenApiCoverageTracker::importState() validates the
             // inner shape on its own terms.
@@ -122,7 +141,7 @@ final class CoverageSidecarEnvelope
     /**
      * @param array<string, mixed> $payload
      *
-     * @return array{coverage: array<string, mixed>, strictRequired: null|array<string, mixed>}
+     * @return ParsedEnvelope
      */
     private static function parseEnvelope(array $payload): array
     {

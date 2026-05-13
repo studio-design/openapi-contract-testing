@@ -519,21 +519,40 @@ final class CoverageMergeCommand
     /**
      * Aggregate strict_required observations imported from worker sidecars
      * and surface any drift. Returns `true` when the run should exit
-     * non-zero (Fail mode + drift); Warn mode reports drift but returns
-     * `false` so the merge CLI's exit stays driven by the user's intent.
+     * non-zero (Fail mode + drift, or Fail mode + zero observations);
+     * Warn mode reports drift but returns `false` so the merge CLI's exit
+     * stays driven by the user's intent.
      *
      * Mirrors {@see CoverageReportSubscriber::evaluateStrictRequiredGate()}
      * but translates fatality into a return value instead of `exit()`ing —
      * the CLI surface joins it with `writeFailures`/`thresholdFailure` into
-     * one exit code.
+     * one exit code. The subscriber's partial-run skip branch is omitted
+     * here because aggregated worker output carries no per-process filter
+     * context.
      *
-     * Off mode short-circuits before touching the asserter so unrelated
-     * runs pay nothing for the import-time tracker reset.
+     * Off mode short-circuits before invoking the asserter so unrelated
+     * runs do not pay for spec loading and intersection diffing.
      */
     private function evaluateStrictRequiredGate(StrictRequiredMode $mode, ?string $githubSummaryPath): bool
     {
         if ($mode === StrictRequiredMode::Off) {
             return false;
+        }
+
+        // Fail-loud guard: when the user opted into --strict-required=fail
+        // but no worker recorded any observation (e.g., a fleet still on the
+        // pre-envelope library version, or a misconfigured paratest run),
+        // the gate cannot evaluate the contract. Silent-pass here would
+        // defeat the whole point of opting into fail-fast — symmetric with
+        // the threshold gate's no-coverage FATAL in `run()`.
+        if ($mode === StrictRequiredMode::Fail && StrictRequiredTracker::recordedSpecs() === []) {
+            $this->writeStderr(
+                '[OpenAPI Strict Required] FATAL: --strict-required=fail requested but '
+                . 'no worker recorded any strict_required observations; the gate cannot '
+                . "be evaluated. Verify all workers are running the v2 sidecar envelope.\n",
+            );
+
+            return true;
         }
 
         $reports = StrictRequiredAsserter::detectAll($mode);

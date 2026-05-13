@@ -96,6 +96,23 @@ class CoverageSidecarEnvelopeTest extends TestCase
     }
 
     #[Test]
+    public function parse_rejects_v1_shape_carrying_unexpected_strict_required_key(): void
+    {
+        // Forward-compat guard: a v1 payload that also carries a top-level
+        // `strictRequired` key is ambiguous — either the writer is using an
+        // unknown wire variant or the envelopeVersion key was dropped. Fail
+        // loudly rather than silently discarding observations.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('strictRequired');
+
+        CoverageSidecarEnvelope::parse([
+            'version' => 1,
+            'specs' => [],
+            'strictRequired' => ['version' => 1, 'observations' => []],
+        ]);
+    }
+
+    #[Test]
     public function parse_treats_missing_strict_required_in_v2_as_null(): void
     {
         // Forward-compat: if a future writer omits strictRequired entirely
