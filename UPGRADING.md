@@ -4,6 +4,129 @@ This file documents non-trivial upgrades between releases. Patches with
 no behaviour change are not listed here — see `CHANGELOG.md` for the
 full record.
 
+Sections are ordered newest-first. If you are jumping multiple minors,
+read each intermediate section in order — behavioural changes compose.
+
+## Within v1.x
+
+The v1.x line is covered end-to-end by SemVer (see "v0.x → v1.0.0"
+below for the surface contract). Minor releases are additive by default;
+the only behavioural change so far is in v1.3.0 and is gated on an
+already-opt-in flag.
+
+### From v1.3.0 → v1.4.0
+
+- No source-code changes required.
+- **New `AssertsNoEnumDrift` PHPUnit trait** (#186). Wraps
+  `EnumDriftAsserter::assertNoDrift()` so drift tests increment PHPUnit's
+  assertion counter and stop being flagged risky under PHPUnit 13's
+  `beStrictAboutTestsThatDoNotTestAnything=true` default. Drop-in for
+  existing drift tests:
+
+  ```php
+  use Studio\OpenApiContractTesting\PHPUnit\AssertsNoEnumDrift;
+
+  final class EnumDriftTest extends TestCase
+  {
+      use AssertsNoEnumDrift;
+
+      #[Test]
+      public function no_drift(): void
+      {
+          $this->assertNoEnumDrift([StatusEnum::class, RoleEnum::class]);
+      }
+  }
+  ```
+
+  The static `EnumDriftAsserter::assertNoDrift()` API is unchanged —
+  non-PHPUnit drift CI scripts keep working as-is.
+- **Internal move**: `StackTraceFilter` moved from
+  `Studio\OpenApiContractTesting\Laravel\Internal\` to
+  `Studio\OpenApiContractTesting\Internal\`. The class is `@internal` and
+  outside the SemVer surface; the move is mentioned only for the rare
+  consumer who imported it directly (which the `@internal` marker said
+  not to do).
+
+### From v1.2.0 → v1.3.0
+
+- No source-code changes required.
+- **`auto_validate_request: true` now downgrades documented 4xx failures
+  to `Skipped`** (#182). When request validation is enabled AND the
+  response status matches `skip_request_validation_response_codes`
+  (default `['422', '400']`) AND the spec documents that status for the
+  operation, the request-validation `Failure` becomes `Skipped`. This
+  removes false-fails for dataProvider tests that intentionally send
+  invalid input to verify documented 4xx behaviour.
+
+  - Undocumented 4xx responses still fail loudly (real spec gap).
+  - Successful responses are never demoted.
+  - Tests asserting that the request validator returns `Failure` for
+    invalid input + documented 422 will need updating — assert
+    `Skipped` (or `isSkipped() === true`) instead.
+  - To restore strict pre-v1.3 behaviour, set
+    `skip_request_validation_response_codes => []` in your Laravel
+    config. The downgrade is gated on `auto_validate_request: true`, so
+    suites that never enabled auto-validation are unaffected.
+- **New `auto_inject_dummy_credentials` flag** (#180). Superset of the
+  existing `auto_inject_dummy_bearer`: also fills dummy values for
+  `apiKey` (header / cookie / query) schemes in the validator's view
+  when the test did not supply a real credential. Off by default; the
+  legacy bearer-only flag still works and is bypassed when the new flag
+  is on. No migration required unless you opt in.
+
+### From v1.1.0 → v1.2.0
+
+- No source-code changes required.
+- **New `enum_spec_base_path` PHPUnit extension parameter** (#171).
+  Optional secondary root used only for `#[BoundToOpenApiEnum]` path
+  resolution. Set it when per-enum JSON sources live outside
+  `spec_base_path` (e.g. `openapi/_shared/...` while bundles live in
+  `openapi/bundled/`). Single-root projects: omit it — behaviour is
+  bit-for-bit identical to v1.1.x. See README → "Enum drift detection"
+  for the bundled-external layout recipe.
+- **Markdown coverage output formatting** (#176). The Markdown renderer
+  now emits a blank line between each endpoint heading and its response
+  table. Visual-only fix; only relevant if a downstream consumer parses
+  the Markdown by line offsets.
+
+### From v1.0.0 → v1.1.0
+
+- No source-code changes required.
+- **New enum drift detection surface** (#166). Static set-membership
+  comparison between PHP backed enums and their bound OpenAPI `enum:`
+  arrays — catches PHP-only cases the runtime never observes AND
+  spec-only values the implementation cannot produce. New public symbols
+  (all `final`, additive, covered by v1.x SemVer):
+
+  - `Attribute\BoundToOpenApiEnum(string $specPath)` — bind a PHP enum
+    to its spec file. Path resolves relative to
+    `OpenApiSpecLoader::getBasePath()`.
+  - `Schema\EnumDriftAsserter::assertNoDrift(array $enumFqcns, bool $failOnDrift = true)`
+    — fatal by default; `failOnDrift: false` demotes to a single
+    `E_USER_WARNING` per drifting binding.
+  - `Schema\EnumDriftAsserter::detectAll()` — non-throwing inspection
+    seam returning `EnumDriftReport[]`.
+  - `Schema\EnumDriftReport`, `Exception\EnumDriftException`,
+    `Exception\EnumBindingException` + `EnumBindingReason`.
+
+  Adopting is opt-in — without `#[BoundToOpenApiEnum]` on any enum,
+  nothing runs.
+- **Opt-in auto-discovery via the PHPUnit extension** (#168). Three new
+  parameters scan PSR-4 namespaces at bootstrap and run drift checks
+  before any test executes:
+
+  ```xml
+  <parameter name="enum_drift_enabled" value="true"/>
+  <parameter name="enum_drift_scan_namespaces" value="App\Enums,App\Domain\Enums"/>
+  <parameter name="enum_drift_fail_on_drift" value="true"/>
+  ```
+
+  Defaults: `enum_drift_enabled=false` (master opt-in),
+  `enum_drift_fail_on_drift=true` (FATAL + `exit(1)` on drift).
+  Misconfiguration (unresolvable namespace, missing Composer
+  `ClassLoader`, `EnumBindingException`) always FATALs regardless of
+  `enum_drift_fail_on_drift` — setup errors must not hide drift signals.
+
 ## v0.x → v1.0.0
 
 v1.0.0 is the API stability commitment. Anything not marked `@internal`
