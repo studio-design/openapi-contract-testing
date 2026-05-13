@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
+use const STDERR;
+
+use InvalidArgumentException;
 use RuntimeException;
-use stdClass;
 use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidationResult;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseHeaderValidator;
+use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredBodyWalker;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
 use Studio\OpenApiContractTesting\Validation\Support\PathDiagnosticsFormatter;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
@@ -18,14 +21,14 @@ use Studio\OpenApiContractTesting\Validation\Support\SpecResponseKeyResolver;
 use Studio\OpenApiContractTesting\Validation\Support\StatusCodePatternSet;
 use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
 
-use function array_is_list;
 use function array_keys;
 use function array_merge;
+use function fwrite;
 use function get_debug_type;
 use function is_array;
-use function is_string;
 use function sprintf;
 use function strtolower;
+use function strtoupper;
 
 final class OpenApiResponseValidator
 {
@@ -238,33 +241,22 @@ final class OpenApiResponseValidator
     }
 
     /**
-     * Feed the strict-required tracker one observation. Top-level keys of the
-     * decoded body drive the "field always returned" intersection that
-     * {@see StrictRequiredAsserter} diffs against the spec's `required` array
-     * at run end.
+     * Feed the strict-required tracker one observation. The body is walked
+     * recursively via {@see StrictRequiredBodyWalker::collectPointers()}
+     * which produces a `pointer => list<string>` map describing every
+     * object node observed; {@see StrictRequiredAsserter} diffs each
+     * pointer's keys against the spec's `required` array at the matching
+     * schema node.
      *
      * Only recorded on the Success path (caller guarantees `$errors === []`):
      * a conformance failure means the body shape itself is suspect, and
      * skipped responses are explicitly excluded from coverage too — both
      * cases would poison the intersection.
      *
-     * Body-shape handling:
-     *   - scalar / `null` bodies: skipped (no top-level keys to diff against
-     *     `required`)
-     *   - `stdClass` (returned by callers who decoded with `json_decode(_, false)`):
-     *     coerced to an associative array so framework-agnostic users are
-     *     not silently dropped from observation
-     *   - PHP associative arrays (JSON objects via `json_decode(_, true)`):
-     *     recorded as-is — this is the Laravel adapter's path
-     *   - JSON arrays (list-shape, only numeric keys): skipped to avoid
-     *     collapsing a sibling object observation's intersection to `[]`;
-     *     `required` semantics only apply to object-shaped responses
-     *   - empty object `{}` (lands here as `[]` after decode): recorded as
-     *     an empty observation so a single empty response correctly drops
-     *     the intersection. The body validator already disambiguated `[]`
-     *     vs `{}` via stdClass coercion before validating, so by the time
-     *     we are on the Success path with `$responseBody === []`, the
-     *     schema accepted an empty object.
+     * Body-shape handling is delegated to the walker (see its docblock for
+     * the full matrix). The validator only short-circuits when the walker
+     * yields an empty map — null / scalar bodies, or arrays whose only
+     * elements are scalars (no object structure to intersect).
      */
     private function maybeRecordStrictRequired(
         string $specName,
@@ -274,33 +266,44 @@ final class OpenApiResponseValidator
         ?string $matchedContentType,
         mixed $responseBody,
     ): void {
-        if ($responseBody instanceof stdClass) {
-            $responseBody = (array) $responseBody;
-        }
-        if (!is_array($responseBody)) {
+        $pointers = StrictRequiredBodyWalker::collectPointers($responseBody);
+        if ($pointers === []) {
             return;
         }
-        // Distinguish empty object {} (record empty observation) from
-        // non-empty list [...] (skip): empty array is ambiguous so we err
-        // on the "object" side, consistent with the body validator's
-        // empty-object coercion upstream.
-        if ($responseBody !== [] && array_is_list($responseBody)) {
-            return;
+
+        try {
+            StrictRequiredTracker::record(
+                $specName,
+                $method,
+                $matchedPath,
+                $statusKey,
+                $matchedContentType ?? StrictRequiredTracker::ANY_CONTENT_TYPE,
+                $pointers,
+            );
+        } catch (InvalidArgumentException $e) {
+            // The walker's contract is "every value is a list of strings,
+            // every key is a non-empty pointer string." A throw here means
+            // the walker produced something malformed — a library bug, not
+            // a user-test failure. Failing the actual test with this
+            // exception would blame the user for our regression. Emit a
+            // one-shot stderr WARNING with a clear library-bug prefix and
+            // disable strict_required for this observation; the rest of the
+            // test continues normally.
+            $message = sprintf(
+                '[OpenAPI Strict Required] LIBRARY BUG: walker produced malformed pointer map for %s %s %s; '
+                . 'strict_required recording skipped for this observation. Please report at '
+                . 'https://github.com/studio-design/openapi-contract-testing/issues '
+                . "with the cause: %s\n",
+                strtoupper($method),
+                $matchedPath,
+                $statusKey,
+                $e->getMessage(),
+            );
+            // Write directly to STDERR rather than via trigger_error so the
+            // message is unconditional and not subject to error handlers
+            // installed by the test framework.
+            fwrite(STDERR, $message);
         }
-        $topLevelKeys = [];
-        foreach (array_keys($responseBody) as $key) {
-            if (is_string($key)) {
-                $topLevelKeys[] = $key;
-            }
-        }
-        StrictRequiredTracker::record(
-            $specName,
-            $method,
-            $matchedPath,
-            $statusKey,
-            $matchedContentType ?? StrictRequiredTracker::ANY_CONTENT_TYPE,
-            $topLevelKeys,
-        );
     }
 
     /**

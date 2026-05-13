@@ -182,6 +182,7 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
 
         $reports = StrictRequiredAsserter::detectAll($this->strictRequiredMode);
         $unresolved = StrictRequiredAsserter::detectUnresolvedGroups($this->strictRequiredMode);
+        $unwalkable = StrictRequiredAsserter::detectUnwalkableNodes($this->strictRequiredMode);
 
         if ($unresolved !== []) {
             // Validator only records on Success, so reaching this branch
@@ -192,6 +193,18 @@ final readonly class CoverageReportSubscriber implements ExecutionFinishedSubscr
                 "[OpenAPI Strict Required] NOTE: %d observation group(s) had no matching response schema; skipped from drift detection:\n  - %s\n",
                 count($unresolved),
                 implode("\n  - ", $unresolved),
+            ));
+        }
+
+        if ($unwalkable !== []) {
+            // Pointers landed on schema nodes (anyOf / oneOf) where
+            // "required" has no AND-semantic; "add to required" drift
+            // advice would actively mislead. Surface as a NOTE so users
+            // can pin those shapes via `allOf` or accept the gap.
+            $this->writeStderr(sprintf(
+                "[OpenAPI Strict Required] NOTE: %d observation pointer(s) landed on disjunction (anyOf/oneOf) schema nodes; skipped from drift detection because `required` is not safely AND-mergeable across disjunctions. Pin the shape with `allOf` if you need strict_required coverage there:\n  - %s\n",
+                count($unwalkable),
+                implode("\n  - ", $unwalkable),
             ));
         }
 
