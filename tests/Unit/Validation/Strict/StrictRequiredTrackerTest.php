@@ -11,26 +11,23 @@ use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
 
 final class StrictRequiredTrackerTest extends TestCase
 {
+    private StrictRequiredTracker $tracker;
+
     protected function setUp(): void
     {
         parent::setUp();
-        StrictRequiredTracker::reset();
-    }
-
-    protected function tearDown(): void
-    {
-        StrictRequiredTracker::reset();
-        parent::tearDown();
+        // Issue #229: per-test tracker instance — no global reset needed.
+        $this->tracker = new StrictRequiredTracker();
     }
 
     #[Test]
     public function single_observation_keeps_full_pointer_map(): void
     {
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['a', 'b', 'c'],
         ]);
 
-        $observations = StrictRequiredTracker::getObservations('front');
+        $observations = $this->tracker->getObservationsOn('front');
         $this->assertSame(
             [
                 'GET /x' => [
@@ -44,13 +41,13 @@ final class StrictRequiredTrackerTest extends TestCase
     #[Test]
     public function multiple_observations_intersect_keys_at_each_pointer(): void
     {
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['a', 'b', 'c'],
         ]);
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['a', 'b'],
         ]);
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['a', 'b', 'd'],
         ]);
 
@@ -60,17 +57,17 @@ final class StrictRequiredTrackerTest extends TestCase
                     '200:application/json' => ['hits' => 3, 'pointers' => ['/' => ['a', 'b']]],
                 ],
             ],
-            StrictRequiredTracker::getObservations('front'),
+            $this->tracker->getObservationsOn('front'),
         );
     }
 
     #[Test]
     public function empty_body_observation_keeps_pointer_with_empty_key_list(): void
     {
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['a', 'b'],
         ]);
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => [],
         ]);
 
@@ -80,19 +77,19 @@ final class StrictRequiredTrackerTest extends TestCase
                     '200:application/json' => ['hits' => 2, 'pointers' => ['/' => []]],
                 ],
             ],
-            StrictRequiredTracker::getObservations('front'),
+            $this->tracker->getObservationsOn('front'),
         );
     }
 
     #[Test]
     public function nested_pointers_are_tracked_independently_per_pointer(): void
     {
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['data'],
             '/data' => ['id', 'name', 'created_at'],
             '/data/tags[*]' => ['t'],
         ]);
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['data'],
             '/data' => ['id', 'name', 'created_at', 'extra'],
             '/data/tags[*]' => ['t'],
@@ -111,7 +108,7 @@ final class StrictRequiredTrackerTest extends TestCase
                     ],
                 ],
             ],
-            StrictRequiredTracker::getObservations('front'),
+            $this->tracker->getObservationsOn('front'),
         );
     }
 
@@ -121,11 +118,11 @@ final class StrictRequiredTrackerTest extends TestCase
         // obs#1 has /items[*]; obs#2 has empty items array (no [*] pointer
         // emitted by the walker). The cross-observation rule must drop the
         // pointer entirely — "always observed" requires the pointer itself.
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['items'],
             '/items[*]' => ['id', 'name'],
         ]);
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['items'],
         ]);
 
@@ -138,17 +135,17 @@ final class StrictRequiredTrackerTest extends TestCase
                     ],
                 ],
             ],
-            StrictRequiredTracker::getObservations('front'),
+            $this->tracker->getObservationsOn('front'),
         );
     }
 
     #[Test]
     public function pointer_only_in_second_observation_is_dropped(): void
     {
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['items'],
         ]);
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['items'],
             '/items[*]' => ['id'],
         ]);
@@ -162,15 +159,15 @@ final class StrictRequiredTrackerTest extends TestCase
                     ],
                 ],
             ],
-            StrictRequiredTracker::getObservations('front'),
+            $this->tracker->getObservationsOn('front'),
         );
     }
 
     #[Test]
     public function different_status_keys_are_independent(): void
     {
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', ['/' => ['a']]);
-        StrictRequiredTracker::record('front', 'GET', '/x', '404', 'application/json', ['/' => ['error']]);
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', ['/' => ['a']]);
+        $this->tracker->recordOn('front', 'GET', '/x', '404', 'application/json', ['/' => ['error']]);
 
         $this->assertSame(
             [
@@ -179,15 +176,15 @@ final class StrictRequiredTrackerTest extends TestCase
                     '404:application/json' => ['hits' => 1, 'pointers' => ['/' => ['error']]],
                 ],
             ],
-            StrictRequiredTracker::getObservations('front'),
+            $this->tracker->getObservationsOn('front'),
         );
     }
 
     #[Test]
     public function different_content_types_are_independent(): void
     {
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', ['/' => ['a']]);
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/problem+json', ['/' => ['detail']]);
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', ['/' => ['a']]);
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/problem+json', ['/' => ['detail']]);
 
         $this->assertSame(
             [
@@ -196,81 +193,81 @@ final class StrictRequiredTrackerTest extends TestCase
                     '200:application/problem+json' => ['hits' => 1, 'pointers' => ['/' => ['detail']]],
                 ],
             ],
-            StrictRequiredTracker::getObservations('front'),
+            $this->tracker->getObservationsOn('front'),
         );
     }
 
     #[Test]
     public function different_specs_are_independent(): void
     {
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', ['/' => ['a']]);
-        StrictRequiredTracker::record('admin', 'GET', '/x', '200', 'application/json', ['/' => ['b']]);
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', ['/' => ['a']]);
+        $this->tracker->recordOn('admin', 'GET', '/x', '200', 'application/json', ['/' => ['b']]);
 
         $this->assertSame(
             ['GET /x' => ['200:application/json' => ['hits' => 1, 'pointers' => ['/' => ['a']]]]],
-            StrictRequiredTracker::getObservations('front'),
+            $this->tracker->getObservationsOn('front'),
         );
         $this->assertSame(
             ['GET /x' => ['200:application/json' => ['hits' => 1, 'pointers' => ['/' => ['b']]]]],
-            StrictRequiredTracker::getObservations('admin'),
+            $this->tracker->getObservationsOn('admin'),
         );
     }
 
     #[Test]
     public function record_normalises_method_to_uppercase(): void
     {
-        StrictRequiredTracker::record('front', 'get', '/x', '200', 'application/json', ['/' => ['a']]);
+        $this->tracker->recordOn('front', 'get', '/x', '200', 'application/json', ['/' => ['a']]);
 
-        $this->assertArrayHasKey('GET /x', StrictRequiredTracker::getObservations('front'));
+        $this->assertArrayHasKey('GET /x', $this->tracker->getObservationsOn('front'));
     }
 
     #[Test]
     public function record_normalises_pointer_lists_to_sorted_unique(): void
     {
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['z', 'a', 'a', 'm'],
         ]);
 
         $this->assertSame(
             ['GET /x' => ['200:application/json' => ['hits' => 1, 'pointers' => ['/' => ['a', 'm', 'z']]]]],
-            StrictRequiredTracker::getObservations('front'),
+            $this->tracker->getObservationsOn('front'),
         );
     }
 
     #[Test]
     public function reset_clears_all_specs(): void
     {
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', ['/' => ['a']]);
-        StrictRequiredTracker::record('admin', 'GET', '/y', '200', 'application/json', ['/' => ['b']]);
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', ['/' => ['a']]);
+        $this->tracker->recordOn('admin', 'GET', '/y', '200', 'application/json', ['/' => ['b']]);
 
-        StrictRequiredTracker::reset();
+        $this->tracker->resetOn();
 
-        $this->assertSame([], StrictRequiredTracker::getObservations('front'));
-        $this->assertSame([], StrictRequiredTracker::getObservations('admin'));
+        $this->assertSame([], $this->tracker->getObservationsOn('front'));
+        $this->assertSame([], $this->tracker->getObservationsOn('admin'));
     }
 
     #[Test]
     public function export_and_import_round_trip_with_nested_pointers(): void
     {
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['data'],
             '/data' => ['id', 'name'],
         ]);
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['data'],
             '/data' => ['id', 'name', 'extra'],
         ]);
-        StrictRequiredTracker::record('front', 'POST', '/y', '201', 'application/json', [
+        $this->tracker->recordOn('front', 'POST', '/y', '201', 'application/json', [
             '/' => ['id'],
         ]);
 
-        $exported = StrictRequiredTracker::exportState();
+        $exported = $this->tracker->exportStateOn();
         $this->assertSame(2, $exported['version']);
 
-        StrictRequiredTracker::reset();
-        $this->assertSame([], StrictRequiredTracker::getObservations('front'));
+        $sink = new StrictRequiredTracker();
+        $this->assertSame([], $sink->getObservationsOn('front'));
 
-        StrictRequiredTracker::importState($exported);
+        $sink->importStateOn($exported);
 
         $this->assertSame(
             [
@@ -287,19 +284,19 @@ final class StrictRequiredTrackerTest extends TestCase
                     '201:application/json' => ['hits' => 1, 'pointers' => ['/' => ['id']]],
                 ],
             ],
-            StrictRequiredTracker::getObservations('front'),
+            $sink->getObservationsOn('front'),
         );
     }
 
     #[Test]
     public function import_unions_with_existing_via_intersection(): void
     {
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['a', 'b', 'c'],
             '/nested' => ['x', 'y'],
         ]);
 
-        StrictRequiredTracker::importState([
+        $this->tracker->importStateOn([
             'version' => 2,
             'observations' => [
                 'front' => [
@@ -328,19 +325,19 @@ final class StrictRequiredTrackerTest extends TestCase
                     ],
                 ],
             ],
-            StrictRequiredTracker::getObservations('front'),
+            $this->tracker->getObservationsOn('front'),
         );
     }
 
     #[Test]
     public function import_drops_pointer_absent_on_one_side(): void
     {
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['a'],
             '/items[*]' => ['id', 'name'],
         ]);
 
-        StrictRequiredTracker::importState([
+        $this->tracker->importStateOn([
             'version' => 2,
             'observations' => [
                 'front' => [
@@ -363,7 +360,7 @@ final class StrictRequiredTrackerTest extends TestCase
                     ],
                 ],
             ],
-            StrictRequiredTracker::getObservations('front'),
+            $this->tracker->getObservationsOn('front'),
         );
     }
 
@@ -373,7 +370,7 @@ final class StrictRequiredTrackerTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Unsupported strict_required state version');
 
-        StrictRequiredTracker::importState([
+        $this->tracker->importStateOn([
             'version' => 99,
             'observations' => [],
         ]);
@@ -388,7 +385,7 @@ final class StrictRequiredTrackerTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Unsupported strict_required state version: got 1, expected 2');
 
-        StrictRequiredTracker::importState([
+        $this->tracker->importStateOn([
             'version' => 1,
             'observations' => [
                 'front' => ['GET /x' => ['200:application/json' => ['hits' => 1, 'alwaysPresent' => ['a']]]],
@@ -402,7 +399,7 @@ final class StrictRequiredTrackerTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('list<string>');
 
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['a', 42, 'c'],
         ]);
     }
@@ -413,7 +410,7 @@ final class StrictRequiredTrackerTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('non-empty string pointers');
 
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '' => ['a'],
         ]);
     }
@@ -424,7 +421,7 @@ final class StrictRequiredTrackerTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('"observations" object');
 
-        StrictRequiredTracker::importState(['version' => 2]);
+        $this->tracker->importStateOn(['version' => 2]);
     }
 
     #[Test]
@@ -433,7 +430,7 @@ final class StrictRequiredTrackerTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('integer hits >= 1');
 
-        StrictRequiredTracker::importState([
+        $this->tracker->importStateOn([
             'version' => 2,
             'observations' => [
                 'front' => ['GET /x' => ['200:application/json' => ['hits' => 0, 'pointers' => []]]],
@@ -447,7 +444,7 @@ final class StrictRequiredTrackerTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('entries must be strings');
 
-        StrictRequiredTracker::importState([
+        $this->tracker->importStateOn([
             'version' => 2,
             'observations' => [
                 'front' => ['GET /x' => ['200:application/json' => [
@@ -466,7 +463,7 @@ final class StrictRequiredTrackerTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('v1 "alwaysPresent" field');
 
-        StrictRequiredTracker::importState([
+        $this->tracker->importStateOn([
             'version' => 2,
             'observations' => [
                 'front' => ['GET /x' => ['200:application/json' => [
@@ -482,7 +479,7 @@ final class StrictRequiredTrackerTest extends TestCase
     {
         // Two-pass validation invariant: a malformed entry deep in the
         // payload must not leave the tracker in a partially-merged state.
-        StrictRequiredTracker::record('front', 'GET', '/x', '200', 'application/json', [
+        $this->tracker->recordOn('front', 'GET', '/x', '200', 'application/json', [
             '/' => ['a', 'b'],
         ]);
 
@@ -501,7 +498,7 @@ final class StrictRequiredTrackerTest extends TestCase
         ];
 
         try {
-            StrictRequiredTracker::importState($payload);
+            $this->tracker->importStateOn($payload);
             $this->fail('expected InvalidArgumentException');
         } catch (InvalidArgumentException) {
             // expected
@@ -513,8 +510,8 @@ final class StrictRequiredTrackerTest extends TestCase
                     '200:application/json' => ['hits' => 1, 'pointers' => ['/' => ['a', 'b']]],
                 ],
             ],
-            StrictRequiredTracker::getObservations('front'),
+            $this->tracker->getObservationsOn('front'),
         );
-        $this->assertSame([], StrictRequiredTracker::getObservations('admin'));
+        $this->assertSame([], $this->tracker->getObservationsOn('admin'));
     }
 }

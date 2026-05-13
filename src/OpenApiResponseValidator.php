@@ -43,6 +43,7 @@ final class OpenApiResponseValidator
     private readonly ResponseBodyValidator $bodyValidator;
     private readonly ResponseHeaderValidator $headerValidator;
     private readonly StatusCodePatternSet $skipPatterns;
+    private readonly ?StrictRequiredTracker $strictRequiredTracker;
 
     /**
      * @param string[] $skipResponseCodes Regex patterns (without delimiters or
@@ -50,15 +51,28 @@ final class OpenApiResponseValidator
      *                                    short-circuits validation and returns an `OpenApiValidationResult::skipped()`
      *                                    — isValid() stays true, isSkipped() becomes true, and the matched
      *                                    path is still reported so coverage is recorded.
+     * @param null|StrictRequiredTracker $strictRequiredTracker Optional injected tracker (Issue #229). When
+     *                                                          omitted, recording falls back to
+     *                                                          {@see StrictRequiredTracker::current()}, which
+     *                                                          the PHPUnit extension installs at bootstrap.
+     *                                                          The Laravel `ValidatesOpenApiSchema` trait
+     *                                                          caches one validator per config without
+     *                                                          injecting anything, so the fallback is the
+     *                                                          common production path; tests or framework
+     *                                                          adapters can pass an instance directly to
+     *                                                          assert against without touching the
+     *                                                          process-global locator.
      */
     public function __construct(
         int $maxErrors = 20,
         array $skipResponseCodes = self::DEFAULT_SKIP_RESPONSE_CODES,
+        ?StrictRequiredTracker $strictRequiredTracker = null,
     ) {
         $this->skipPatterns = new StatusCodePatternSet($skipResponseCodes, 'skipResponseCodes');
         $runner = new SchemaValidatorRunner($maxErrors);
         $this->bodyValidator = new ResponseBodyValidator($runner);
         $this->headerValidator = new ResponseHeaderValidator($runner);
+        $this->strictRequiredTracker = $strictRequiredTracker;
     }
 
     /**
@@ -286,9 +300,10 @@ final class OpenApiResponseValidator
             return;
         }
         $contentTypeKey = $matchedContentType ?? StrictRequiredTracker::ANY_CONTENT_TYPE;
+        $tracker = $this->strictRequiredTracker ?? StrictRequiredTracker::current();
 
         try {
-            StrictRequiredTracker::record(
+            $tracker->recordOn(
                 $specName,
                 $method,
                 $matchedPath,
