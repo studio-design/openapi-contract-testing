@@ -249,20 +249,41 @@ final class StrictRequiredAsserterTest extends TestCase
     }
 
     #[Test]
-    public function any_of_top_level_schema_yields_noisy_drift_report(): void
+    public function any_of_top_level_schema_yields_unwalkable_note_not_drift(): void
     {
-        // Documented limitation pinned: anyOf nodes are NOT descended into
-        // (no AND-semantic for required across disjunctions). The collected
-        // required at this pointer stays `[]` and every always-present key
-        // surfaces as drift.
+        // anyOf nodes are NOT descended into (no AND-semantic for required
+        // across disjunctions). Rather than emit misleading "add to
+        // required" drift advice, the asserter surfaces these as an
+        // unwalkable NOTE that the subscriber renders separately.
         StrictRequiredTracker::record(self::SPEC_NAME, 'GET', '/either-shape', '200', 'application/json', [
             '/' => ['a', 'b'],
         ]);
 
-        $reports = StrictRequiredAsserter::detectAll(StrictRequiredMode::Warn);
-        $this->assertCount(1, $reports);
-        $this->assertSame(['a', 'b'], $reports[0]->missingFromRequired);
-        $this->assertSame('/', $reports[0]->schemaPointer);
+        $this->assertSame([], StrictRequiredAsserter::detectAll(StrictRequiredMode::Warn));
+
+        $unwalkable = StrictRequiredAsserter::detectUnwalkableNodes(StrictRequiredMode::Warn);
+        $this->assertCount(1, $unwalkable);
+        $this->assertStringContainsString('GET /either-shape', $unwalkable[0]);
+        $this->assertStringContainsString('anyOf', $unwalkable[0]);
+    }
+
+    #[Test]
+    public function one_of_top_level_schema_yields_unwalkable_note_not_drift(): void
+    {
+        // Symmetric pin for `oneOf` — same descent-stop rationale as
+        // `anyOf`. Without this, a future refactor that accidentally added
+        // `oneOf` handling to inferShape() / collectPropertyBranches()
+        // would silently change drift output for every oneOf-rooted spec.
+        StrictRequiredTracker::record(self::SPEC_NAME, 'GET', '/either-shape-oneof', '200', 'application/json', [
+            '/' => ['a', 'b'],
+        ]);
+
+        $this->assertSame([], StrictRequiredAsserter::detectAll(StrictRequiredMode::Warn));
+
+        $unwalkable = StrictRequiredAsserter::detectUnwalkableNodes(StrictRequiredMode::Warn);
+        $this->assertCount(1, $unwalkable);
+        $this->assertStringContainsString('GET /either-shape-oneof', $unwalkable[0]);
+        $this->assertStringContainsString('oneOf', $unwalkable[0]);
     }
 
     #[Test]
@@ -368,6 +389,71 @@ final class StrictRequiredAsserterTest extends TestCase
         // Sort with PHP's ksort-like semantics — expectation is `/` first,
         // then `/meta`, then `/rows[*]` alphabetically.
         $this->assertSame(['/', '/meta', '/rows[*]'], $pointers);
+    }
+
+    #[Test]
+    public function additional_properties_schema_is_not_walked(): void
+    {
+        // /dict declares `entries` with additionalProperties carrying a
+        // schema requiring `id`. Observations under any dynamic key
+        // (e.g. /entries/foo) must NOT find a `walked` entry — the
+        // asserter deliberately treats additionalProperties as out-of-
+        // scope. The observed pointer then either lands in drift (when
+        // ancestor is walked but the property itself is undeclared) or in
+        // unresolved. This pins that no false "matches required" path
+        // accidentally walks additionalProperties.
+        StrictRequiredTracker::record(self::SPEC_NAME, 'GET', '/dict', '200', 'application/json', [
+            '/' => ['entries'],
+            '/entries' => ['foo'],
+            '/entries/foo' => ['id', 'label'],
+        ]);
+
+        $reports = StrictRequiredAsserter::detectAll(StrictRequiredMode::Warn);
+
+        // /entries observes the dynamic key `foo`. spec's /entries node
+        // requires nothing (no required, no declared properties), so
+        // `foo` surfaces as drift. /entries/foo is not in `walked` (we do
+        // not descend additionalProperties), so all observed keys at that
+        // pointer also surface as drift. Verify neither `id` nor `label`
+        // are silently absolved by the additionalProperties' required: ["id"].
+        $pointers = array_map(static fn($r) => $r->schemaPointer, $reports);
+        $this->assertContains('/entries', $pointers);
+        $this->assertContains('/entries/foo', $pointers);
+
+        // The /entries/foo report must list BOTH id and label as missing
+        // — if the asserter had walked additionalProperties, only `label`
+        // would surface (because additionalProperties.required has "id").
+        foreach ($reports as $r) {
+            if ($r->schemaPointer === '/entries/foo') {
+                $this->assertSame(['id', 'label'], $r->missingFromRequired);
+
+                return;
+            }
+        }
+        $this->fail('expected a drift report at /entries/foo');
+    }
+
+    #[Test]
+    public function spec_load_failure_surfaces_cause_in_unresolved_diagnostic(): void
+    {
+        // Tracker has observations against a spec that vanishes between
+        // bootstrap and assertion. The asserter's catch block must (a)
+        // emit unresolved entries (no drift can be computed) and (b)
+        // include the load failure's message so the user knows the spec
+        // file is the cause — not a strict_required bug.
+        StrictRequiredTracker::record('does-not-exist', 'GET', '/x', '200', 'application/json', [
+            '/' => ['a'],
+        ]);
+
+        $unresolved = StrictRequiredAsserter::detectUnresolvedGroups(StrictRequiredMode::Warn);
+
+        $this->assertCount(1, $unresolved);
+        $this->assertStringContainsString('does-not-exist', $unresolved[0]);
+        $this->assertStringContainsString('GET /x', $unresolved[0]);
+        $this->assertStringContainsString('spec failed to load', $unresolved[0]);
+
+        // No drift report for an unloadable spec.
+        $this->assertSame([], StrictRequiredAsserter::detectAll(StrictRequiredMode::Warn));
     }
 
     #[Test]

@@ -63,11 +63,8 @@ final class StrictRequiredBodyWalker
 
         $out = [];
         if ($body === [] || !array_is_list($body)) {
-            // Object root (including empty {}). Pointer starts at "/".
             self::walkObject($body, '/', $out);
         } else {
-            // Non-empty list root: walk under the bare "[*]" pointer so
-            // children come out as "[*]/foo" etc.
             self::walkList($body, '', $out);
         }
 
@@ -144,9 +141,9 @@ final class StrictRequiredBodyWalker
                 continue;
             }
 
-            // Object-shape element (including empty `{}` which we treat
-            // as empty object — consistent with the root-`{}` semantic
-            // used by the validator pre-#227).
+            // Object-shape element (including empty `{}`, treated as
+            // empty object consistent with the validator's stdClass
+            // coercion at the root).
             $sawObjectElement = true;
             $thisElementKeys = [];
             foreach (array_keys($element) as $key) {
@@ -167,19 +164,23 @@ final class StrictRequiredBodyWalker
             }
         }
 
-        if (!$sawObjectElement) {
-            // Pure scalar / nested-list list — no object structure to compare
-            // against `required`. Skip recording the `[*]` pointer entirely.
-            return;
+        $elementCount = count($elementKeySets);
+        if ($sawObjectElement) {
+            // At least one element contributed object keys — record the
+            // `[*]` pointer with their intersection. A pure scalar / nested-
+            // list list skips this row (no object structure to diff against
+            // `required` at the immediate level), but child observations
+            // gathered below still propagate.
+            $out[$starPointer] = self::intersectAll($elementKeySets);
         }
 
-        $out[$starPointer] = self::intersectAll($elementKeySets);
-
-        $elementCount = count($elementKeySets);
         foreach ($childKeySetsByPointer as $childPointer => $sets) {
-            // A child pointer is "always observed" only when every element
-            // contributed it. If fewer sets exist than elements, the missing
-            // elements implicitly contributed zero keys → intersection is [].
+            // Partial-presence rule: a child pointer is "always observed"
+            // only when every element contributed it. Marking a
+            // sometimes-present nested object as always-present would
+            // falsely flag drift; collapsing to `[]` here lets the
+            // tracker's cross-response intersection drop the pointer if
+            // other responses also lacked it.
             if (count($sets) < $elementCount) {
                 $out[$childPointer] = [];
 

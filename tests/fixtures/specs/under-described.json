@@ -127,11 +127,30 @@
       "get": {
         "responses": {
           "200": {
-            "description": "anyOf top-level — strict_required intentionally yields noisy report here",
+            "description": "anyOf top-level — descent stops; surfaces as unwalkable NOTE not drift",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
+                    { "type": "object", "required": ["a"], "properties": { "a": { "type": "string" } } },
+                    { "type": "object", "required": ["b"], "properties": { "b": { "type": "string" } } }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/either-shape-oneof": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "oneOf top-level — pinned parallel to /either-shape so a refactor adding oneOf descent fails loudly",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
                     { "type": "object", "required": ["a"], "properties": { "a": { "type": "string" } } },
                     { "type": "object", "required": ["b"], "properties": { "b": { "type": "string" } } }
                   ]
@@ -211,6 +230,36 @@
                           "id":         { "type": "string" },
                           "name":       { "type": "string" },
                           "created_at": { "type": "string", "format": "date-time" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dict": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "ok; additionalProperties carries a schema with required — strict_required deliberately does NOT walk into additionalProperties",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["entries"],
+                  "properties": {
+                    "entries": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": ["id"],
+                        "properties": {
+                          "id":    { "type": "string" },
+                          "label": { "type": "string" }
                         }
                       }
                     }

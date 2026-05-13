@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
+use const STDERR;
+
+use InvalidArgumentException;
 use RuntimeException;
 use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
@@ -20,10 +23,12 @@ use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
 
 use function array_keys;
 use function array_merge;
+use function fwrite;
 use function get_debug_type;
 use function is_array;
 use function sprintf;
 use function strtolower;
+use function strtoupper;
 
 final class OpenApiResponseValidator
 {
@@ -265,14 +270,40 @@ final class OpenApiResponseValidator
         if ($pointers === []) {
             return;
         }
-        StrictRequiredTracker::record(
-            $specName,
-            $method,
-            $matchedPath,
-            $statusKey,
-            $matchedContentType ?? StrictRequiredTracker::ANY_CONTENT_TYPE,
-            $pointers,
-        );
+
+        try {
+            StrictRequiredTracker::record(
+                $specName,
+                $method,
+                $matchedPath,
+                $statusKey,
+                $matchedContentType ?? StrictRequiredTracker::ANY_CONTENT_TYPE,
+                $pointers,
+            );
+        } catch (InvalidArgumentException $e) {
+            // The walker's contract is "every value is a list of strings,
+            // every key is a non-empty pointer string." A throw here means
+            // the walker produced something malformed — a library bug, not
+            // a user-test failure. Failing the actual test with this
+            // exception would blame the user for our regression. Emit a
+            // one-shot stderr WARNING with a clear library-bug prefix and
+            // disable strict_required for this observation; the rest of the
+            // test continues normally.
+            $message = sprintf(
+                '[OpenAPI Strict Required] LIBRARY BUG: walker produced malformed pointer map for %s %s %s; '
+                . 'strict_required recording skipped for this observation. Please report at '
+                . 'https://github.com/studio-design/openapi-contract-testing/issues '
+                . "with the cause: %s\n",
+                strtoupper($method),
+                $matchedPath,
+                $statusKey,
+                $e->getMessage(),
+            );
+            // Write directly to STDERR rather than via trigger_error so the
+            // message is unconditional and not subject to error handlers
+            // installed by the test framework.
+            fwrite(STDERR, $message);
+        }
     }
 
     /**

@@ -163,6 +163,32 @@ final class StrictRequiredBodyWalkerTest extends TestCase
     }
 
     #[Test]
+    public function partial_presence_of_nested_object_under_star_collapses_to_empty(): void
+    {
+        // Some items[*] have `meta`, others don't. The walker collapses
+        // the `/items[*]/meta` pointer's intersection to `[]` because the
+        // child set was contributed by fewer elements than the parent
+        // observed. This pins the partial-presence branch — a future
+        // change here could silently treat sometimes-present nested
+        // objects as always-present.
+        $pointers = StrictRequiredBodyWalker::collectPointers([
+            'items' => [
+                ['id' => '1', 'meta' => ['created_at' => 't1', 'flag' => true]],
+                ['id' => '2'],
+            ],
+        ]);
+
+        $this->assertSame(
+            [
+                '/' => ['items'],
+                '/items[*]' => ['id'],
+                '/items[*]/meta' => [],
+            ],
+            $pointers,
+        );
+    }
+
+    #[Test]
     public function skips_pointer_for_empty_array(): void
     {
         $pointers = StrictRequiredBodyWalker::collectPointers([
@@ -205,6 +231,45 @@ final class StrictRequiredBodyWalkerTest extends TestCase
                 '/data/rows[*]' => ['id', 'tags'],
                 '/data/rows[*]/tags[*]' => ['t'],
             ],
+            $pointers,
+        );
+    }
+
+    #[Test]
+    public function nested_arrays_of_objects_propagate_observations_through_outer_list(): void
+    {
+        // Outer list contains lists of objects only — no object element at
+        // the outer level. The inner-level observations under
+        // `/matrix[*][*]` must still propagate; without that, a body shaped
+        // like a 2D matrix of objects would lose every nested observation.
+        $pointers = StrictRequiredBodyWalker::collectPointers([
+            'matrix' => [
+                [['a' => 1, 'b' => 2], ['a' => 1, 'b' => 2]],
+                [['a' => 1, 'b' => 2]],
+            ],
+        ]);
+
+        $this->assertSame(
+            [
+                '/' => ['matrix'],
+                '/matrix[*][*]' => ['a', 'b'],
+            ],
+            $pointers,
+        );
+    }
+
+    #[Test]
+    public function root_array_of_arrays_of_objects_propagates_inner_observations(): void
+    {
+        // Same bug class as above but at the root: every outer element is
+        // a list. Without propagation the entire body returns `[]`.
+        $pointers = StrictRequiredBodyWalker::collectPointers([
+            [['id' => '1', 'name' => 'a']],
+            [['id' => '2', 'name' => 'b']],
+        ]);
+
+        $this->assertSame(
+            ['[*][*]' => ['id', 'name']],
             $pointers,
         );
     }

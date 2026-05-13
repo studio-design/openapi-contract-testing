@@ -26,6 +26,7 @@ use function ksort;
 use function sort;
 use function sprintf;
 use function str_replace;
+use function str_starts_with;
 use function strpos;
 use function strtolower;
 use function strtoupper;
@@ -134,6 +135,29 @@ final class StrictRequiredAsserter
     }
 
     /**
+     * Diagnostic accessor: observation pointers that fell under a schema
+     * node where descent could not proceed safely — `anyOf` / `oneOf` /
+     * scalar / malformed nodes. `required` has no AND-semantic at a
+     * disjunction node, so producing "add to `required`" drift advice for
+     * these would be actively misleading; the subscriber surfaces them as
+     * a NOTE instead.
+     *
+     * Observed pointers under a property that the spec does NOT declare
+     * (e.g. impl returns a field never mentioned in `properties`) still
+     * surface as drift — only the disjunction / unresolved-schema case
+     * lands here.
+     *
+     * @return list<string> identifiers in the form
+     *                      `"specName :: METHOD path :: statusKey:contentTypeKey:pointer (reason)"`
+     *
+     * @internal Consumed by {@see CoverageReportSubscriber}.
+     */
+    public static function detectUnwalkableNodes(StrictRequiredMode $mode): array
+    {
+        return self::analyse($mode)['unwalkable'];
+    }
+
+    /**
      * Render the diagnostic block describing every drifting endpoint.
      *
      * @param list<StrictRequiredReport> $reports
@@ -180,16 +204,17 @@ final class StrictRequiredAsserter
     }
 
     /**
-     * @return array{reports: list<StrictRequiredReport>, unresolved: list<string>}
+     * @return array{reports: list<StrictRequiredReport>, unresolved: list<string>, unwalkable: list<string>}
      */
     private static function analyse(StrictRequiredMode $mode): array
     {
         if ($mode === StrictRequiredMode::Off) {
-            return ['reports' => [], 'unresolved' => []];
+            return ['reports' => [], 'unresolved' => [], 'unwalkable' => []];
         }
 
         $reports = [];
         $unresolved = [];
+        $unwalkable = [];
         foreach (StrictRequiredTracker::recordedSpecs() as $specName) {
             $spec = self::reportsForSpec($specName);
             foreach ($spec['reports'] as $report) {
@@ -198,41 +223,56 @@ final class StrictRequiredAsserter
             foreach ($spec['unresolved'] as $u) {
                 $unresolved[] = $u;
             }
+            foreach ($spec['unwalkable'] as $u) {
+                $unwalkable[] = $u;
+            }
         }
+        sort($unresolved);
+        sort($unwalkable);
 
-        return ['reports' => $reports, 'unresolved' => $unresolved];
+        return ['reports' => $reports, 'unresolved' => $unresolved, 'unwalkable' => $unwalkable];
     }
 
     /**
-     * @return array{reports: list<StrictRequiredReport>, unresolved: list<string>}
+     * @return array{reports: list<StrictRequiredReport>, unresolved: list<string>, unwalkable: list<string>}
      */
     private static function reportsForSpec(string $specName): array
     {
         $observations = StrictRequiredTracker::getObservations($specName);
         if ($observations === []) {
-            return ['reports' => [], 'unresolved' => []];
+            return ['reports' => [], 'unresolved' => [], 'unwalkable' => []];
         }
 
         try {
             $spec = OpenApiSpecLoader::load($specName);
-        } catch (InvalidOpenApiSpecException|SpecFileNotFoundException) {
-            // Mirror CoverageReportSubscriber::computeAllResults() —
-            // a spec file unlinked between bootstrap and ExecutionFinished
-            // is not the asserter's problem to escalate; coverage reporting
-            // handles that channel. Treat all observations for this spec as
-            // unresolved so the diagnostic at least surfaces.
+        } catch (InvalidOpenApiSpecException|SpecFileNotFoundException $e) {
+            // A spec file unlinked or rewritten between bootstrap and
+            // ExecutionFinished is not the asserter's job to escalate
+            // (coverage reporting handles that channel) — but if we
+            // silently dropped the observations, the user would see "no
+            // drift" with no clue that the spec itself is the cause.
+            // Degrade to an unresolved NOTE per observation, carrying the
+            // load failure message so the diagnostic points at the spec
+            // not at strict_required.
             $unresolvedAll = [];
             foreach ($observations as $endpointKey => $responses) {
                 foreach (array_keys($responses) as $responseKey) {
-                    $unresolvedAll[] = sprintf('%s :: %s :: %s', $specName, $endpointKey, $responseKey);
+                    $unresolvedAll[] = sprintf(
+                        '%s :: %s :: %s (spec failed to load: %s)',
+                        $specName,
+                        $endpointKey,
+                        $responseKey,
+                        $e->getMessage(),
+                    );
                 }
             }
 
-            return ['reports' => [], 'unresolved' => $unresolvedAll];
+            return ['reports' => [], 'unresolved' => $unresolvedAll, 'unwalkable' => []];
         }
 
         $reports = [];
         $unresolved = [];
+        $unwalkable = [];
         foreach ($observations as $endpointKey => $responses) {
             [$method, $path] = self::splitEndpointKey($endpointKey);
             foreach ($responses as $responseKey => $row) {
@@ -258,7 +298,9 @@ final class StrictRequiredAsserter
                     continue;
                 }
 
-                $specByPointer = self::collectRequiredByPointer($schemaNode);
+                $analysis = self::collectRequiredByPointer($schemaNode);
+                $walked = $analysis['walked'];
+                $disjunctions = $analysis['disjunctions'];
 
                 // Sort the observed pointers so generated reports are
                 // deterministic — useful for snapshot-style assertions and
@@ -267,7 +309,26 @@ final class StrictRequiredAsserter
                 ksort($pointers);
 
                 foreach ($pointers as $pointer => $alwaysPresent) {
-                    $specRequired = $specByPointer[$pointer] ?? [];
+                    $disjunction = self::findCoveringDisjunction($pointer, $disjunctions);
+                    if ($disjunction !== null) {
+                        // The spec node at (or above) this pointer is a
+                        // disjunction (`anyOf` / `oneOf`); the "add to
+                        // required" advice does not apply. Surface as a
+                        // NOTE separately from drift reports.
+                        $unwalkable[] = sprintf(
+                            '%s :: %s :: %s:%s (%s at %s)',
+                            $specName,
+                            $endpointKey,
+                            $responseKey,
+                            $pointer,
+                            $disjunction['reason'],
+                            $disjunction['pointer'] === '' ? '<root>' : $disjunction['pointer'],
+                        );
+
+                        continue;
+                    }
+
+                    $specRequired = $walked[$pointer] ?? [];
                     $missing = array_values(array_diff($alwaysPresent, $specRequired));
                     if ($missing === []) {
                         continue;
@@ -288,7 +349,36 @@ final class StrictRequiredAsserter
             }
         }
 
-        return ['reports' => $reports, 'unresolved' => $unresolved];
+        return ['reports' => $reports, 'unresolved' => $unresolved, 'unwalkable' => $unwalkable];
+    }
+
+    /**
+     * Return the disjunction descriptor covering an observed pointer, or
+     * `null` if none. An ancestor matches when the observed pointer equals
+     * the disjunction's pointer OR descends from it via a `/` or `[`
+     * separator boundary. A disjunction with an empty pointer (`""`) marks
+     * "root schema is unwalkable" and covers every observation.
+     *
+     * @param list<array{pointer: string, reason: string}> $disjunctions
+     *
+     * @return null|array{pointer: string, reason: string}
+     */
+    private static function findCoveringDisjunction(string $pointer, array $disjunctions): ?array
+    {
+        foreach ($disjunctions as $d) {
+            $dp = $d['pointer'];
+            if ($dp === '') {
+                return $d;
+            }
+            if ($pointer === $dp) {
+                return $d;
+            }
+            if (str_starts_with($pointer, $dp . '/') || str_starts_with($pointer, $dp . '[')) {
+                return $d;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -369,40 +459,59 @@ final class StrictRequiredAsserter
     }
 
     /**
-     * Descend the response schema producing `pointer => required-keys`,
-     * mirroring {@see StrictRequiredBodyWalker::collectPointers()} so that
-     * observed pointers can be looked up directly. `allOf` branches are
-     * unioned at every level; `anyOf` / `oneOf` are NOT descended into
-     * (their `required` cannot be safely AND-merged).
+     * Descend the response schema producing two parallel maps:
+     *  - `walked`: `pointer => required-keys` for each object node reached.
+     *    `allOf` branches are unioned at every level.
+     *  - `disjunctions`: pointers where descent stopped because the node is
+     *    `anyOf` / `oneOf` (no safe AND-semantic for `required` across
+     *    disjunctions). The caller uses this to surface observations under
+     *    these pointers as NOTE rather than misleading drift advice.
+     *
+     * If the root schema itself is unwalkable, the disjunction list carries
+     * an empty-pointer entry meaning "every observation is unwalkable."
      *
      * @param array<string, mixed> $schema
      *
-     * @return array<string, list<string>>
+     * @return array{walked: array<string, list<string>>, disjunctions: list<array{pointer: string, reason: string}>}
      */
     private static function collectRequiredByPointer(array $schema): array
     {
-        $out = [];
+        $walked = [];
+        $disjunctions = [];
+        $rootShape = self::inferShape($schema);
+        if ($rootShape === null) {
+            // Root schema is itself unwalkable (anyOf/oneOf/scalar/empty).
+            // Use an empty-pointer disjunction so any observed pointer
+            // matches; the body could be either object- or array-shaped.
+            $disjunctions[] = [
+                'pointer' => '',
+                'reason' => self::disjunctionReason($schema),
+            ];
+
+            return ['walked' => $walked, 'disjunctions' => $disjunctions];
+        }
         // Root-array schemas use bare `[*]` for their element pointer
         // (matching the walker's root-list convention); object roots start
-        // at `/`. Other shapes do not record at the root.
-        $rootPointer = self::inferShape($schema) === 'array' ? '' : '/';
-        self::descendSchema($schema, $rootPointer, $out);
+        // at `/`.
+        $rootPointer = $rootShape === 'array' ? '' : '/';
+        self::descendSchema($schema, $rootPointer, $walked, $disjunctions);
 
-        return $out;
+        return ['walked' => $walked, 'disjunctions' => $disjunctions];
     }
 
     /**
      * @param array<string, mixed> $schema
-     * @param array<string, list<string>> $out
+     * @param array<string, list<string>> $walked
+     * @param list<array{pointer: string, reason: string}> $disjunctions
      */
-    private static function descendSchema(array $schema, string $pointer, array &$out): void
+    private static function descendSchema(array $schema, string $pointer, array &$walked, array &$disjunctions): void
     {
         $type = self::inferShape($schema);
         if ($type === 'object') {
-            $out[$pointer] = self::collectRequiredFromSchema($schema);
+            $walked[$pointer] = self::collectRequiredFromSchema($schema);
             foreach (self::collectPropertyBranches($schema) as $propName => $propSchema) {
                 $childPointer = self::appendProperty($pointer, $propName);
-                self::descendSchema($propSchema, $childPointer, $out);
+                self::descendSchema($propSchema, $childPointer, $walked, $disjunctions);
             }
 
             return;
@@ -410,15 +519,41 @@ final class StrictRequiredAsserter
         if ($type === 'array') {
             $items = self::collectItemsSchema($schema);
             if ($items !== null) {
-                self::descendSchema($items, $pointer . '[*]', $out);
+                self::descendSchema($items, $pointer . '[*]', $walked, $disjunctions);
             }
 
             return;
         }
-        // type is null (scalar / unknown / anyOf-rooted node) — leave the
-        // pointer absent from $out. Observed-but-unresolved pointers fall
-        // back to `required = []` in the diff loop, which is the documented
-        // noisy-report behavior.
+        // type is null — scalar leaf, anyOf / oneOf, or malformed node.
+        // For disjunctions specifically, surface the descent stop as a
+        // disjunction entry so the caller can emit a NOTE rather than
+        // misleading drift advice. Scalar / empty nodes are silently
+        // skipped — an observed pointer landing there really is "spec
+        // doesn't model this" and surfacing as drift is appropriate.
+        $reason = self::disjunctionReason($schema);
+        if ($reason !== null) {
+            $disjunctions[] = ['pointer' => $pointer, 'reason' => $reason];
+        }
+    }
+
+    /**
+     * Classify a schema node that {@see self::inferShape()} reported as
+     * non-descendable. Returns the disjunction kind if applicable (so the
+     * caller can emit a NOTE), `null` for scalar / empty leaves (which
+     * legitimately do not contribute to `required` semantics).
+     *
+     * @param array<string, mixed> $schema
+     */
+    private static function disjunctionReason(array $schema): ?string
+    {
+        if (isset($schema['anyOf']) && is_array($schema['anyOf'])) {
+            return 'anyOf';
+        }
+        if (isset($schema['oneOf']) && is_array($schema['oneOf'])) {
+            return 'oneOf';
+        }
+
+        return null;
     }
 
     /**
@@ -459,9 +594,9 @@ final class StrictRequiredAsserter
     }
 
     /**
-     * Union of `required` arrays at this schema node, walking `allOf`. Same
-     * helper used by the root-level MVP (#225); preserved here so nested
-     * descent gets `allOf` for free.
+     * Union of `required` arrays at this schema node, walking `allOf`
+     * branches so nested descent inherits AND-semantic `required`
+     * composition.
      *
      * @param array<string, mixed> $schema
      *

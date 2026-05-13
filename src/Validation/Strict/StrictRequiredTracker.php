@@ -6,6 +6,7 @@ namespace Studio\OpenApiContractTesting\Validation\Strict;
 
 use InvalidArgumentException;
 use Studio\OpenApiContractTesting\Coverage\CoverageSidecarEnvelope;
+use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 
 use function array_intersect;
 use function array_is_list;
@@ -37,7 +38,7 @@ use function strtoupper;
  * Combined with `hits` (the number of contributing observations), the
  * intersection is what {@see StrictRequiredAsserter} diffs against the
  * matching spec's `required` arrays — descended in parallel — to detect
- * schema under-description at any nesting depth (Issue #224 + #227).
+ * schema under-description at any nesting depth.
  *
  * State format version 2 introduces the per-pointer row shape; v1 rows that
  * carried a flat `alwaysPresent: list<string>` field are explicitly rejected
@@ -66,9 +67,10 @@ final class StrictRequiredTracker
     /**
      * Format version stamped on every {@see self::exportState()} payload.
      * Importers reject unknown versions to prevent silent misinterpretation
-     * of future shape changes. Bumped from 1 → 2 in the nested-walk release
-     * (issue #227) — v1 row shape (`alwaysPresent: list<string>`) is no
-     * longer accepted.
+     * of future shape changes. v1 used a flat `alwaysPresent: list<string>`
+     * row; v2 carries a `pointers` map keyed by JSON-Pointer-like strings.
+     * v1 payloads are rejected loudly on import — see
+     * {@see self::validateRow()}.
      */
     public const STATE_FORMAT_VERSION = 2;
 
@@ -117,6 +119,12 @@ final class StrictRequiredTracker
      * @throws InvalidArgumentException when a pointer key is not a
      *                                  non-empty string, or a value is not
      *                                  a list of strings
+     *
+     * @internal The parameter shape is not part of the SemVer-frozen public
+     *           API. The pointer-map shape (introduced in state format v2)
+     *           may evolve as the walker gains new pointer notations. Direct
+     *           callers outside the library should not exist; the library
+     *           routes through {@see OpenApiResponseValidator::validate()}.
      */
     public static function record(
         string $specName,
