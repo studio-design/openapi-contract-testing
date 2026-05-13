@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Validation\Strict;
 
 use InvalidArgumentException;
+use Studio\OpenApiContractTesting\Coverage\CoverageSidecarEnvelope;
 
 use function array_intersect;
 use function array_is_list;
@@ -36,13 +37,11 @@ use function strtoupper;
  *  - once `alwaysPresent` shrinks to `[]` it stays empty for the rest of
  *    the run; reporting is then trivially a no-op for this group
  *
- * {@see self::exportState()} / {@see self::importState()} mirror the shape
- * used by {@see \Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker}'s
- * sidecar protocol, but they are NOT yet wired into the worker sidecar
- * writer or the merge CLI — strict_required is sequential-only in this
- * release; see `docs/strict-required.md` "Known limitations". The methods
- * exist so the paratest follow-up (issue #226) can plug in without
- * changing the wire format.
+ * {@see self::exportState()} / {@see self::importState()} are wired into
+ * the v2 sidecar envelope ({@see CoverageSidecarEnvelope}):
+ * paratest workers export observations to disk and the merge CLI re-imports
+ * them to run the gate across all workers. See `docs/strict-required.md`
+ * "Paratest" for the operator-facing flow.
  *
  * @phpstan-type StrictRequiredRow array{hits: int, alwaysPresent: list<string>}
  * @phpstan-type StrictRequiredEndpoint array<string, StrictRequiredRow>

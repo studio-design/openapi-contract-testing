@@ -7,9 +7,11 @@ namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Coverage\CoverageMergeCommand;
+use Studio\OpenApiContractTesting\Coverage\CoverageSidecarEnvelope;
 use Studio\OpenApiContractTesting\Coverage\CoverageSidecarWriter;
 use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
 
 use function dirname;
 use function file_exists;
@@ -39,6 +41,7 @@ class CoverageMergeCommandTest extends TestCase
     {
         parent::setUp();
         OpenApiCoverageTracker::reset();
+        StrictRequiredTracker::reset();
         OpenApiSpecLoader::reset();
 
         $base = sys_get_temp_dir() . '/openapi-coverage-merge-' . uniqid('', true);
@@ -60,6 +63,7 @@ class CoverageMergeCommandTest extends TestCase
         }
 
         OpenApiCoverageTracker::reset();
+        StrictRequiredTracker::reset();
         OpenApiSpecLoader::reset();
         parent::tearDown();
     }
@@ -1085,6 +1089,464 @@ class CoverageMergeCommandTest extends TestCase
 
         $this->assertSame(1, $exit);
         $this->assertStringContainsString('Failed to write Markdown report', $stderr);
+    }
+
+    #[Test]
+    public function merges_strict_required_observations_across_workers_in_warn_mode(): void
+    {
+        $this->writeStrictRequiredWorkerSidecar('1', ['expires', 'signed_url', 'url']);
+        $this->writeStrictRequiredWorkerSidecar('2', ['expires', 'signed_url', 'url']);
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stdoutWriter: static fn(string $msg): null => null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['under-described'],
+            'output_file' => $this->outputFile,
+            'strict_required' => 'warn',
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('[OpenAPI Strict Required] WARNING', $stderr);
+        $this->assertStringContainsString('PUT /signed-url', $stderr);
+    }
+
+    #[Test]
+    public function merge_fails_with_exit_one_in_strict_required_fail_mode_on_drift(): void
+    {
+        $this->writeStrictRequiredWorkerSidecar('1', ['expires', 'signed_url', 'url']);
+        $this->writeStrictRequiredWorkerSidecar('2', ['expires', 'signed_url', 'url']);
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stdoutWriter: static fn(string $msg): null => null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['under-described'],
+            'output_file' => $this->outputFile,
+            'strict_required' => 'fail',
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('[OpenAPI Strict Required] FATAL', $stderr);
+    }
+
+    #[Test]
+    public function merge_passes_in_off_mode_even_when_drift_exists(): void
+    {
+        $this->writeStrictRequiredWorkerSidecar('1', ['expires', 'signed_url', 'url']);
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stdoutWriter: static fn(string $msg): null => null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['under-described'],
+            'output_file' => $this->outputFile,
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringNotContainsString('[OpenAPI Strict Required]', $stderr);
+    }
+
+    #[Test]
+    public function merge_rejects_unknown_strict_required_value_with_exit_two(): void
+    {
+        $this->writeStrictRequiredWorkerSidecar('1', ['expires', 'signed_url', 'url']);
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stdoutWriter: static fn(string $msg): null => null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['under-described'],
+            'output_file' => $this->outputFile,
+            'strict_required' => 'loud',
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(2, $exit);
+        $this->assertStringContainsString('[OpenAPI Strict Required] FATAL', $stderr);
+    }
+
+    #[Test]
+    public function strict_required_emits_unresolved_groups_note_in_warn_mode(): void
+    {
+        // The merge CLI's unresolved-groups NOTE branch must surface
+        // observations that have no matching response schema. Without this
+        // pin, a refactor of evaluateStrictRequiredGate() could drop the
+        // detectUnresolvedGroups() call and the user would no longer be
+        // told why no drift block appeared.
+        OpenApiCoverageTracker::reset();
+        StrictRequiredTracker::reset();
+        // GET on /signed-url has no schema in the fixture (only PUT does)
+        // — the observation cannot be resolved against any spec response.
+        OpenApiCoverageTracker::recordResponse(
+            'under-described',
+            'GET',
+            '/signed-url',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        StrictRequiredTracker::record(
+            'under-described',
+            'GET',
+            '/signed-url',
+            '200',
+            'application/json',
+            ['expires'],
+        );
+        $envelope = CoverageSidecarEnvelope::build(
+            OpenApiCoverageTracker::exportState(),
+            StrictRequiredTracker::exportState(),
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', $envelope);
+        OpenApiCoverageTracker::reset();
+        StrictRequiredTracker::reset();
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stdoutWriter: static fn(string $msg): null => null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['under-described'],
+            'output_file' => $this->outputFile,
+            'strict_required' => 'warn',
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit, "stderr: {$stderr}");
+        $this->assertStringContainsString('[OpenAPI Strict Required] NOTE', $stderr);
+        $this->assertStringContainsString('GET /signed-url', $stderr);
+        // No drift was detected — only the unresolved NOTE should appear.
+        $this->assertStringNotContainsString('[OpenAPI Strict Required] WARNING', $stderr);
+    }
+
+    #[Test]
+    public function strict_required_fail_appends_block_to_github_step_summary(): void
+    {
+        // The merge CLI must surface drift to $GITHUB_STEP_SUMMARY so a CI
+        // user reading the run summary tab sees the FATAL block. Without
+        // this pin a refactor that drops the github_step_summary argument
+        // from evaluateStrictRequiredGate() would regress silently.
+        $this->writeStrictRequiredWorkerSidecar('1', ['expires', 'signed_url', 'url']);
+
+        $githubSummary = $this->outputFile . '.github-summary.md';
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stdoutWriter: static fn(string $msg): null => null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['under-described'],
+            'output_file' => $this->outputFile,
+            'github_step_summary' => $githubSummary,
+            'strict_required' => 'fail',
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $contents = (string) file_get_contents($githubSummary);
+        $this->assertStringContainsString(':rotating_light: FATAL OpenAPI strict_required drift', $contents);
+        $this->assertStringContainsString('PUT /signed-url', $contents);
+
+        @unlink($githubSummary);
+    }
+
+    #[Test]
+    public function strict_required_warn_appends_warning_block_to_github_step_summary(): void
+    {
+        // Pin the warn-mode block label too — the heading swap (rotating_light
+        // vs warning) lives in OpenApiCoverageExtension::appendGithub… and
+        // changing it accidentally would mislead CI users about severity.
+        $this->writeStrictRequiredWorkerSidecar('1', ['expires', 'signed_url', 'url']);
+
+        $githubSummary = $this->outputFile . '.github-summary.md';
+        $command = new CoverageMergeCommand(
+            stdoutWriter: static fn(string $msg): null => null,
+            stderrWriter: static fn(string $msg): null => null,
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['under-described'],
+            'output_file' => $this->outputFile,
+            'github_step_summary' => $githubSummary,
+            'strict_required' => 'warn',
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $contents = (string) file_get_contents($githubSummary);
+        $this->assertStringContainsString(':warning: OpenAPI strict_required drift', $contents);
+
+        @unlink($githubSummary);
+    }
+
+    #[Test]
+    public function strict_required_fail_writes_all_coverage_outputs_before_aborting(): void
+    {
+        // Pin the documented "render report first, assert gate second"
+        // contract: a strict_required=fail drift must NOT suppress the
+        // coverage outputs users rely on for triage. A future refactor that
+        // re-orders evaluateStrictRequiredGate() ahead of writeReports() /
+        // appendGithubStepSummary() must fail this test.
+        $this->writeStrictRequiredWorkerSidecar('1', ['expires', 'signed_url', 'url']);
+        $this->writeStrictRequiredWorkerSidecar('2', ['expires', 'signed_url', 'url']);
+
+        $junitOutput = $this->outputFile . '.junit.xml';
+        $jsonOutput = $this->outputFile . '.json';
+        $htmlOutput = $this->outputFile . '.html';
+        $githubSummary = $this->outputFile . '.github-summary.md';
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stdoutWriter: static fn(string $msg): null => null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['under-described'],
+            'output_file' => $this->outputFile,
+            'junit_output' => $junitOutput,
+            'json_output' => $jsonOutput,
+            'html_output' => $htmlOutput,
+            'github_step_summary' => $githubSummary,
+            'strict_required' => 'fail',
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('[OpenAPI Strict Required] FATAL', $stderr);
+
+        // Every configured coverage output must exist and contain the
+        // endpoint that triggered the drift — proving the renderer ran
+        // before the gate decided to fail.
+        foreach ([$this->outputFile, $junitOutput, $jsonOutput, $htmlOutput, $githubSummary] as $path) {
+            $this->assertFileExists($path, "coverage output {$path} must be written before strict gate aborts");
+            $this->assertStringContainsString('PUT /signed-url', (string) file_get_contents($path), "expected PUT /signed-url in {$path}");
+        }
+
+        // The GH step summary must also carry the strict_required FATAL
+        // block, not just the coverage Markdown — covered separately below.
+
+        @unlink($junitOutput);
+        @unlink($jsonOutput);
+        @unlink($htmlOutput);
+        @unlink($githubSummary);
+    }
+
+    #[Test]
+    public function fail_mode_exits_non_zero_when_no_worker_recorded_strict_observations(): void
+    {
+        // A CI that opted into --strict-required=fail must NOT silently pass
+        // when every worker contributed a legacy v1 sidecar (no strict
+        // observations). The gate cannot evaluate the contract, and that's
+        // a fail-loud condition — symmetric with the threshold gate's
+        // "no contract test coverage was recorded" guard at run() L296.
+        OpenApiCoverageTracker::recordResponse(
+            'under-described',
+            'PUT',
+            '/signed-url',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+        OpenApiCoverageTracker::reset();
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stdoutWriter: static fn(string $msg): null => null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['under-described'],
+            'output_file' => $this->outputFile,
+            'strict_required' => 'fail',
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('[OpenAPI Strict Required] FATAL', $stderr);
+        $this->assertStringContainsString('no worker recorded', $stderr);
+    }
+
+    #[Test]
+    public function warn_mode_passes_silently_when_no_worker_recorded_strict_observations(): void
+    {
+        // Symmetric design: warn mode tolerates "no observations" because
+        // the user explicitly opted out of fail-fast. The mixed v1/v2
+        // upgrade window relies on this — flipping to warn first lets users
+        // roll out v2 workers gradually before turning the gate to fail.
+        OpenApiCoverageTracker::recordResponse(
+            'under-described',
+            'PUT',
+            '/signed-url',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+        OpenApiCoverageTracker::reset();
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stdoutWriter: static fn(string $msg): null => null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['under-described'],
+            'output_file' => $this->outputFile,
+            'strict_required' => 'warn',
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringNotContainsString('[OpenAPI Strict Required] FATAL', $stderr);
+    }
+
+    #[Test]
+    public function merge_tolerates_mixed_v1_and_v2_sidecars(): void
+    {
+        // Worker A: legacy v1 (bare coverage payload, no strict_required).
+        // Simulates a worker still on an older library version during an
+        // upgrade window — coverage merges; strict_required half is absent.
+        OpenApiCoverageTracker::recordResponse(
+            'under-described',
+            'GET',
+            '/users/{id}',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+        OpenApiCoverageTracker::reset();
+
+        // Worker B: v2 envelope with drift-inducing observations.
+        $this->writeStrictRequiredWorkerSidecar('2', ['expires', 'signed_url', 'url']);
+
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stdoutWriter: static fn(string $msg): null => null,
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+        );
+
+        $exit = $command->run([
+            'sidecar_dir' => $this->sidecarDir,
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => ['under-described'],
+            'output_file' => $this->outputFile,
+            'strict_required' => 'warn',
+            'cleanup' => true,
+        ]);
+
+        $this->assertSame(0, $exit);
+        $this->assertStringContainsString('[OpenAPI Strict Required] WARNING', $stderr);
+        // Coverage from worker A must still be merged.
+        $contents = (string) file_get_contents($this->outputFile);
+        $this->assertStringContainsString('GET /users/{id}', $contents);
+    }
+
+    #[Test]
+    public function parse_argv_accepts_strict_required_flag(): void
+    {
+        $opts = CoverageMergeCommand::parseArgv(['--strict-required=warn']);
+        $this->assertSame('warn', $opts['strict_required'] ?? null);
+    }
+
+    /**
+     * Write a worker sidecar carrying an under-described drift observation:
+     * a response that always returned `expires`/`signed_url`/`url` even
+     * though the spec declares them optional.
+     *
+     * @param list<string> $alwaysPresent
+     */
+    private function writeStrictRequiredWorkerSidecar(string $token, array $alwaysPresent): void
+    {
+        OpenApiCoverageTracker::reset();
+        StrictRequiredTracker::reset();
+        OpenApiCoverageTracker::recordResponse(
+            'under-described',
+            'PUT',
+            '/signed-url',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        StrictRequiredTracker::record(
+            'under-described',
+            'PUT',
+            '/signed-url',
+            '200',
+            'application/json',
+            $alwaysPresent,
+        );
+        $envelope = CoverageSidecarEnvelope::build(
+            OpenApiCoverageTracker::exportState(),
+            StrictRequiredTracker::exportState(),
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, $token, $envelope);
+        OpenApiCoverageTracker::reset();
+        StrictRequiredTracker::reset();
     }
 
     /** @return list<string> */
