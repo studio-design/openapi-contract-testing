@@ -10,6 +10,30 @@ the README for the full surface contract.
 
 ## Unreleased
 
+## [1.5.0](https://github.com/studio-design/openapi-contract-testing/compare/v1.4.0...v1.5.0) (2026-05-13)
+
+
+### Features
+
+* **coverage:** add HTML output for self-contained coverage reports ([#209](https://github.com/studio-design/openapi-contract-testing/issues/209)) ([7e0186d](https://github.com/studio-design/openapi-contract-testing/commit/7e0186dae6f9f1d16e29816126ab477abf0a18af))
+* **coverage:** add JSON output for machine-readable coverage reports ([#208](https://github.com/studio-design/openapi-contract-testing/issues/208)) ([d219843](https://github.com/studio-design/openapi-contract-testing/commit/d2198434ef3b43897909db4fd99929c1cef3231d))
+* **coverage:** add JUnit XML output for CI dashboard integration ([#207](https://github.com/studio-design/openapi-contract-testing/issues/207)) ([5649f73](https://github.com/studio-design/openapi-contract-testing/commit/5649f73b757db2f091cb260ec59b3805ce7e2af8))
+* **pest:** implement toMatchOpenApiResponseSchema / toMatchOpenApiRequestSchema ([#193](https://github.com/studio-design/openapi-contract-testing/issues/193)) ([7f295f7](https://github.com/studio-design/openapi-contract-testing/commit/7f295f7d330476caee44275e5e6e0c1be0b96209))
+* **pest:** scaffold pest plugin entrypoint ([#188](https://github.com/studio-design/openapi-contract-testing/issues/188)) ([25d1fd8](https://github.com/studio-design/openapi-contract-testing/commit/25d1fd8a8f321f1f81b7e2a97529e63882f3880d))
+* **strict_required:** walk nested objects and array elements when collecting always-present keys ([#231](https://github.com/studio-design/openapi-contract-testing/issues/231)) ([bbb9001](https://github.com/studio-design/openapi-contract-testing/commit/bbb90012c7d99faad6f102c828980a1facbf9ed6))
+* **strict-required:** aggregate paratest worker observations via sidecar envelope v2 ([#230](https://github.com/studio-design/openapi-contract-testing/issues/230)) ([4caef4a](https://github.com/studio-design/openapi-contract-testing/commit/4caef4a2d2538d1508c47f4bbdd605459885b474))
+* **validator:** add strict_required mode for detecting schema under-description ([#225](https://github.com/studio-design/openapi-contract-testing/issues/225)) ([82b315f](https://github.com/studio-design/openapi-contract-testing/commit/82b315fb7089e1d96a4fbd8323ed85e5597652bb))
+* **validator:** add strict_required_per_call mode for per-call drift detection ([#232](https://github.com/studio-design/openapi-contract-testing/issues/232)) ([efaa869](https://github.com/studio-design/openapi-contract-testing/commit/efaa86990bcd44a62b6e61a7da42a18dd718ca1e))
+
+
+### Bug Fixes
+
+* **extension:** skip persistent coverage outputs on partial PHPUnit runs ([#222](https://github.com/studio-design/openapi-contract-testing/issues/222)) ([04e532d](https://github.com/studio-design/openapi-contract-testing/commit/04e532d162b9aba94a8f277455cc4d8453e2ce88))
+* **ref-resolver:** preserve $ref keys inside opaque-data fields ([#220](https://github.com/studio-design/openapi-contract-testing/issues/220)) ([3acc6e1](https://github.com/studio-design/openapi-contract-testing/commit/3acc6e164c5deb285805f09dbff6657387b14dd3))
+* **request:** coerce empty array body to stdClass when schema accepts object ([#218](https://github.com/studio-design/openapi-contract-testing/issues/218)) ([e599b7d](https://github.com/studio-design/openapi-contract-testing/commit/e599b7d028af2917992dddec0ce42fa26531277b))
+* **schema-converter:** preserve sibling items as additionalItems when lowering prefixItems ([#213](https://github.com/studio-design/openapi-contract-testing/issues/213)) ([17cc7ee](https://github.com/studio-design/openapi-contract-testing/commit/17cc7ee7abbca51e9fde89b426be2c596e2befbc))
+* **schema-converter:** recurse into if/then/else, patternProperties, propertyNames, contains, dependentSchemas ([#215](https://github.com/studio-design/openapi-contract-testing/issues/215)) ([bbd35f7](https://github.com/studio-design/openapi-contract-testing/commit/bbd35f71b69501950b269965721f79bb336af78e))
+
 ## [1.4.0](https://github.com/studio-design/openapi-contract-testing/compare/v1.3.0...v1.4.0) (2026-05-11)
 
 
