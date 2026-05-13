@@ -132,7 +132,7 @@ Paratest workers (`TEST_TOKEN` set) are unaffected — they always write
 their sidecar so the merge CLI can aggregate. The persistent-write skip
 only fires on the sequential (or merge) rendering path.
 
-### `defaultTestSuite` と partial 判定の opt-in 解除
+### default_testsuite_as_full opt-in
 
 `phpunit.xml` で `defaultTestSuite` を宣言しているプロジェクトでは、引数なしの
 `phpunit` 実行でも PHPUnit が `Configuration::includeTestSuites()` にその名前を
@@ -159,3 +159,8 @@ only fires on the sequential (or merge) rendering path.
 - 副作用として `output_file` / `junit_output` 等の persistent 書き込みも実行される。
   defaultTestSuite に含まれないテストスイート (例: 別 job で動かす Integration suite)
   が抜けた状態のレポートが書かれる点を許容できる場合のみ有効化する。
+- 設定ミス検知: `default_testsuite_as_full=true` だが `defaultTestSuite` 属性が
+  未設定 (`<phpunit defaultTestSuite="...">` 不在) や空文字 (`defaultTestSuite=""`)
+  の場合、opt-in が黙って no-op になるのを避けるため bootstrap で stderr に
+  WARNING を出す (FATAL ではない — 設計上 opt-in を立てたまま XML を直さなくても
+  実行可能なため)。

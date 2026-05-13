@@ -234,7 +234,7 @@ The diagnostic block is rendered after the coverage report (Markdown, JUnit, JSO
 [OpenAPI Strict Required] NOTE: strict_required is skipped on partial runs (--filter / --testsuite / etc.) ...
 ```
 
-`phpunit.xml` で `defaultTestSuite` を宣言しているプロジェクトでは引数なしの `phpunit` 実行でも partial 判定が立つため、このゲートが常にスキップされて到達不能になる場合がある。`default_testsuite_as_full` opt-in でこの挙動を解除できる — トレードオフを含めて [`ci.md` の Partial test runs 節](ci.md#defaulttestsuite-と-partial-判定の-opt-in-解除) を参照。
+`phpunit.xml` で `defaultTestSuite` を宣言しているプロジェクトでは引数なしの `phpunit` 実行でも partial 判定が立つため、このゲートが常にスキップされて到達不能になる場合がある。`default_testsuite_as_full` opt-in でこの挙動を解除できる — トレードオフを含めて [`default_testsuite_as_full` opt-in](ci.md#default_testsuite_as_full-opt-in) 節を参照。
 
 ## Known limitations
 

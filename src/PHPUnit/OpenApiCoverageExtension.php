@@ -360,7 +360,7 @@ final class OpenApiCoverageExtension implements Extension
             hasTestsCovering: $configuration->hasTestsCovering(),
             hasTestsUsing: $configuration->hasTestsUsing(),
             hasTestsRequiringPhpExtension: $configuration->hasTestsRequiringPhpExtension(),
-            defaultTestSuite: self::readDefaultTestSuite($configuration),
+            defaultTestSuite: self::readDefaultTestSuite($configuration, warnOnInertOptIn: $treatDefaultAsFull),
             treatDefaultTestSuiteAsFull: $treatDefaultAsFull,
         );
     }
@@ -374,16 +374,46 @@ final class OpenApiCoverageExtension implements Extension
      * `includeTestSuite()` accessor). The `hasDefaultTestSuite()` guard is
      * mandatory: `defaultTestSuite()` throws `NoDefaultTestSuiteException`
      * when the xml attribute is absent.
+     *
+     * `$warnOnInertOptIn` surfaces the two misconfigurations that make
+     * `default_testsuite_as_full=true` a silent no-op: (1) the user opted
+     * in but never set `<phpunit defaultTestSuite="...">`, and (2) the
+     * attribute is present but empty. The WARN is gated on the opt-in
+     * itself so it never fires for callers that did not request the
+     * neutralisation (the same path the rest of the extension uses).
      */
-    private static function readDefaultTestSuite(Configuration $configuration): ?string
-    {
+    private static function readDefaultTestSuite(
+        Configuration $configuration,
+        bool $warnOnInertOptIn,
+    ): ?string {
         if (!$configuration->hasDefaultTestSuite()) {
+            if ($warnOnInertOptIn) {
+                self::writeStderr(
+                    '[OpenAPI Coverage] WARNING: default_testsuite_as_full=true but phpunit.xml does not declare '
+                    . 'a `defaultTestSuite` attribute on <phpunit>. The opt-in will be inert; partial-run '
+                    . 'detection remains active. Either set `defaultTestSuite="..."` on <phpunit> or remove '
+                    . "`default_testsuite_as_full`.\n",
+                );
+            }
+
             return null;
         }
 
         $value = $configuration->defaultTestSuite();
 
-        return $value !== '' ? $value : null;
+        if ($value === '') {
+            if ($warnOnInertOptIn) {
+                self::writeStderr(
+                    '[OpenAPI Coverage] WARNING: default_testsuite_as_full=true but phpunit.xml declares an '
+                    . 'empty `defaultTestSuite=""` attribute. The opt-in cannot match an empty default and '
+                    . "will be inert. Set a non-empty `defaultTestSuite` or remove `default_testsuite_as_full`.\n",
+                );
+            }
+
+            return null;
+        }
+
+        return $value;
     }
 
     /**
