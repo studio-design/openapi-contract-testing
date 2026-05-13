@@ -5,21 +5,25 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting;
 
 use RuntimeException;
+use stdClass;
 use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidationResult;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseHeaderValidator;
+use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
 use Studio\OpenApiContractTesting\Validation\Support\PathDiagnosticsFormatter;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 use Studio\OpenApiContractTesting\Validation\Support\SpecResponseKeyResolver;
 use Studio\OpenApiContractTesting\Validation\Support\StatusCodePatternSet;
 use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
 
+use function array_is_list;
 use function array_keys;
 use function array_merge;
 use function get_debug_type;
 use function is_array;
+use function is_string;
 use function sprintf;
 use function strtolower;
 
@@ -203,6 +207,21 @@ final class OpenApiResponseValidator
         $errors = array_merge($bodyResult->errors, $headerErrors);
 
         if ($errors === []) {
+            // Strict-required recording happens on the validated success path
+            // so that conformance-failing or skipped responses do not
+            // contribute to the "field appeared in every response" intersection.
+            // The tracker is a no-op when the extension parameter
+            // `strict_required` is off (record is still called but consumes
+            // negligible memory until the asserter runs).
+            $this->maybeRecordStrictRequired(
+                $specName,
+                $method,
+                $matchedPath,
+                $statusCodeStr,
+                $bodyResult->matchedContentType,
+                $responseBody,
+            );
+
             return OpenApiValidationResult::success(
                 $matchedPath,
                 $statusCodeStr,
@@ -215,6 +234,72 @@ final class OpenApiResponseValidator
             $matchedPath,
             $statusCodeStr,
             $bodyResult->matchedContentType,
+        );
+    }
+
+    /**
+     * Feed the strict-required tracker one observation. Top-level keys of the
+     * decoded body drive the "field always returned" intersection that
+     * {@see StrictRequiredAsserter} diffs against the spec's `required` array
+     * at run end.
+     *
+     * Only recorded on the Success path (caller guarantees `$errors === []`):
+     * a conformance failure means the body shape itself is suspect, and
+     * skipped responses are explicitly excluded from coverage too — both
+     * cases would poison the intersection.
+     *
+     * Body-shape handling:
+     *   - scalar / `null` bodies: skipped (no top-level keys to diff against
+     *     `required`)
+     *   - `stdClass` (returned by callers who decoded with `json_decode(_, false)`):
+     *     coerced to an associative array so framework-agnostic users are
+     *     not silently dropped from observation
+     *   - PHP associative arrays (JSON objects via `json_decode(_, true)`):
+     *     recorded as-is — this is the Laravel adapter's path
+     *   - JSON arrays (list-shape, only numeric keys): skipped to avoid
+     *     collapsing a sibling object observation's intersection to `[]`;
+     *     `required` semantics only apply to object-shaped responses
+     *   - empty object `{}` (lands here as `[]` after decode): recorded as
+     *     an empty observation so a single empty response correctly drops
+     *     the intersection. The body validator already disambiguated `[]`
+     *     vs `{}` via stdClass coercion before validating, so by the time
+     *     we are on the Success path with `$responseBody === []`, the
+     *     schema accepted an empty object.
+     */
+    private function maybeRecordStrictRequired(
+        string $specName,
+        string $method,
+        string $matchedPath,
+        string $statusKey,
+        ?string $matchedContentType,
+        mixed $responseBody,
+    ): void {
+        if ($responseBody instanceof stdClass) {
+            $responseBody = (array) $responseBody;
+        }
+        if (!is_array($responseBody)) {
+            return;
+        }
+        // Distinguish empty object {} (record empty observation) from
+        // non-empty list [...] (skip): empty array is ambiguous so we err
+        // on the "object" side, consistent with the body validator's
+        // empty-object coercion upstream.
+        if ($responseBody !== [] && array_is_list($responseBody)) {
+            return;
+        }
+        $topLevelKeys = [];
+        foreach (array_keys($responseBody) as $key) {
+            if (is_string($key)) {
+                $topLevelKeys[] = $key;
+            }
+        }
+        StrictRequiredTracker::record(
+            $specName,
+            $method,
+            $matchedPath,
+            $statusKey,
+            $matchedContentType ?? StrictRequiredTracker::ANY_CONTENT_TYPE,
+            $topLevelKeys,
         );
     }
 
