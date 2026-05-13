@@ -26,6 +26,8 @@ use Studio\OpenApiContractTesting\Schema\EnumDriftAsserter;
 use Studio\OpenApiContractTesting\Schema\EnumDriftReport;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredMode;
+use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallChecker;
+use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallMode;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
 
 use function array_filter;
@@ -96,7 +98,11 @@ final class OpenApiCoverageExtension implements Extension
     /**
      * Append a Markdown block describing a strict_required outcome to the
      * GitHub Actions Step Summary file. Mirrors
-     * {@see appendGithubStepSummaryEnumDriftBlock()}.
+     * {@see appendGithubStepSummaryEnumDriftBlock()} structurally, but the
+     * body text is intentionally distinct ("schema under-description" vs
+     * "checks failed") so log scrapers can route the two channels by
+     * grepping the title — keep the wording divergent if you ever touch
+     * either method.
      *
      * @internal Exposed so {@see CoverageReportSubscriber} can reuse the same
      *           rendering path when invoking the asserter at ExecutionFinished.
@@ -273,6 +279,19 @@ final class OpenApiCoverageExtension implements Extension
         // paratest workers via the sidecar envelope (Issue #226).
         $strictRequiredMode = self::resolveStrictRequiredMode($parameters, $githubSummaryPath);
         StrictRequiredTracker::reset();
+
+        // Issue #228: per-call strict_required mode. Independent of the
+        // run-level parameter above — both gates can be wired in the same
+        // run. Resolve first so an invalid value FATAL-throws BEFORE we
+        // touch the checker state; reset then runs only on the happy path
+        // and on test seams where setupExtension() is invoked multiple
+        // times in one PHP process. The follow-up `configure()` overwrites
+        // unconditionally, so the reset matters specifically for the
+        // failed-resolve early-return path (where configure never runs)
+        // and for repeated bootstrap calls.
+        $strictRequiredPerCallMode = self::resolveStrictRequiredPerCallMode($parameters, $githubSummaryPath);
+        StrictRequiredPerCallChecker::reset();
+        StrictRequiredPerCallChecker::configure($strictRequiredPerCallMode);
 
         if ($facade === null) {
             return;
@@ -605,6 +624,37 @@ final class OpenApiCoverageExtension implements Extension
                 trim($raw) === '' ? '<empty>' : $raw,
             );
             self::writeStderr("[OpenAPI Strict Required] FATAL: {$reason}\n");
+            self::appendGithubStepSummaryStrictRequiredBlock($githubSummaryPath, $reason, isFatal: true);
+
+            throw new InvalidStrictRequiredConfigurationException($reason, $e);
+        }
+    }
+
+    /**
+     * Issue #228: read the `strict_required_per_call` parameter. Mirrors
+     * {@see resolveStrictRequiredMode()} with one deliberate difference —
+     * the per-call enum rejects `fail` outright (per-call is warn-only;
+     * the run-level mode is the safe fail-gate). Unrecognised values stay
+     * FATAL for the same opt-in fail-loud rationale.
+     */
+    private static function resolveStrictRequiredPerCallMode(
+        ParameterCollection $parameters,
+        ?string $githubSummaryPath,
+    ): StrictRequiredPerCallMode {
+        if (!$parameters->has('strict_required_per_call')) {
+            return StrictRequiredPerCallMode::Off;
+        }
+
+        $raw = $parameters->get('strict_required_per_call');
+
+        try {
+            return StrictRequiredPerCallMode::fromConfigValue($raw);
+        } catch (InvalidArgumentException $e) {
+            $reason = sprintf(
+                'strict_required_per_call=%s is not recognised. Accepted: off, warn.',
+                trim($raw) === '' ? '<empty>' : $raw,
+            );
+            self::writeStderr("[OpenAPI Strict Required per-call] FATAL: {$reason}\n");
             self::appendGithubStepSummaryStrictRequiredBlock($githubSummaryPath, $reason, isFatal: true);
 
             throw new InvalidStrictRequiredConfigurationException($reason, $e);

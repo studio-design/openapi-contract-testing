@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
-use const STDERR;
-
 use InvalidArgumentException;
 use RuntimeException;
+use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
 use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidationResult;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseHeaderValidator;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredBodyWalker;
+use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallChecker;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
 use Studio\OpenApiContractTesting\Validation\Support\PathDiagnosticsFormatter;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
@@ -23,7 +23,6 @@ use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
 
 use function array_keys;
 use function array_merge;
-use function fwrite;
 use function get_debug_type;
 use function is_array;
 use function sprintf;
@@ -241,22 +240,38 @@ final class OpenApiResponseValidator
     }
 
     /**
-     * Feed the strict-required tracker one observation. The body is walked
-     * recursively via {@see StrictRequiredBodyWalker::collectPointers()}
-     * which produces a `pointer => list<string>` map describing every
-     * object node observed; {@see StrictRequiredAsserter} diffs each
-     * pointer's keys against the spec's `required` array at the matching
-     * schema node.
+     * Feed the strict-required tracker one observation, and (when per-call
+     * mode is enabled) emit an immediate `E_USER_WARNING` for any
+     * already-drifting pointer.
      *
-     * Only recorded on the Success path (caller guarantees `$errors === []`):
-     * a conformance failure means the body shape itself is suspect, and
-     * skipped responses are explicitly excluded from coverage too — both
-     * cases would poison the intersection.
+     * The body is walked once via {@see StrictRequiredBodyWalker::collectPointers()}
+     * and the resulting `pointer => list<string>` map is shared with both
+     * the run-level tracker (intersection mode, asserts at
+     * `ExecutionFinished`) and the per-call checker (Issue #228, fires
+     * immediately). Walking once keeps the cost flat regardless of how many
+     * gates the user enabled.
+     *
+     * Only invoked on the Success path (caller guarantees `$errors === []`).
+     * Conformance-failing bodies are filtered out by the caller; skipped
+     * statuses (matched skip pattern) short-circuit far earlier in
+     * `validate()` and never reach this method, so neither gate sees them.
      *
      * Body-shape handling is delegated to the walker (see its docblock for
      * the full matrix). The validator only short-circuits when the walker
-     * yields an empty map — null / scalar bodies, or arrays whose only
-     * elements are scalars (no object structure to intersect).
+     * yields an empty map — strictly: when no object node is observed
+     * anywhere in the body (null / scalar root, or arrays containing no
+     * object element at any nesting depth).
+     *
+     * Tracker-side malformed-map guard: if the tracker rejects the pointer
+     * map (`InvalidArgumentException` from `record()`), we suppress the
+     * per-call checker too rather than letting it iterate the same bad
+     * data. The per-call checker has no input-shape validation of its own
+     * — `findCoveringDisjunction()` would TypeError on a non-string key,
+     * `array_diff()` would silently produce a corrupted "missing" list on
+     * a non-list value. Failing the user's test with either is the wrong
+     * fingerprint when the underlying bug is in the walker. The single
+     * LIBRARY BUG line covers both gates by name so the reader knows
+     * neither contributed to drift detection for this observation.
      */
     private function maybeRecordStrictRequired(
         string $specName,
@@ -270,6 +285,7 @@ final class OpenApiResponseValidator
         if ($pointers === []) {
             return;
         }
+        $contentTypeKey = $matchedContentType ?? StrictRequiredTracker::ANY_CONTENT_TYPE;
 
         try {
             StrictRequiredTracker::record(
@@ -277,33 +293,53 @@ final class OpenApiResponseValidator
                 $method,
                 $matchedPath,
                 $statusKey,
-                $matchedContentType ?? StrictRequiredTracker::ANY_CONTENT_TYPE,
+                $contentTypeKey,
                 $pointers,
             );
         } catch (InvalidArgumentException $e) {
             // The walker's contract is "every value is a list of strings,
             // every key is a non-empty pointer string." A throw here means
             // the walker produced something malformed — a library bug, not
-            // a user-test failure. Failing the actual test with this
-            // exception would blame the user for our regression. Emit a
-            // one-shot stderr WARNING with a clear library-bug prefix and
-            // disable strict_required for this observation; the rest of the
-            // test continues normally.
+            // a user-test failure. Emit a one-shot stderr WARNING with a
+            // clear library-bug prefix naming both gates, then return so
+            // the per-call checker is not handed the same malformed map
+            // (it has no input-shape validation; iterating would TypeError
+            // or emit a corrupted warning misattributing the fault to the
+            // user). The rest of the test continues normally.
             $message = sprintf(
                 '[OpenAPI Strict Required] LIBRARY BUG: walker produced malformed pointer map for %s %s %s; '
-                . 'strict_required recording skipped for this observation. Please report at '
-                . 'https://github.com/studio-design/openapi-contract-testing/issues '
+                . 'strict_required and strict_required_per_call recording skipped for this observation. '
+                . 'Please report at https://github.com/studio-design/openapi-contract-testing/issues '
                 . "with the cause: %s\n",
                 strtoupper($method),
                 $matchedPath,
                 $statusKey,
                 $e->getMessage(),
             );
-            // Write directly to STDERR rather than via trigger_error so the
-            // message is unconditional and not subject to error handlers
-            // installed by the test framework.
-            fwrite(STDERR, $message);
+            // Routed through the extension's writer rather than `fwrite`
+            // so test seams that override stderr capture the LIBRARY BUG
+            // line, and so paratest workers' diagnostics travel through
+            // the same channel as every other extension stderr line.
+            // `OpenApiCoverageExtension::writeStderr()` falls back to bare
+            // STDERR when no override is set, so the validator stays usable
+            // outside the PHPUnit extension context.
+            OpenApiCoverageExtension::writeStderr($message);
+
+            return;
         }
+
+        // Per-call mode (Issue #228) reads the same pointer map the
+        // tracker just accepted. The checker short-circuits when its mode
+        // is Off (the default for users who only opted into the run-level
+        // gate), so unconditional invocation here is the cheapest path.
+        StrictRequiredPerCallChecker::maybeWarn(
+            $specName,
+            $method,
+            $matchedPath,
+            $statusKey,
+            $contentTypeKey,
+            $pointers,
+        );
     }
 
     /**
