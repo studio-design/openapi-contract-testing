@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/logo.png" alt="openapi-contract-testing" width="480">
+</p>
+
 # OpenAPI Contract Testing for PHPUnit
 
 [![CI](https://github.com/studio-design/openapi-contract-testing/actions/workflows/ci.yml/badge.svg)](https://github.com/studio-design/openapi-contract-testing/actions/workflows/ci.yml)
