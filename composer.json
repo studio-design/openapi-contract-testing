@@ -113,7 +113,8 @@
             "/UPGRADING.md",
             "/SECURITY.md",
             "/draft-zenn-article.md",
-            "/renovate.json"
+            "/renovate.json",
+            "/images"
         ]
     },
     "minimum-stability": "stable",
