@@ -6,7 +6,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Response;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
+use Studio\OpenApiContractTesting\DecodedBody;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
@@ -40,7 +40,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/pets/{id}',
             200,
             $content,
-            ['id' => 1],
+            DecodedBody::present(['id' => 1]),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -62,7 +62,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/pets',
             200,
             $content,
-            null,
+            DecodedBody::absent(),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -80,8 +80,8 @@ class ResponseBodyValidatorTest extends TestCase
         // short-circuited as an absent body. Against `type: object` it is a
         // contract violation and must surface a schema type error — NOT the
         // "Response body is empty" message reserved for a genuinely absent
-        // body. The PresentJsonNull marker is how an adapter signals "the
-        // wire carried a body and its decoded value is null".
+        // body. A present DecodedBody carrying `null` is how an adapter
+        // signals "the wire carried a body and its decoded value is null".
         $content = [
             'application/json' => ['schema' => ['type' => 'object']],
         ];
@@ -92,7 +92,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/pets',
             200,
             $content,
-            PresentJsonNull::Body,
+            DecodedBody::present(null),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -119,7 +119,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/pets',
             200,
             $content,
-            PresentJsonNull::Body,
+            DecodedBody::present(null),
             'application/json',
             OpenApiVersion::V3_1,
         );
@@ -146,7 +146,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/pets',
             200,
             $content,
-            PresentJsonNull::Body,
+            DecodedBody::present(null),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -168,7 +168,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/robots.txt',
             200,
             $content,
-            'User-agent: *',
+            DecodedBody::present('User-agent: *'),
             'text/plain; charset=utf-8',
             OpenApiVersion::V3_0,
         );
@@ -194,7 +194,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/pets',
             422,
             $content,
-            ['detail' => 'oops'],
+            DecodedBody::present(['detail' => 'oops']),
             'application/problem+json',
             OpenApiVersion::V3_0,
         );
@@ -216,7 +216,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/pets',
             200,
             $content,
-            'blob',
+            DecodedBody::present('blob'),
             'application/xml',
             OpenApiVersion::V3_0,
         );
@@ -238,7 +238,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/pets',
             200,
             $content,
-            '<pets/>',
+            DecodedBody::present('<pets/>'),
             null,
             OpenApiVersion::V3_0,
         );
@@ -266,7 +266,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/p',
             200,
             $content,
-            [],
+            DecodedBody::present([]),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -290,7 +290,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/p',
             200,
             $content,
-            [],
+            DecodedBody::present([]),
             'application/json',
             OpenApiVersion::V3_1,
         );
@@ -319,7 +319,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/p',
             200,
             $content,
-            [],
+            DecodedBody::present([]),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -357,7 +357,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/p',
             200,
             $content,
-            [],
+            DecodedBody::present([]),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -385,7 +385,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/p',
             200,
             $content,
-            [],
+            DecodedBody::present([]),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -412,7 +412,7 @@ class ResponseBodyValidatorTest extends TestCase
             '/pets/{id}',
             200,
             $content,
-            ['id' => 'not-an-int'],
+            DecodedBody::present(['id' => 'not-an-int']),
             'application/json',
             OpenApiVersion::V3_0,
         );

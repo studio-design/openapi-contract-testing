@@ -97,6 +97,13 @@ final class OpenApiRequestValidator
      * @param array<string, mixed> $queryParams parsed query string (string|array<string> per key)
      * @param array<array-key, mixed> $headers request headers (string|array<string> per key, case-insensitive name match; non-string keys are silently dropped)
      * @param array<string, mixed> $cookies request cookies (string values per key). Used for apiKey security schemes with `in: cookie`. Caller is expected to pass framework-parsed cookies (e.g. Laravel's `$request->cookies->all()`) — this validator does not parse a `Cookie` header.
+     * @param mixed $requestBody the decoded request body. Accepts either a
+     *                           {@see DecodedBody} envelope (what the framework
+     *                           adapters pass) or a bare decoded value for
+     *                           backward compatibility. A bare `null` is read
+     *                           as an absent body; a caller that needs to
+     *                           assert a literal JSON `null` body must pass
+     *                           `DecodedBody::present(null)` explicitly.
      * @param null|int $responseStatusCode optional response status the request produced; enables the documented-4xx downgrade when set
      */
     public function validate(
@@ -110,6 +117,12 @@ final class OpenApiRequestValidator
         array $cookies = [],
         ?int $responseStatusCode = null,
     ): OpenApiValidationResult {
+        // The `mixed` body parameter is kept for backward compatibility.
+        // Framework adapters now pass a DecodedBody envelope directly; legacy
+        // direct callers pass a bare value, which fromLegacy() normalizes
+        // (a plain `null` becomes an absent body — see {@see DecodedBody}).
+        $body = DecodedBody::fromLegacy($requestBody);
+
         $spec = OpenApiSpecLoader::load($specName);
 
         $version = OpenApiVersion::fromSpec($spec);
@@ -164,7 +177,7 @@ final class OpenApiRequestValidator
             ...ValidatorErrorBoundary::safely('query', $specName, $method, $matchedPath, fn(): array => $this->queryValidator->validate($method, $matchedPath, $collected->parameters, $queryParams, $version)),
             ...ValidatorErrorBoundary::safely('header', $specName, $method, $matchedPath, fn(): array => $this->headerValidator->validate($method, $matchedPath, $collected->parameters, $headers, $version)),
             ...ValidatorErrorBoundary::safely('security', $specName, $method, $matchedPath, fn(): array => $this->securityValidator->validate($method, $matchedPath, $spec, $operation, $headers, $queryParams, $cookies)),
-            ...ValidatorErrorBoundary::safely('request-body', $specName, $method, $matchedPath, fn(): array => $this->bodyValidator->validate($specName, $method, $matchedPath, $operation, $requestBody, $contentType, $version)),
+            ...ValidatorErrorBoundary::safely('request-body', $specName, $method, $matchedPath, fn(): array => $this->bodyValidator->validate($specName, $method, $matchedPath, $operation, $body, $contentType, $version)),
         ];
 
         if ($errors === []) {

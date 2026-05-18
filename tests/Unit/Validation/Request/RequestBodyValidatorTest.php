@@ -6,7 +6,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Request;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
+use Studio\OpenApiContractTesting\DecodedBody;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
@@ -29,7 +29,7 @@ class RequestBodyValidatorTest extends TestCase
             'GET',
             '/pets',
             [],
-            null,
+            DecodedBody::absent(),
             null,
             OpenApiVersion::V3_0,
         );
@@ -54,7 +54,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/pets',
             $operation,
-            null,
+            DecodedBody::absent(),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -70,8 +70,8 @@ class RequestBodyValidatorTest extends TestCase
         // JSON `null` against an OPTIONAL `type: object` body must NOT pass:
         // before the fix the validator read the decoded `null` as "no body"
         // and, because the body was optional, returned no errors — letting a
-        // malformed `null` body slip through unchecked. A present `null` is
-        // now type-checked against the schema and fails loudly.
+        // malformed `null` body slip through unchecked. A present DecodedBody
+        // carrying `null` is now type-checked against the schema and fails loudly.
         $operation = [
             'requestBody' => [
                 'required' => false,
@@ -86,7 +86,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/pets',
             $operation,
-            PresentJsonNull::Body,
+            DecodedBody::present(null),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -115,7 +115,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/pets',
             $operation,
-            PresentJsonNull::Body,
+            DecodedBody::present(null),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -143,7 +143,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/pets',
             $operation,
-            PresentJsonNull::Body,
+            DecodedBody::present(null),
             'application/json',
             OpenApiVersion::V3_1,
         );
@@ -173,7 +173,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/pets',
             $operation,
-            PresentJsonNull::Body,
+            DecodedBody::present(null),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -182,12 +182,12 @@ class RequestBodyValidatorTest extends TestCase
     }
 
     #[Test]
-    public function validate_still_treats_plain_null_as_absent_body(): void
+    public function validate_still_treats_absent_body_as_no_body(): void
     {
-        // Regression guard for issue #246: a plain PHP `null` (absent body,
-        // raw content was empty) keeps the historical "no body" semantics —
-        // it is NOT type-checked. An optional absent body still passes; the
-        // PresentJsonNull marker is the ONLY value whose handling changed.
+        // Regression guard for issue #246: an absent body (raw content was
+        // empty) keeps the historical "no body" semantics — it is NOT
+        // type-checked. An optional absent body still passes; only a present
+        // DecodedBody carrying `null` is type-checked against the schema.
         $operation = [
             'requestBody' => [
                 'required' => false,
@@ -202,7 +202,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/pets',
             $operation,
-            null,
+            DecodedBody::absent(),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -226,7 +226,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/pets',
             $operation,
-            null,
+            DecodedBody::absent(),
             'application/xml',
             OpenApiVersion::V3_0,
         );
@@ -245,7 +245,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/pets',
             $operation,
-            null,
+            DecodedBody::absent(),
             null,
             OpenApiVersion::V3_0,
         );
@@ -270,7 +270,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/pets',
             $operation,
-            null,
+            DecodedBody::absent(),
             null,
             OpenApiVersion::V3_0,
         );
@@ -302,7 +302,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/pets',
             $operation,
-            ['name' => 'Fido'],
+            DecodedBody::present(['name' => 'Fido']),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -332,7 +332,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/p',
             $operation,
-            [],
+            DecodedBody::present([]),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -358,7 +358,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/p',
             $operation,
-            [],
+            DecodedBody::present([]),
             'application/json',
             OpenApiVersion::V3_1,
         );
@@ -391,7 +391,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/p',
             $operation,
-            [],
+            DecodedBody::present([]),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -429,7 +429,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/p',
             $operation,
-            [],
+            DecodedBody::present([]),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -467,7 +467,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/p',
             $operation,
-            [],
+            DecodedBody::present([]),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -506,7 +506,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/p',
             $operation,
-            [],
+            DecodedBody::present([]),
             'application/json',
             OpenApiVersion::V3_0,
         );
@@ -520,10 +520,10 @@ class RequestBodyValidatorTest extends TestCase
     {
         // Request-side-specific invariant: the coercion fires regardless of
         // `required: true|false` because an empty `{}` body arrives as PHP
-        // `[]`, not as `null` — only `null` short-circuits the `required`
-        // branch. A future refactor that moved the optional-body fast-path
-        // to also match `[]` would silently skip the coercion gate; this
-        // test pins the current behaviour.
+        // `[]`, not as an absent body — only an absent body short-circuits the
+        // `required` branch. A future refactor that moved the optional-body
+        // fast-path to also match `[]` would silently skip the coercion gate;
+        // this test pins the current behaviour.
         $operation = [
             'requestBody' => [
                 'required' => false,
@@ -538,7 +538,7 @@ class RequestBodyValidatorTest extends TestCase
             'POST',
             '/p',
             $operation,
-            [],
+            DecodedBody::present([]),
             'application/json',
             OpenApiVersion::V3_0,
         );

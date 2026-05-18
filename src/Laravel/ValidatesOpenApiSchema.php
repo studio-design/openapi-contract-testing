@@ -18,8 +18,8 @@ use PHPUnit\Framework\AssertionFailedError;
 use RuntimeException;
 use Studio\OpenApiContractTesting\Attribute\SkipOpenApi;
 use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\DecodedBody;
 use Studio\OpenApiContractTesting\HttpMethod;
-use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
 use Studio\OpenApiContractTesting\Internal\StackTraceFilter;
 use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
@@ -1126,23 +1126,24 @@ trait ValidatesOpenApiSchema
     /**
      * Extract the request body in the shape OpenApiRequestValidator expects.
      * Mirrors {@see self::extractJsonBody()} for the request side: parse JSON
-     * only when the Content-Type claims it (or is absent), stay `null` on
-     * empty or non-JSON bodies so the validator decides whether the spec
-     * required one.
+     * only when the Content-Type claims it (or is absent), report an absent
+     * body on empty or non-JSON content so the validator decides whether the
+     * spec required one.
      *
-     * Issue #246: a non-empty body that decodes to the literal JSON `null`
-     * yields a {@see PresentJsonNull} marker so the validator type-checks the
-     * value against the schema instead of mistaking it for an absent body.
+     * Issues #246 / #248: a non-empty body that decodes to the literal JSON
+     * `null` is returned as a present {@see DecodedBody} carrying `null`, so
+     * the validator type-checks the value against the schema instead of
+     * mistaking it for an absent body.
      */
-    private function extractRequestBody(Request $request, string $contentType): mixed
+    private function extractRequestBody(Request $request, string $contentType): DecodedBody
     {
         $content = $request->getContent();
         if ($content === '') {
-            return null;
+            return DecodedBody::absent();
         }
 
         if ($contentType !== '' && !str_contains(strtolower($contentType), 'json')) {
-            return null;
+            return DecodedBody::absent();
         }
 
         // The return lives inside the try so its dependence on a successful
@@ -1152,7 +1153,7 @@ trait ValidatesOpenApiSchema
             /** @var mixed $decoded */
             $decoded = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
 
-            return $decoded ?? PresentJsonNull::Body;
+            return DecodedBody::present($decoded);
         } catch (JsonException $e) {
             $this->failOpenApi(
                 'Request body could not be parsed as JSON: ' . $e->getMessage()
@@ -1164,27 +1165,28 @@ trait ValidatesOpenApiSchema
     /**
      * Extract the response body in the shape OpenApiResponseValidator expects.
      * Mirrors {@see self::extractRequestBody()}: parse JSON only when the
-     * Content-Type claims it (or is absent), stay `null` on empty or non-JSON
-     * bodies so the validator decides whether the spec required one.
+     * Content-Type claims it (or is absent), report an absent body on empty
+     * or non-JSON content so the validator decides whether the spec required
+     * one.
      *
-     * Issue #246: decoding goes through `json_decode()` rather than
+     * Issues #246 / #248: decoding goes through `json_decode()` rather than
      * `TestResponse::json()` so a body of the literal JSON `null` is not
      * tripped up by Laravel's "null decode == invalid JSON" heuristic, and a
      * scalar body is returned as-is for schema type-checking instead of being
-     * forced into an array. A present literal `null` yields a
-     * {@see PresentJsonNull} marker so it is type-checked rather than read as
-     * an absent body — keeping this adapter aligned with the Symfony one.
+     * forced into an array. A present literal `null` is returned as a present
+     * {@see DecodedBody} carrying `null` so it is type-checked rather than
+     * read as an absent body — keeping this adapter aligned with the Symfony one.
      */
-    private function extractJsonBody(string $content, string $contentType): mixed
+    private function extractJsonBody(string $content, string $contentType): DecodedBody
     {
         if ($content === '') {
-            return null;
+            return DecodedBody::absent();
         }
 
-        // Non-JSON Content-Type: return null so the validator can decide
-        // whether the spec requires a JSON body for this endpoint.
+        // Non-JSON Content-Type: report an absent body so the validator can
+        // decide whether the spec requires a JSON body for this endpoint.
         if ($contentType !== '' && !str_contains(strtolower($contentType), 'json')) {
-            return null;
+            return DecodedBody::absent();
         }
 
         // See extractRequestBody(): the return is inside the try so its
@@ -1193,7 +1195,7 @@ trait ValidatesOpenApiSchema
             /** @var mixed $decoded */
             $decoded = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
 
-            return $decoded ?? PresentJsonNull::Body;
+            return DecodedBody::present($decoded);
         } catch (JsonException $e) {
             $this->failOpenApi(
                 'Response body could not be parsed as JSON: ' . $e->getMessage()
