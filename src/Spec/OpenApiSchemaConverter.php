@@ -505,13 +505,19 @@ final class OpenApiSchemaConverter
      * the property-dependency constraint is dropped wholesale: a payload
      * carrying the trigger property without its dependents passes silently.
      *
-     * The converter still recurses into `dependentSchemas` value subschemas
-     * for keyword hygiene (#214), but that does not restore the outer
-     * keyword's intended validation — hence this separate observability
+     * The converter still recurses into `dependentSchemas` map-shaped value
+     * subschemas for keyword hygiene (#214), but that does not restore the
+     * outer keyword's intended validation — hence this separate observability
      * warning. The Draft 07 equivalent (`if` / `then` / `else`) differs from
      * the `additionalProperties` / `required` advice in
      * {@see warnIfUsesUnsupportedKeywords()}, so the copy lives here rather
      * than folding these keywords into `DRAFT_2020_12_UNSUPPORTED_KEYS`.
+     *
+     * Called from `convertInPlace()`, so the warning fires for every schema
+     * node the converter recurses into. A keyword buried inside a position
+     * `convertInPlace()` deliberately does not visit — notably a list-shaped
+     * `dependentSchemas` value, itself a spec defect skipped at the recursion
+     * site — is not surfaced; that residual gap is defect-on-defect only.
      *
      * Warns once per keyword per process; dedup shares `$warnedKeywords`.
      *
