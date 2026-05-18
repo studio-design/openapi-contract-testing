@@ -47,6 +47,7 @@ final class StackTraceFilter
     private const DROP_PATTERNS = [
         '/studio-design/openapi-contract-testing/src/',
         '/openapi-contract-testing/src/Laravel/',
+        '/openapi-contract-testing/src/Symfony/',
         '/openapi-contract-testing/src/Internal/',
         '/openapi-contract-testing/src/PHPUnit/',
         '/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php',

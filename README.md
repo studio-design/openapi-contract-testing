@@ -26,7 +26,7 @@ Validate your API responses against your OpenAPI specification during testing, a
 - **Enum drift detection** — Static comparison between PHP backed enums and their `enum:` spec arrays, with PHPUnit-extension auto-discovery
 - **Schema under-description detection** — Optional strict mode that flags response fields the implementation always returns but the spec marks as optional, catching the spec gaps that conformance checks alone can't. See [`docs/strict-required.md`](docs/strict-required.md) for current scope and limitations.
 - **Skip-by-status-code** — Configurable regex list of status codes whose bodies are not validated (default: every `5xx`); per-request via `skipResponseCode()`
-- **Laravel & Pest adapters** — Auto-assert / auto-validate-request integration, with explicit `expect(...)->toMatchOpenApiResponseSchema()` for Pest
+- **Laravel, Symfony & Pest adapters** — Auto-assert / auto-validate-request integration for Laravel, an `OpenApiAssertions` trait for Symfony HttpFoundation, and explicit `expect(...)->toMatchOpenApiResponseSchema()` for Pest
 - **Parallel-runner safe** — Coordinated sidecar+merge workflow for paratest / `pest --parallel`
 - **Multi-format reports** — Markdown / JUnit XML / JSON / HTML output with one-click GitHub Step Summary
 - **Zero runtime overhead** — Only used in test suites
@@ -50,7 +50,7 @@ This library fills a gap left by existing PHP OpenAPI testing tools: **endpoint 
 | PHPUnit integration | ✅ | ✅ | ❌ | ⚠️ | ✅ |
 | Pest plugin | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Laravel auto-assert | ✅ | ✅ | ❌ | ❌ | ✅ |
-| Symfony HttpFoundation | ❌ | ❌ | ⚠️ | ✅ | ❌ |
+| Symfony HttpFoundation | ✅ | ❌ | ⚠️ | ✅ | ❌ |
 | External `$ref` auto-resolution | ✅ | ✅ | ✅ | ✅ | ✅ |
 | YAML spec loading | ✅ | ⚠️ | ✅ | ✅ | ✅ |
 | **Auto-inject dummy bearer** | ✅ | ❌ | ❌ | ❌ | ❌ |

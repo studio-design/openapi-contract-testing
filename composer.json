@@ -17,11 +17,14 @@
         "guzzlehttp/psr7": "^2.0",
         "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
         "phpstan/phpstan": "^2.1.13",
+        "symfony/browser-kit": "^6.4 || ^7.0 || ^8.0",
         "symfony/http-foundation": "^6.4 || ^7.0 || ^8.0",
+        "symfony/http-kernel": "^6.4 || ^7.0 || ^8.0",
         "symfony/yaml": "^6.4 || ^7.0 || ^8.0"
     },
     "suggest": {
         "illuminate/testing": "Required for the Laravel adapter (ValidatesOpenApiSchema trait)",
+        "symfony/http-foundation": "Required for the Symfony adapter (OpenApiAssertions trait), which validates HttpFoundation Request / Response objects directly",
         "symfony/yaml": "Required to load OpenAPI specs directly from .yaml / .yml files",
         "guzzlehttp/guzzle": "A PSR-18 HTTP client implementation for resolving external HTTP(S) $refs",
         "symfony/http-client": "A PSR-18 HTTP client implementation for resolving external HTTP(S) $refs",
