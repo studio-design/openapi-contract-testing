@@ -28,6 +28,7 @@ use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver;
 use Studio\OpenApiContractTesting\Validation\Request\SecuritySchemeIntrospector;
+use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
 use Studio\OpenApiContractTesting\Validation\Support\HeaderNormalizer;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -44,7 +45,6 @@ use function is_numeric;
 use function is_string;
 use function json_decode;
 use function sprintf;
-use function str_contains;
 use function strtolower;
 use function strtoupper;
 use function trigger_error;
@@ -1125,10 +1125,19 @@ trait ValidatesOpenApiSchema
 
     /**
      * Extract the request body in the shape OpenApiRequestValidator expects.
-     * Mirrors {@see self::extractJsonBody()} for the request side: parse JSON
-     * only when the Content-Type claims it (or is absent), report an absent
-     * body on empty or non-JSON content so the validator decides whether the
-     * spec required one.
+     * Mirrors {@see self::extractJsonBody()} for the request side: the body is
+     * JSON-decoded only when the Content-Type is a JSON media type (or absent);
+     * an empty body, or a non-JSON Content-Type, yields an absent envelope.
+     *
+     * A non-JSON body is left undecoded rather than guessed at: the Content-Type
+     * is forwarded to the validator separately, which resolves non-JSON media
+     * types through content negotiation. When the operation declares a
+     * `requestBody` content map, a media type missing from it is reported as
+     * "Content-Type is not defined" and one it declares is accepted without
+     * body-schema validation (the validator's schema engine is JSON-only). The
+     * JSON-ness test uses {@see ContentTypeMatcher::isJsonContentType()} so this
+     * adapter and the validator agree on exactly which media types count as
+     * JSON (issue #251).
      *
      * Issues #246 / #248: a non-empty body that decodes to the literal JSON
      * `null` is returned as a present {@see DecodedBody} carrying `null`, so
@@ -1142,7 +1151,12 @@ trait ValidatesOpenApiSchema
             return DecodedBody::absent();
         }
 
-        if ($contentType !== '' && !str_contains(strtolower($contentType), 'json')) {
+        // Non-JSON Content-Type: leave the body undecoded and report it absent.
+        // The validator receives the Content-Type separately and decides the
+        // contract verdict from it (issue #251).
+        if ($contentType !== '' && !ContentTypeMatcher::isJsonContentType(
+            ContentTypeMatcher::normalizeMediaType($contentType),
+        )) {
             return DecodedBody::absent();
         }
 
@@ -1164,10 +1178,12 @@ trait ValidatesOpenApiSchema
 
     /**
      * Extract the response body in the shape OpenApiResponseValidator expects.
-     * Mirrors {@see self::extractRequestBody()}: parse JSON only when the
-     * Content-Type claims it (or is absent), report an absent body on empty
-     * or non-JSON content so the validator decides whether the spec required
-     * one.
+     * Mirrors {@see self::extractRequestBody()}: the body is JSON-decoded only
+     * when the Content-Type is a JSON media type (or absent); an empty body, or
+     * a non-JSON Content-Type, yields an absent envelope. The JSON-ness test
+     * uses {@see ContentTypeMatcher::isJsonContentType()} so this adapter and
+     * the validator agree on exactly which media types count as JSON (issue
+     * #251).
      *
      * Issues #246 / #248: decoding goes through `json_decode()` rather than
      * `TestResponse::json()` so a body of the literal JSON `null` is not
@@ -1183,9 +1199,12 @@ trait ValidatesOpenApiSchema
             return DecodedBody::absent();
         }
 
-        // Non-JSON Content-Type: report an absent body so the validator can
-        // decide whether the spec requires a JSON body for this endpoint.
-        if ($contentType !== '' && !str_contains(strtolower($contentType), 'json')) {
+        // Non-JSON Content-Type: leave the body undecoded and report it absent.
+        // The validator receives the Content-Type separately and decides the
+        // contract verdict from it (issue #251).
+        if ($contentType !== '' && !ContentTypeMatcher::isJsonContentType(
+            ContentTypeMatcher::normalizeMediaType($contentType),
+        )) {
             return DecodedBody::absent();
         }
 

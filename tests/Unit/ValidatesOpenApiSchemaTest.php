@@ -287,6 +287,34 @@ class ValidatesOpenApiSchemaTest extends TestCase
     }
 
     #[Test]
+    public function content_type_containing_json_substring_is_not_decoded_as_json(): void
+    {
+        // Issue #251: a Content-Type that merely contains the substring "json"
+        // (e.g. application/jsonsomethingweird) is NOT a JSON media type. The
+        // adapter defers to ContentTypeMatcher::isJsonContentType() — the same
+        // strict check the validator uses — so a non-JSON body is left
+        // undecoded and the validator surfaces its clean "Content-Type is not
+        // defined" diagnostic instead of a misleading "could not be parsed as
+        // JSON" parse error.
+        $response = $this->makeTestResponse(
+            'not json at all',
+            200,
+            ['Content-Type' => 'application/jsonsomethingweird'],
+        );
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage(
+            "Response Content-Type 'application/jsonsomethingweird' is not defined",
+        );
+
+        $this->assertResponseMatchesOpenApiSchema(
+            $response,
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
     public function missing_content_type_header_still_parses_json(): void
     {
         $body = (string) json_encode(
