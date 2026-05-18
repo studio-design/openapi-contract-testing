@@ -14,6 +14,7 @@ use Studio\OpenApiContractTesting\Validation\Request\QueryParameterValidator;
 use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidationResult;
 use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Request\SecurityValidator;
+use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
 use Studio\OpenApiContractTesting\Validation\Support\PathDiagnosticsFormatter;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 use Studio\OpenApiContractTesting\Validation\Support\SpecResponseKeyResolver;
@@ -22,7 +23,6 @@ use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
 
 use function array_key_exists;
 use function array_keys;
-use function get_debug_type;
 use function is_array;
 use function sprintf;
 use function strtolower;
@@ -131,23 +131,22 @@ final class OpenApiRequestValidator
 
         $version = OpenApiVersion::fromSpec($spec);
 
-        // A present-but-non-array `paths` is a malformed spec — a stray
-        // scalar or an explicit `null` (a YAML `paths:` left empty, or a node
-        // that decoded to the wrong type). `array_key_exists` (not `isset`)
-        // is deliberate: `isset` is false for `null`, which would let a
-        // present-but-`null` `paths` slip through to `?? []` below and be
-        // silently coalesced to an empty map. A non-array value otherwise
-        // reaches the `array_keys()` call and raises an uncaught TypeError.
-        // Surface it as a loud spec error instead, mirroring the
+        // The root `paths` must decode to a JSON object; a scalar, `null`, or
+        // a JSON list is a malformed spec ({@see MalformedSpecNode}).
+        // Unguarded, a non-array reaches the `array_keys()` call below
+        // (uncaught TypeError) and a list mis-resolves silently. The presence
+        // test uses `array_key_exists` (not `isset`) so a present-but-`null`
+        // `paths` is caught here rather than coalesced to an empty map by
+        // `?? []`. Surface it as a loud spec error instead, mirroring the
         // response-side traversal guards (issue #259).
-        if (array_key_exists('paths', $spec) && !is_array($spec['paths'])) {
+        if (array_key_exists('paths', $spec) && MalformedSpecNode::isMalformed($spec['paths'])) {
             return OpenApiValidationResult::failure([
                 sprintf(
                     "Malformed 'paths' for %s %s in '%s' spec: expected object, got %s.",
                     $method,
                     $requestPath,
                     $specName,
-                    get_debug_type($spec['paths']),
+                    MalformedSpecNode::describe($spec['paths']),
                 ),
             ]);
         }
@@ -173,12 +172,13 @@ final class OpenApiRequestValidator
         // malformed, exactly like a scalar path item.
         $pathSpec = $spec['paths'][$matchedPath] ?? null;
 
-        // A present-but-non-array path item is a malformed spec; without this
-        // guard a scalar/`null` `$pathSpec` reaches the `array_key_exists()`
-        // method lookup below (and `ParameterCollector::collect()`'s `array
-        // $pathSpec` parameter) and raises an uncaught TypeError. Surface it
-        // loudly instead (issue #259).
-        if (!is_array($pathSpec)) {
+        // A path item must decode to a JSON object; a scalar, `null`, or a
+        // JSON list is malformed ({@see MalformedSpecNode}). Unguarded, a
+        // non-array reaches the `array_key_exists()` method lookup below (and
+        // `ParameterCollector::collect()`'s `array $pathSpec` parameter),
+        // raising an uncaught TypeError, and a list mis-resolves silently.
+        // Surface it loudly instead (issue #259).
+        if (MalformedSpecNode::isMalformed($pathSpec)) {
             return OpenApiValidationResult::failure([
                 sprintf(
                     "Malformed 'paths[\"%s\"]' for %s %s in '%s' spec: expected object, got %s.",
@@ -186,7 +186,7 @@ final class OpenApiRequestValidator
                     $method,
                     $matchedPath,
                     $specName,
-                    get_debug_type($pathSpec),
+                    MalformedSpecNode::describe($pathSpec),
                 ),
             ], $matchedPath);
         }
@@ -203,11 +203,12 @@ final class OpenApiRequestValidator
 
         $operation = $pathSpec[$lowerMethod];
 
-        // A present-but-non-array operation is a malformed spec; a scalar or
-        // `null` here would reach `ParameterCollector::collect()`'s `array
-        // $operation` parameter (the first scalar-typed sink) and raise an
-        // uncaught TypeError (issue #259).
-        if (!is_array($operation)) {
+        // An operation must decode to a JSON object; a scalar, `null`, or a
+        // JSON list is malformed ({@see MalformedSpecNode}). A non-array
+        // would reach `ParameterCollector::collect()`'s `array $operation`
+        // parameter (the first scalar-typed sink) and raise an uncaught
+        // TypeError; a list mis-resolves silently (issue #259).
+        if (MalformedSpecNode::isMalformed($operation)) {
             return OpenApiValidationResult::failure([
                 sprintf(
                     "Malformed 'paths[\"%s\"].%s' for %s %s in '%s' spec: expected object, got %s.",
@@ -216,7 +217,7 @@ final class OpenApiRequestValidator
                     $method,
                     $matchedPath,
                     $specName,
-                    get_debug_type($operation),
+                    MalformedSpecNode::describe($operation),
                 ),
             ], $matchedPath);
         }

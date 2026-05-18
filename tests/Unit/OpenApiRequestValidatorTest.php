@@ -501,7 +501,7 @@ class OpenApiRequestValidatorTest extends TestCase
 
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString("Malformed 'requestBody'", $result->errors()[0]);
-        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got string', $result->errors()[0]);
     }
 
     #[Test]
@@ -536,7 +536,7 @@ class OpenApiRequestValidatorTest extends TestCase
 
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString("Malformed 'requestBody.content[\"application/json\"]'", $result->errors()[0]);
-        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got string', $result->errors()[0]);
     }
 
     #[Test]
@@ -557,7 +557,7 @@ class OpenApiRequestValidatorTest extends TestCase
             "Malformed 'requestBody.content[\"application/json\"].schema'",
             $result->errors()[0],
         );
-        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got string', $result->errors()[0]);
     }
 
     /**
@@ -726,6 +726,70 @@ class OpenApiRequestValidatorTest extends TestCase
             $result->errors()[0],
         );
         $this->assertStringContainsString('expected object, got null', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function list_paths_node_returns_failure(): void
+    {
+        // The spec's root `paths` is a JSON list (`[...]`). A list passes
+        // `is_array()` but is not an object — the guard surfaces it as a loud
+        // malformed-spec error rather than letting integer keys mis-resolve
+        // (issue #259).
+        $result = $this->validator->validate(
+            'malformed-paths-list',
+            'POST',
+            '/things',
+            [],
+            [],
+            ['foo' => 'bar'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString("Malformed 'paths'", $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got list', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function list_path_item_returns_failure(): void
+    {
+        // `paths["/list-path-item"]` is a JSON list (issue #259).
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/list-path-item',
+            [],
+            [],
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'paths[\"/list-path-item\"]'",
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got list', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function list_operation_returns_failure(): void
+    {
+        // `paths["/list-operation"].get` is a JSON list (issue #259).
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/list-operation',
+            [],
+            [],
+            null,
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'paths[\"/list-operation\"].get'",
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got list', $result->errors()[0]);
     }
 
     // ========================================

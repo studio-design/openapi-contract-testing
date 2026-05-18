@@ -2083,7 +2083,7 @@ class OpenApiResponseValidatorTest extends TestCase
             "Malformed 'responses[200].content'",
             $result->errors()[0],
         );
-        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got string', $result->errors()[0]);
     }
 
     #[Test]
@@ -2106,7 +2106,7 @@ class OpenApiResponseValidatorTest extends TestCase
             'Malformed \'responses[200].content["application/json"]\'',
             $result->errors()[0],
         );
-        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got string', $result->errors()[0]);
     }
 
     #[Test]
@@ -2129,7 +2129,7 @@ class OpenApiResponseValidatorTest extends TestCase
             'Malformed \'responses[200].content["application/json"].schema\'',
             $result->errors()[0],
         );
-        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got string', $result->errors()[0]);
     }
 
     #[Test]
@@ -2177,7 +2177,7 @@ class OpenApiResponseValidatorTest extends TestCase
             "Malformed 'responses[200]'",
             $result->errors()[0],
         );
-        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got string', $result->errors()[0]);
     }
 
     #[Test]
@@ -2202,7 +2202,7 @@ class OpenApiResponseValidatorTest extends TestCase
             "Malformed 'responses[default]'",
             $result->errors()[0],
         );
-        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got string', $result->errors()[0]);
     }
 
     #[Test]
@@ -2441,5 +2441,118 @@ class OpenApiResponseValidatorTest extends TestCase
             "Malformed 'paths[\"/scalar-responses-map\"].get.responses'",
             $result->errors()[0],
         );
+    }
+
+    #[Test]
+    public function list_paths_node_returns_failure(): void
+    {
+        // The spec's root `paths` is a JSON list (`[...]`). A list passes
+        // `is_array()` but is not an object: `array_keys()` would yield
+        // integer keys that mis-resolve silently against every request path.
+        // The guard surfaces it as a loud malformed-spec error (issue #259).
+        $result = $this->validator->validate(
+            'malformed-paths-list',
+            'GET',
+            '/things',
+            200,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString("Malformed 'paths'", $result->errors()[0]);
+        $this->assertStringContainsString('expected object, got list', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function list_path_item_returns_failure(): void
+    {
+        // `paths["/list-path-item"]` is a JSON list. A list path item passes
+        // `is_array()` but has no method keys, so it would mis-resolve to a
+        // misleading "method not defined" — the guard surfaces it as
+        // malformed instead (issue #259).
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/list-path-item',
+            200,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'paths[\"/list-path-item\"]'",
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got list', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function list_operation_returns_failure(): void
+    {
+        // `paths["/list-operation"].get` is a JSON list (issue #259).
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/list-operation',
+            200,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'paths[\"/list-operation\"].get'",
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got list', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function list_responses_map_returns_failure(): void
+    {
+        // `paths["/list-responses-map"].get.responses` is a JSON list. A list
+        // passes `is_array()` and would reach `SpecResponseKeyResolver` with
+        // integer keys that never match a status — the guard surfaces it as
+        // malformed instead (issue #259).
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/list-responses-map',
+            200,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'paths[\"/list-responses-map\"].get.responses'",
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got list', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function list_response_status_entry_returns_failure(): void
+    {
+        // `responses["200"]` is a JSON list. The per-entry guard (issue #258)
+        // now routes through MalformedSpecNode, so a list response entry is
+        // surfaced with the same loud diagnostic as a scalar one.
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/list-response-status',
+            200,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'responses[200]'",
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got list', $result->errors()[0]);
     }
 }
