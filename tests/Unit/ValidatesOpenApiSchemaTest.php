@@ -145,6 +145,46 @@ class ValidatesOpenApiSchemaTest extends TestCase
     }
 
     #[Test]
+    public function literal_null_response_body_is_type_checked(): void
+    {
+        // Issue #246: a response body of the literal JSON `null` is
+        // type-checked against the schema instead of being read as an absent
+        // body. GET /v1/pets declares a `type: object` 200 schema, so a null
+        // body fails with a schema type error. Before the fix the Laravel
+        // adapter decoded through TestResponse::json(), whose "null decode ==
+        // invalid JSON" heuristic raised a misleading framework failure.
+        $response = $this->makeTestResponse('null', 200);
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('must match the type');
+
+        $this->assertResponseMatchesOpenApiSchema(
+            $response,
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
+    public function scalar_response_body_is_type_checked(): void
+    {
+        // Issue #246: a scalar JSON body (the integer `123`) reaches the
+        // validator and is type-checked. Before the fix the body extractor's
+        // `?array` return type raised a TypeError on a non-array decoded
+        // body; the Laravel and Symfony adapters now behave identically.
+        $response = $this->makeTestResponse('123', 200);
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('must match the type');
+
+        $this->assertResponseMatchesOpenApiSchema(
+            $response,
+            HttpMethod::GET,
+            '/v1/pets',
+        );
+    }
+
+    #[Test]
     public function non_json_html_body_passes_as_null_body(): void
     {
         $response = $this->makeTestResponse(

@@ -128,6 +128,26 @@ class ValidatesOpenApiSchemaAutoValidateRequestTest extends TestCase
     }
 
     #[Test]
+    public function auto_validate_request_type_checks_literal_null_body(): void
+    {
+        // Issue #246: a request body of the literal JSON `null` with no
+        // Content-Type is type-checked against the requestBody schema instead
+        // of being read as an absent body. POST /v1/pets requires a
+        // `type: object` body, so a null body fails loudly with a schema type
+        // error — before the fix the decoded `null` was misreported as an
+        // empty body.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_validate_request'] = true;
+
+        $request = Request::create('/v1/pets', 'POST', [], [], [], [], 'null');
+        $request->headers->remove('Content-Type');
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('must match the type');
+
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::POST, '/v1/pets');
+    }
+
+    #[Test]
     public function auto_validate_request_true_raises_on_missing_bearer(): void
     {
         // Without auto-inject, a bearer-protected endpoint called without any

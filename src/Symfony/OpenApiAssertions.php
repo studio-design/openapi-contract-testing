@@ -11,6 +11,7 @@ use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\AssertionFailedError;
 use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\HttpMethod;
+use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
 use Studio\OpenApiContractTesting\Internal\StackTraceFilter;
 use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
@@ -332,6 +333,12 @@ trait OpenApiAssertions
      * claims JSON, stay `null` on empty or non-JSON bodies so the validator
      * decides whether the spec required one.
      *
+     * Issue #246: when the raw content is non-empty but decodes to the literal
+     * JSON `null`, a {@see PresentJsonNull} marker is returned instead of a
+     * bare `null` so the validator type-checks the value against the schema
+     * rather than mistaking it for an absent body. Non-null decoded values
+     * (scalars, arrays) pass through unchanged.
+     *
      * @param string $subject either `Request` or `Response`, used only for the
      *                        error message when the body is not valid JSON
      */
@@ -359,7 +366,7 @@ trait OpenApiAssertions
             ));
         }
 
-        return $decoded;
+        return $decoded ?? PresentJsonNull::Body;
     }
 
     /** Like Assert::fail() but with vendor frames stripped from the trace. */

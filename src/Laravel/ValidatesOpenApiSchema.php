@@ -19,6 +19,7 @@ use RuntimeException;
 use Studio\OpenApiContractTesting\Attribute\SkipOpenApi;
 use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\HttpMethod;
+use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
 use Studio\OpenApiContractTesting\Internal\StackTraceFilter;
 use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
@@ -520,7 +521,7 @@ trait ValidatesOpenApiSchema
             $resolvedMethod,
             $resolvedPath,
             $response->getStatusCode(),
-            $this->extractJsonBody($response, $content, $contentType),
+            $this->extractJsonBody($content, $contentType),
             $contentType !== '' ? $contentType : null,
             // HeaderNormalizer is idempotent; HeaderBag's already-lower-cased
             // keys pass through unchanged.
@@ -1127,6 +1128,10 @@ trait ValidatesOpenApiSchema
      * Mirrors {@see self::extractJsonBody()} for the request side: parse JSON
      * only when the Content-Type claims it, stay `null` on empty or non-JSON
      * bodies so the validator decides whether the spec required one.
+     *
+     * Issue #246: a non-empty body that decodes to the literal JSON `null`
+     * yields a {@see PresentJsonNull} marker so the validator type-checks the
+     * value against the schema instead of mistaking it for an absent body.
      */
     private function extractRequestBody(Request $request, string $contentType): mixed
     {
@@ -1149,11 +1154,24 @@ trait ValidatesOpenApiSchema
             );
         }
 
-        return $decoded;
+        return $decoded ?? PresentJsonNull::Body;
     }
 
-    /** @return null|array<string, mixed> */
-    private function extractJsonBody(TestResponse $response, string $content, string $contentType): ?array
+    /**
+     * Extract the response body in the shape OpenApiResponseValidator expects.
+     * Mirrors {@see self::extractRequestBody()}: parse JSON only when the
+     * Content-Type claims it (or is absent), stay `null` on empty or non-JSON
+     * bodies so the validator decides whether the spec required one.
+     *
+     * Issue #246: decoding goes through `json_decode()` rather than
+     * `TestResponse::json()` so a body of the literal JSON `null` is not
+     * tripped up by Laravel's "null decode == invalid JSON" heuristic, and a
+     * scalar body is returned as-is for schema type-checking instead of being
+     * forced into an array. A present literal `null` yields a
+     * {@see PresentJsonNull} marker so it is type-checked rather than read as
+     * an absent body — keeping this adapter aligned with the Symfony one.
+     */
+    private function extractJsonBody(string $content, string $contentType): mixed
     {
         if ($content === '') {
             return null;
@@ -1166,12 +1184,15 @@ trait ValidatesOpenApiSchema
         }
 
         try {
-            return $response->json();
+            /** @var mixed $decoded */
+            $decoded = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
             $this->failOpenApi(
                 'Response body could not be parsed as JSON: ' . $e->getMessage()
                 . ($contentType === '' ? ' (no Content-Type header was present on the response)' : ''),
             );
         }
+
+        return $decoded ?? PresentJsonNull::Body;
     }
 }

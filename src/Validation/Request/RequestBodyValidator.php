@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Validation\Request;
 
 use stdClass;
+use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\SchemaContext;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
@@ -141,7 +142,17 @@ final class RequestBodyValidator
             return [];
         }
 
-        if ($requestBody === null) {
+        // Issue #246: see the matching comment in ResponseBodyValidator. A
+        // PresentJsonNull marker means the wire carried a literal JSON `null`
+        // body; unwrap it and flag the body as present so it is type-checked
+        // against the schema instead of taking the empty-body branch.
+        $bodyWasPresent = false;
+        if ($requestBody instanceof PresentJsonNull) {
+            $requestBody = null;
+            $bodyWasPresent = true;
+        }
+
+        if ($requestBody === null && !$bodyWasPresent) {
             if (!$required) {
                 return [];
             }

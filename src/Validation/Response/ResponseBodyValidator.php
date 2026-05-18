@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Validation\Response;
 
 use stdClass;
+use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiValidationResult;
 use Studio\OpenApiContractTesting\OpenApiVersion;
@@ -106,7 +107,18 @@ final class ResponseBodyValidator
             return new ResponseBodyValidationResult([], $jsonContentType);
         }
 
-        if ($responseBody === null) {
+        // Issue #246: an adapter that saw non-empty raw content but decoded a
+        // literal JSON `null` passes the PresentJsonNull marker so the null is
+        // type-checked against the schema below, rather than short-circuiting
+        // as an absent body. Unwrap it to a real null and remember the body
+        // WAS present so the empty-body branch is bypassed.
+        $bodyWasPresent = false;
+        if ($responseBody instanceof PresentJsonNull) {
+            $responseBody = null;
+            $bodyWasPresent = true;
+        }
+
+        if ($responseBody === null && !$bodyWasPresent) {
             return new ResponseBodyValidationResult(
                 [
                     "Response body is empty but {$method} {$matchedPath} (status {$statusCode}) defines a JSON-compatible response schema in '{$specName}' spec.",
