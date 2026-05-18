@@ -1216,6 +1216,99 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     // ========================================
+    // dependentSchemas / dependentRequired silent-ignore warning (#216)
+    // opis Draft 07 does not register either 2019-09 keyword, so the
+    // property-dependency constraint is dropped wholesale and no error
+    // surfaces. The warning makes that silent bypass loud.
+    // ========================================
+
+    #[Test]
+    public function dependent_schemas_emits_warning(): void
+    {
+        $schema = [
+            'type' => 'object',
+            'properties' => ['creditCard' => ['type' => 'string']],
+            'dependentSchemas' => [
+                'creditCard' => [
+                    'type' => 'object',
+                    'required' => ['cvv'],
+                ],
+            ],
+        ];
+
+        $warnings = $this->captureWarnings(static function () use ($schema): void {
+            OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        });
+
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString('dependentSchemas', $warnings[0]);
+    }
+
+    #[Test]
+    public function dependent_required_emits_warning(): void
+    {
+        $schema = [
+            'type' => 'object',
+            'properties' => [
+                'creditCard' => ['type' => 'string'],
+                'cvv' => ['type' => 'string'],
+            ],
+            'dependentRequired' => ['creditCard' => ['cvv']],
+        ];
+
+        $warnings = $this->captureWarnings(static function () use ($schema): void {
+            OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        });
+
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString('dependentRequired', $warnings[0]);
+    }
+
+    #[Test]
+    public function dependent_keywords_emit_warning_for_oas_3_0_too(): void
+    {
+        // Both keywords are 2019-09 but can appear in hand-rolled or
+        // generated 3.0 specs that mix dialects. The warning must run for
+        // both versions, mirroring the unevaluated* handling.
+        $schema = [
+            'type' => 'object',
+            'dependentRequired' => ['creditCard' => ['cvv']],
+        ];
+
+        $warnings = $this->captureWarnings(static function () use ($schema): void {
+            OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
+        });
+
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString('dependentRequired', $warnings[0]);
+    }
+
+    #[Test]
+    public function dependent_keywords_warn_independently_and_point_to_if_then_else(): void
+    {
+        // Per-keyword dedup: a schema declaring both keywords at once must
+        // surface two distinct warnings, each pointing the user at the
+        // Draft 07 equivalent (if/then/else).
+        $schema = [
+            'type' => 'object',
+            'dependentSchemas' => [
+                'creditCard' => ['type' => 'object', 'required' => ['cvv']],
+            ],
+            'dependentRequired' => ['billingAddress' => ['country']],
+        ];
+
+        $warnings = $this->captureWarnings(static function () use ($schema): void {
+            OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        });
+
+        $this->assertCount(2, $warnings);
+        $joined = implode("\n", $warnings);
+        $this->assertStringContainsString('dependentSchemas', $joined);
+        $this->assertStringContainsString('dependentRequired', $joined);
+        $this->assertStringContainsString('if/then/else', $joined);
+    }
+
+    // ========================================
     // discriminator.mapping silent-strip warning (#147)
     // ========================================
 
@@ -1857,7 +1950,12 @@ class OpenApiSchemaConverterTest extends TestCase
             ],
         ];
 
-        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        // The outer `dependentSchemas` keyword triggers the #216 silent-ignore
+        // warning; this test is about inner-subschema lowering, so swallow it.
+        $result = null;
+        $this->captureWarnings(static function () use ($schema, &$result): void {
+            $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        });
 
         $this->assertArrayNotHasKey(
             'const',
@@ -2124,7 +2222,11 @@ class OpenApiSchemaConverterTest extends TestCase
         ];
         $original = $schema;
 
-        OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        // `dependentSchemas` triggers the #216 warning; this test asserts the
+        // input array is not mutated, so swallow the unrelated warning.
+        $this->captureWarnings(static function () use ($schema): void {
+            OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        });
 
         $this->assertSame($original, $schema);
     }
@@ -2146,7 +2248,12 @@ class OpenApiSchemaConverterTest extends TestCase
             'dependentSchemas' => ['k' => true],
         ];
 
-        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        // The `dependentSchemas` key triggers the #216 warning; this test is
+        // about boolean-subschema preservation, so swallow it.
+        $result = null;
+        $this->captureWarnings(static function () use ($schema, &$result): void {
+            $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        });
 
         $this->assertSame($schema, $result);
     }
@@ -2166,7 +2273,12 @@ class OpenApiSchemaConverterTest extends TestCase
             ],
         ];
 
-        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        // The `dependentSchemas` key triggers the #216 warning; this test is
+        // about list-shaped-value skipping, so swallow it.
+        $result = null;
+        $this->captureWarnings(static function () use ($schema, &$result): void {
+            $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
+        });
 
         $this->assertSame($schema, $result);
     }
