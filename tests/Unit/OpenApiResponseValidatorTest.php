@@ -2059,4 +2059,149 @@ class OpenApiResponseValidatorTest extends TestCase
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString('Response body is empty', $result->errorMessage());
     }
+
+    #[Test]
+    public function malformed_response_content_block_returns_failure(): void
+    {
+        // `responses.200.content` is a scalar. Without the guard the scalar
+        // reaches ResponseBodyValidator::validate()'s `array $content`
+        // parameter and raises an uncaught TypeError (TypeError extends Error,
+        // not RuntimeException, so validateBody()'s catch does not see it).
+        // The guard surfaces a loud spec error instead, mirroring the
+        // request-side `Malformed 'requestBody.content'` guard (issue #256).
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/response-scalar-content',
+            200,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'responses[200].content'",
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function malformed_response_content_media_type_entry_returns_failure(): void
+    {
+        // `responses.200.content["application/json"]` is a scalar. The
+        // per-media-type guard in ResponseBodyValidator surfaces it as a spec
+        // error, which the orchestrator turns into a Failure (issue #256).
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/response-scalar-content-media-type',
+            200,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            'Malformed \'responses[200].content["application/json"]\'',
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function malformed_response_content_schema_returns_failure(): void
+    {
+        // `responses.200.content["application/json"].schema` is a scalar.
+        // Without the guard the scalar would reach OpenApiSchemaConverter and
+        // raise a TypeError; the orchestrator now reports a clean spec error.
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/response-scalar-content-schema',
+            200,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            'Malformed \'responses[200].content["application/json"].schema\'',
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function null_response_content_schema_returns_failure(): void
+    {
+        // Locks `array_key_exists` over `isset` at the orchestrator level: an
+        // explicit `schema: null` must surface a Failure, not slip through the
+        // downstream presence check as a silent pass.
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/response-null-content-schema',
+            200,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            'Malformed \'responses[200].content["application/json"].schema\'',
+            $result->errors()[0],
+        );
+    }
+
+    #[Test]
+    public function malformed_response_status_entry_returns_failure(): void
+    {
+        // `responses["200"]` is a scalar instead of a response object. Without
+        // the guard the scalar reaches validateBody()/validateHeaders()' `array
+        // $responseSpec` parameter and raises an uncaught TypeError (TypeError
+        // extends Error, not RuntimeException). The guard added for issue #258
+        // surfaces a loud spec error, mirroring the content-level guards and
+        // RequestBodyValidator's `requestBody` guard.
+        $result = $this->validator->validate(
+            'malformed-response',
+            'GET',
+            '/things',
+            200,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'responses[200]'",
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+    }
+
+    #[Test]
+    public function malformed_response_status_entry_keys_message_off_matched_spec_key(): void
+    {
+        // The spec declares only `default`; a wire status of 200 resolves to
+        // the `default` key (SpecResponseKeyResolver runs before the guard).
+        // The guard's error message must name the matched spec key
+        // (`responses[default]`), not the wire status — `responses[200]` would
+        // point at a map entry the spec author never wrote (issue #258).
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/response-default-status-scalar',
+            200,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'responses[default]'",
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+    }
 }

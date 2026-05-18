@@ -189,6 +189,21 @@ final class OpenApiResponseValidator
         $statusCodeStr = $matchedResponseKey;
         $responseSpec = $responses[$matchedResponseKey];
 
+        // A present-but-non-array response entry is a malformed spec (stray
+        // scalar, e.g. an unresolved $ref); surface it as a loud spec error
+        // (issue #258). Without this guard the scalar reaches the
+        // `array $responseSpec` parameters of validateBody() / validateHeaders()
+        // and raises an uncaught TypeError (TypeError extends Error, not
+        // RuntimeException, so validateBody()'s catch would not see it). This
+        // mirrors the content-level guards in validateBody() and
+        // RequestBodyValidator's `requestBody` guard.
+        if (!is_array($responseSpec)) {
+            return OpenApiValidationResult::failure([
+                "Malformed 'responses[{$matchedResponseKey}]' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
+            ], $matchedPath, $statusCodeStr);
+        }
+
+        /** @var array<string, mixed> $responseSpec */
         $bodyResult = $this->validateBody(
             $specName,
             $method,
@@ -412,7 +427,19 @@ final class OpenApiResponseValidator
             return new ResponseBodyValidationResult([], null);
         }
 
-        /** @var array<string, array<string, mixed>> $content */
+        // A present-but-non-array `content` is a malformed spec (stray scalar,
+        // e.g. an unresolved $ref). Surface it before it reaches
+        // ResponseBodyValidator::validate()'s `array $content` parameter, where
+        // it would raise an uncaught TypeError (TypeError extends Error, not
+        // RuntimeException, so the catch below would not see it). Mirrors
+        // RequestBodyValidator's `requestBody.content` guard (issue #256).
+        if (!is_array($responseSpec['content'])) {
+            return new ResponseBodyValidationResult([
+                "Malformed 'responses[{$statusCode}].content' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
+            ], null);
+        }
+
+        /** @var array<string, mixed> $content */
         $content = $responseSpec['content'];
 
         // Inlined try/catch mirrors ValidatorErrorBoundary::safely() for the
