@@ -198,6 +198,45 @@ in config/openapi-contract-testing.php.
 
 > **Note:** `openApiSpec()` remains the original extension hook and is fully backward-compatible — overriding it works exactly as before.
 
+### With Symfony
+
+For Symfony projects, mix the `OpenApiAssertions` trait into a `WebTestCase` (or any PHPUnit test). It validates HttpFoundation `Request` / `Response` objects directly against the spec — no PSR-7 conversion required — and records endpoint coverage the same way the Laravel adapter does.
+
+```php
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
+use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
+use Studio\OpenApiContractTesting\Symfony\OpenApiAssertions;
+
+#[OpenApiSpec('front')]
+final class PetsTest extends WebTestCase
+{
+    use OpenApiAssertions;
+
+    public function test_list_pets(): void
+    {
+        $client = static::createClient();
+        $client->request('GET', '/api/v1/pets');
+
+        // Validates both the request and the response of the last client call.
+        $this->assertClientMatchesOpenApiSchema($client);
+    }
+}
+```
+
+You can also pass HttpFoundation objects directly — useful when you are not driving the test through the kernel browser:
+
+```php
+// Response only (the Request supplies the HTTP method and path):
+$this->assertResponseMatchesOpenApiSchema($request, $response);
+
+// Request only (optionally pass the response status for the documented-4xx downgrade):
+$this->assertRequestMatchesOpenApiSchema($request, $response->getStatusCode());
+```
+
+Spec resolution uses the same `#[OpenApiSpec]` attribute / `openApiSpec()` chain as the framework-agnostic usage below. There is no Laravel-style `config()` lookup, so pin the spec with the attribute or by overriding `openApiSpec()`. Spec files are still discovered through the [PHPUnit extension](#2-configure-the-phpunit-extension) (`spec_base_path`) or a direct `OpenApiSpecLoader::configure()` call.
+
+> **Requires `symfony/http-foundation`.** Symfony projects already depend on it; it is listed under `suggest` so standalone installs aren't forced to pull it in.
+
 ### Framework-agnostic
 
 You can use the `#[OpenApiSpec]` attribute with the `OpenApiSpecResolver` trait in any PHPUnit test:

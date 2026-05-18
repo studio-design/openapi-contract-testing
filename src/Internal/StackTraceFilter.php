@@ -18,8 +18,9 @@ use function str_replace;
  * Trims this library's own frames (and known framework testing-concern
  * frames) out of an assertion-failure trace so a contract-test failure
  * points at the user's test line, not at vendor code. Consumed by the
- * Laravel traits (`ValidatesOpenApiSchema`, `ExploresOpenApiEndpoint`)
- * and the PHPUnit trait (`AssertsNoEnumDrift`).
+ * Laravel traits (`ValidatesOpenApiSchema`, `ExploresOpenApiEndpoint`),
+ * the Symfony trait (`OpenApiAssertions`), and the PHPUnit trait
+ * (`AssertsNoEnumDrift`).
  *
  * @internal Not part of the package's public API. Do not use from user code.
  */
@@ -47,6 +48,7 @@ final class StackTraceFilter
     private const DROP_PATTERNS = [
         '/studio-design/openapi-contract-testing/src/',
         '/openapi-contract-testing/src/Laravel/',
+        '/openapi-contract-testing/src/Symfony/',
         '/openapi-contract-testing/src/Internal/',
         '/openapi-contract-testing/src/PHPUnit/',
         '/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php',
