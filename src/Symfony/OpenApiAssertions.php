@@ -17,6 +17,7 @@ use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver;
+use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
 use Symfony\Component\BrowserKit\Exception\BadMethodCallException;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -25,7 +26,6 @@ use Symfony\Component\HttpKernel\HttpKernelBrowser;
 use function array_merge;
 use function json_decode;
 use function sprintf;
-use function str_contains;
 use function strtolower;
 use function strtoupper;
 use function var_export;
@@ -329,9 +329,11 @@ trait OpenApiAssertions
 
     /**
      * Decode a JSON request / response body in the shape the validators
-     * expect. Mirrors the Laravel adapter: parse only when the Content-Type
-     * claims JSON (or is absent), report an absent body on empty or non-JSON
-     * content so the validator decides whether the spec required one.
+     * expect. Mirrors the Laravel adapter: the body is JSON-decoded only when
+     * the Content-Type is a JSON media type (or absent); an empty body, or a
+     * non-JSON Content-Type, yields an absent envelope. The JSON-ness test uses
+     * {@see ContentTypeMatcher::isJsonContentType()} so this adapter and the
+     * validator agree on exactly which media types count as JSON (issue #251).
      *
      * Issues #246 / #248: when the raw content is non-empty but decodes to the
      * literal JSON `null`, a present {@see DecodedBody} carrying `null` is
@@ -348,7 +350,12 @@ trait OpenApiAssertions
             return DecodedBody::absent();
         }
 
-        if ($contentType !== '' && !str_contains(strtolower($contentType), 'json')) {
+        // Non-JSON Content-Type: leave the body undecoded and report it absent.
+        // The validator receives the Content-Type separately and decides the
+        // contract verdict from it (issue #251).
+        if ($contentType !== '' && !ContentTypeMatcher::isJsonContentType(
+            ContentTypeMatcher::normalizeMediaType($contentType),
+        )) {
             return DecodedBody::absent();
         }
 

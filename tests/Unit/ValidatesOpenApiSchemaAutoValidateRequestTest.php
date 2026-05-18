@@ -395,6 +395,36 @@ class ValidatesOpenApiSchemaAutoValidateRequestTest extends TestCase
     }
 
     #[Test]
+    public function content_type_containing_json_substring_is_not_decoded_as_json(): void
+    {
+        // Issue #251: a Content-Type that merely contains the substring "json"
+        // (e.g. application/jsonsomethingweird) is NOT a JSON media type. The
+        // adapter defers to ContentTypeMatcher::isJsonContentType() — the same
+        // strict check the validator uses — so a non-JSON body is left
+        // undecoded and the validator surfaces its clean "Content-Type is not
+        // defined" diagnostic instead of a misleading "could not be parsed as
+        // JSON" parse error.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_validate_request'] = true;
+
+        $request = Request::create(
+            '/v1/pets',
+            'POST',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'application/jsonsomethingweird'],
+            'not json at all',
+        );
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage(
+            "Request Content-Type 'application/jsonsomethingweird' is not defined",
+        );
+
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::POST, '/v1/pets');
+    }
+
+    #[Test]
     public function non_json_content_type_body_is_treated_as_null(): void
     {
         // Regression guard: a form-urlencoded body must not be handed to the
