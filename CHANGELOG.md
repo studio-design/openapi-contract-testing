@@ -10,6 +10,23 @@ the README for the full surface contract.
 
 ## Unreleased
 
+## [1.7.0](https://github.com/studio-design/openapi-contract-testing/compare/v1.6.0...v1.7.0) (2026-05-18)
+
+
+### Features
+
+* **schema:** warn when dependentSchemas / dependentRequired is encountered ([#243](https://github.com/studio-design/openapi-contract-testing/issues/243)) ([8ea767e](https://github.com/studio-design/openapi-contract-testing/commit/8ea767ea1935a044cae936276e3c76b6c258d22a))
+* **symfony:** add OpenApiAssertions trait for HttpFoundation contract testing ([#245](https://github.com/studio-design/openapi-contract-testing/issues/245)) ([cccc57d](https://github.com/studio-design/openapi-contract-testing/commit/cccc57d50b690f6049a3c750d5d10ba4943478ac))
+
+
+### Bug Fixes
+
+* **adapters:** align adapter JSON content-type detection with ContentTypeMatcher ([#253](https://github.com/studio-design/openapi-contract-testing/issues/253)) ([61a8299](https://github.com/studio-design/openapi-contract-testing/commit/61a8299c480de3be38c053e1e23a301046324476))
+* **adapters:** type-check literal JSON null / scalar request & response bodies ([#247](https://github.com/studio-design/openapi-contract-testing/issues/247)) ([f7de459](https://github.com/studio-design/openapi-contract-testing/commit/f7de459cb09025a9d95b04466d534e005bfb2395))
+* **validation:** guard response validation against malformed content and response specs ([#257](https://github.com/studio-design/openapi-contract-testing/issues/257)) ([18b0a98](https://github.com/studio-design/openapi-contract-testing/commit/18b0a983dd5e1d7be87e4f7839d440dd124d566a))
+* **validation:** guard spec traversal against malformed structural nodes ([#259](https://github.com/studio-design/openapi-contract-testing/issues/259)) ([#260](https://github.com/studio-design/openapi-contract-testing/issues/260)) ([f25c0bb](https://github.com/studio-design/openapi-contract-testing/commit/f25c0bb3bc71fb753510ea27684b98404aa42b09))
+* **validation:** surface a skip for non-JSON content types that declare a schema ([#254](https://github.com/studio-design/openapi-contract-testing/issues/254)) ([#255](https://github.com/studio-design/openapi-contract-testing/issues/255)) ([44169d4](https://github.com/studio-design/openapi-contract-testing/commit/44169d439d03bc0d4a256a64891b4ae1ebdc0408))
+
 ## [1.6.0](https://github.com/studio-design/openapi-contract-testing/compare/v1.5.0...v1.6.0) (2026-05-13)
 
 
