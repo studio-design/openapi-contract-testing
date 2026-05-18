@@ -39,6 +39,31 @@
                 }
             }
         },
+        "/text-with-schema-and-required-header": {
+            "get": {
+                "operationId": "getTextWithSchemaAndRequiredHeader",
+                "responses": {
+                    "200": {
+                        "description": "text/plain WITH a schema AND a required response header — the body skip must not mask a missing-header failure",
+                        "headers": {
+                            "X-Trace-Id": {
+                                "required": true,
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/text-without-schema": {
             "get": {
                 "operationId": "getTextWithoutSchema",

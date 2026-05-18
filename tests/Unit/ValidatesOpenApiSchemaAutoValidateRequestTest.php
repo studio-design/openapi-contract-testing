@@ -558,6 +558,42 @@ class ValidatesOpenApiSchemaAutoValidateRequestTest extends TestCase
     }
 
     #[Test]
+    public function records_request_skip_reason_in_coverage_for_non_json_schema_body(): void
+    {
+        // Issue #254 end-to-end: a non-JSON request Content-Type that matched
+        // a spec media-type key declaring a `schema` is downgraded to Skipped
+        // by the request validator. The trait must forward that skip reason
+        // into coverage so the endpoint is recorded as request-reached with a
+        // skip reason rather than a clean validated request.
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.auto_validate_request'] = true;
+        $GLOBALS['__openapi_testing_config']['openapi-contract-testing.default_spec'] = 'non-json-content-schema';
+
+        $request = Request::create(
+            '/text-with-schema',
+            'POST',
+            [],
+            [],
+            [],
+            ['CONTENT_TYPE' => 'text/plain'],
+            'plain body',
+        );
+
+        // text/plain with a schema → Skipped, not a failure: no exception.
+        $this->maybeAutoValidateOpenApiRequest($request, HttpMethod::POST, '/text-with-schema');
+
+        $state = OpenApiCoverageTracker::exportState();
+        $endpoint = $state['specs']['non-json-content-schema']['POST /text-with-schema'] ?? null;
+        $this->assertNotNull($endpoint);
+        $this->assertTrue($endpoint['requestReached']);
+        $this->assertArrayHasKey('requestSkipReason', $endpoint);
+        $this->assertNotNull($endpoint['requestSkipReason']);
+        $this->assertStringContainsString(
+            'JSON Schema engine only',
+            (string) $endpoint['requestSkipReason'],
+        );
+    }
+
+    #[Test]
     public function request_validator_cache_invalidates_when_skip_codes_config_changes(): void
     {
         // The trait's cache is keyed on (maxErrors, skipRequestValidationResponseCodes).

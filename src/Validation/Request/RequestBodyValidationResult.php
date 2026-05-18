@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Validation\Request;
 
+use InvalidArgumentException;
 use Studio\OpenApiContractTesting\OpenApiRequestValidator;
+use Studio\OpenApiContractTesting\OpenApiValidationResult;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidationResult;
 
 /**
@@ -21,6 +23,10 @@ use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidationResu
  * the unvalidated body is not miscounted as a clean pass and the skip reason
  * reaches coverage tracking.
  *
+ * If a sibling validator (path / query / header / security) failed, the
+ * orchestrator builds a `failure()` instead and the `skipReason` is dropped
+ * — a genuine failure takes precedence over a skip.
+ *
  * This mirrors {@see ResponseBodyValidationResult} on the response side;
  * request-side coverage has no per-content-type dimension, so no
  * `matchedContentType` is carried.
@@ -31,9 +37,21 @@ final readonly class RequestBodyValidationResult
 {
     /**
      * @param string[] $errors
+     *
+     * @throws InvalidArgumentException when `skipReason` is set alongside a
+     *                                  non-empty `errors` list — a skip means the body was deliberately
+     *                                  not checked, which is mutually exclusive with reporting errors.
+     *                                  Mirrors the `failure([])` guard on {@see OpenApiValidationResult}.
      */
     public function __construct(
         public array $errors,
         public ?string $skipReason = null,
-    ) {}
+    ) {
+        if ($skipReason !== null && $errors !== []) {
+            throw new InvalidArgumentException(
+                'A skipped RequestBodyValidationResult cannot also carry errors: '
+                . 'a skip means the body was not checked.',
+            );
+        }
+    }
 }

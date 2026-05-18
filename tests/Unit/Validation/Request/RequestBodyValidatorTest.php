@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Request;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\DecodedBody;
 use Studio\OpenApiContractTesting\OpenApiVersion;
+use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidationResult;
 use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 
@@ -605,5 +607,48 @@ class RequestBodyValidatorTest extends TestCase
 
         $this->assertSame([], $result->errors);
         $this->assertNull($result->skipReason);
+    }
+
+    #[Test]
+    public function validate_skips_non_json_content_type_matched_via_wildcard_range_with_a_schema(): void
+    {
+        // Issue #254 skip detection keys off `findContentTypeKey()`, which
+        // also matches `<type>/*` ranges. A non-JSON Content-Type that
+        // matches a wildcard spec key declaring a `schema` must skip too —
+        // not just exact-key matches.
+        $operation = [
+            'requestBody' => [
+                'content' => [
+                    'application/*' => ['schema' => ['type' => 'string']],
+                ],
+            ],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'POST',
+            '/blob',
+            $operation,
+            DecodedBody::present('binary-ish blob'),
+            'application/octet-stream',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $result->errors);
+        $this->assertNotNull($result->skipReason);
+        $this->assertStringContainsString('application/*', $result->skipReason);
+    }
+
+    #[Test]
+    public function result_rejects_a_skip_reason_alongside_errors(): void
+    {
+        // A skip means the body was deliberately not checked — that is
+        // mutually exclusive with reporting errors. The DTO guard makes the
+        // contradictory state unconstructable so a future producer bug fails
+        // loudly instead of silently miscounting an errored body as a skip.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('cannot also carry errors');
+
+        new RequestBodyValidationResult(['some error'], 'a skip reason');
     }
 }

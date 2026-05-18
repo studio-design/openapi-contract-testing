@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Validation\Response;
 
+use InvalidArgumentException;
+use Studio\OpenApiContractTesting\OpenApiValidationResult;
+
 /**
  * Outcome of {@see ResponseBodyValidator::validate()}.
  *
@@ -19,7 +22,8 @@ namespace Studio\OpenApiContractTesting\Validation\Response;
  * JSON-Schema engine cannot evaluate (issue #254). `errors` stays empty in
  * that case — it is a skip, not a failure — and the orchestrator turns it
  * into an `OpenApiValidationResult::skipped()` so the unvalidated body is
- * not miscounted as a clean pass.
+ * not miscounted as a clean pass. A skip always names the matched key, so
+ * `matchedContentType` is non-null whenever `skipReason` is set.
  *
  * Coverage tracking uses `matchedContentType` to record per-(status, media-type)
  * granularity instead of treating the whole endpoint as a single bucket.
@@ -30,10 +34,30 @@ final readonly class ResponseBodyValidationResult
 {
     /**
      * @param string[] $errors
+     *
+     * @throws InvalidArgumentException when `skipReason` is set alongside a
+     *                                  non-empty `errors` list (a skip is mutually exclusive with
+     *                                  reporting errors) or alongside a null `matchedContentType`
+     *                                  (a skip is only reached after a media-type key matched).
+     *                                  Mirrors the `failure([])` guard on {@see OpenApiValidationResult}.
      */
     public function __construct(
         public array $errors,
         public ?string $matchedContentType,
         public ?string $skipReason = null,
-    ) {}
+    ) {
+        if ($skipReason !== null && $errors !== []) {
+            throw new InvalidArgumentException(
+                'A skipped ResponseBodyValidationResult cannot also carry errors: '
+                . 'a skip means the body was not checked.',
+            );
+        }
+
+        if ($skipReason !== null && $matchedContentType === null) {
+            throw new InvalidArgumentException(
+                'A skipped ResponseBodyValidationResult must name the matched '
+                . 'media-type key so coverage records the skip against it.',
+            );
+        }
+    }
 }

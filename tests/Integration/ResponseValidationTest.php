@@ -162,8 +162,10 @@ class ResponseValidationTest extends TestCase
     }
 
     #[Test]
-    public function content_negotiation_non_json_response_succeeds_and_records_coverage(): void
+    public function content_negotiation_non_json_response_is_skipped_and_records_coverage(): void
     {
+        // The 409 `text/html` entry declares a `schema`, so the matched
+        // non-JSON Content-Type is Skipped (issue #254), not validated.
         $result = $this->validator->validate(
             'petstore-3.0',
             'POST',
@@ -173,14 +175,26 @@ class ResponseValidationTest extends TestCase
             'text/html',
         );
         $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
+        $this->assertSame('text/html', $result->matchedContentType());
 
         $this->recordResult('petstore-3.0', 'POST', $result);
 
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
         $endpoints = $this->indexEndpoints($coverage['endpoints']);
-        // text/html is one of two declared 409 content-types; the other (application/json)
+        // text/html is one of two declared 409 content-types; it is recorded
+        // as skipped (not validated), and the other (application/json)
         // remains uncovered, so the endpoint as a whole is partial.
         $this->assertSame(EndpointCoverageState::Partial, $endpoints['POST /v1/pets']['state']);
+
+        $textHtmlRow = null;
+        foreach ($endpoints['POST /v1/pets']['responses'] as $row) {
+            if ($row['statusKey'] === '409' && $row['contentTypeKey'] === 'text/html') {
+                $textHtmlRow = $row;
+            }
+        }
+        $this->assertNotNull($textHtmlRow);
+        $this->assertSame(ResponseCoverageState::Skipped, $textHtmlRow['state']);
     }
 
     #[Test]

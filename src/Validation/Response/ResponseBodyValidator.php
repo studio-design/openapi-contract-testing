@@ -83,6 +83,12 @@ final class ResponseBodyValidator
                     // body is not recorded as a clean pass. A non-JSON entry
                     // with no `schema` has nothing to validate — stay
                     // silently successful, as before.
+                    //
+                    // `isset` treats a degenerate `schema: null` as "no
+                    // schema" (silent success). Unlike the request validator,
+                    // this validator has no upstream malformed-schema guard,
+                    // so a non-array `schema` is not surfaced as a loud spec
+                    // error here — tracked separately (see #256).
                     if (isset($content[$matchedKey]['schema'])) {
                         return new ResponseBodyValidationResult(
                             [],
