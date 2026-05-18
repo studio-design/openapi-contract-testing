@@ -209,6 +209,22 @@ final class OpenApiResponseValidator
             $version,
         );
 
+        // The body validator matched a non-JSON media-type key that declares
+        // a `schema` this JSON-Schema engine cannot evaluate (issue #254).
+        // The body was not checked, so surface a Skipped result rather than
+        // a clean Success — but only when headers also passed; a real header
+        // failure must still fail loudly (it falls through to the error
+        // merge below). matchedContentType is forwarded so coverage records
+        // the skip against that exact media-type row.
+        if ($bodyResult->skipReason !== null && $headerErrors === []) {
+            return OpenApiValidationResult::skipped(
+                $matchedPath,
+                $bodyResult->skipReason,
+                $statusCodeStr,
+                $bodyResult->matchedContentType,
+            );
+        }
+
         // The body validator returns ([], null) for two distinct cases:
         // (a) 204-style — spec has no `content` block; nothing to validate,
         //     legitimately Success.

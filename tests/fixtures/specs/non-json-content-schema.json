@@ -1,0 +1,69 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Non-JSON content schema fixture",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/text-with-schema": {
+            "get": {
+                "operationId": "getTextWithSchema",
+                "responses": {
+                    "200": {
+                        "description": "text/plain WITH a schema — unvalidatable, must surface a skip",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "operationId": "postTextWithSchema",
+                "requestBody": {
+                    "content": {
+                        "text/plain": {
+                            "schema": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "204": {
+                        "description": "Accepted"
+                    }
+                }
+            }
+        },
+        "/text-without-schema": {
+            "get": {
+                "operationId": "getTextWithoutSchema",
+                "responses": {
+                    "200": {
+                        "description": "text/plain with NO schema — nothing to validate, silent success",
+                        "content": {
+                            "text/plain": {}
+                        }
+                    }
+                }
+            },
+            "post": {
+                "operationId": "postTextWithoutSchema",
+                "requestBody": {
+                    "content": {
+                        "text/plain": {}
+                    }
+                },
+                "responses": {
+                    "204": {
+                        "description": "Accepted"
+                    }
+                }
+            }
+        }
+    }
+}

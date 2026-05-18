@@ -20,6 +20,7 @@ use function implode;
 use function in_array;
 use function is_array;
 use function is_string;
+use function sprintf;
 
 /**
  * @internal Not part of the package's public API. Do not use from user code.
@@ -75,6 +76,26 @@ final class ResponseBodyValidator
                 // Non-JSON response: check if the content type is defined in the spec.
                 $matchedKey = ContentTypeMatcher::findContentTypeKey($normalizedType, $content);
                 if ($matchedKey !== null) {
+                    // A matched non-JSON media type that declares a `schema`
+                    // is an unvalidatable contract: OpenAPI permits a schema
+                    // on any media type, but this engine only evaluates JSON
+                    // Schema. Surface a skip (issue #254) so the unchecked
+                    // body is not recorded as a clean pass. A non-JSON entry
+                    // with no `schema` has nothing to validate — stay
+                    // silently successful, as before.
+                    if (isset($content[$matchedKey]['schema'])) {
+                        return new ResponseBodyValidationResult(
+                            [],
+                            $matchedKey,
+                            sprintf(
+                                "response Content-Type '%s' matched non-JSON spec media type '%s', "
+                                . 'which declares a schema this validator cannot evaluate (JSON Schema engine only)',
+                                $normalizedType,
+                                $matchedKey,
+                            ),
+                        );
+                    }
+
                     return new ResponseBodyValidationResult([], $matchedKey);
                 }
 

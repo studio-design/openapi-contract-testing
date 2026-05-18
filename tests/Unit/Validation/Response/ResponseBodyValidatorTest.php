@@ -156,8 +156,15 @@ class ResponseBodyValidatorTest extends TestCase
     }
 
     #[Test]
-    public function validate_accepts_non_json_content_type_when_defined_in_spec(): void
+    public function validate_skips_non_json_content_type_when_spec_entry_has_a_schema(): void
     {
+        // Issue #254: the response Content-Type matched the spec's `text/plain`
+        // media-type key, and that key declares a `schema`. OpenAPI permits a
+        // schema on any media type, but this engine only evaluates JSON Schema
+        // — the body cannot be checked. The validator must surface a skip
+        // (empty errors + non-null skipReason) so the unvalidated body is not
+        // recorded as a clean pass. matchedContentType is still the matched
+        // key so coverage records the skip against that exact media-type row.
         $content = [
             'text/plain' => ['schema' => ['type' => 'string']],
         ];
@@ -175,6 +182,35 @@ class ResponseBodyValidatorTest extends TestCase
 
         $this->assertSame([], $result->errors);
         $this->assertSame('text/plain', $result->matchedContentType);
+        $this->assertNotNull($result->skipReason);
+        $this->assertStringContainsString('text/plain', $result->skipReason);
+        $this->assertStringContainsString('JSON Schema engine only', $result->skipReason);
+    }
+
+    #[Test]
+    public function validate_does_not_skip_non_json_content_type_without_a_schema(): void
+    {
+        // A non-JSON media type with NO `schema` has nothing to validate — it
+        // stays silently successful (no errors, no skipReason) so it is not
+        // noisily surfaced in coverage as an unvalidated endpoint.
+        $content = [
+            'text/plain' => [],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/robots.txt',
+            200,
+            $content,
+            DecodedBody::present('User-agent: *'),
+            'text/plain; charset=utf-8',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $result->errors);
+        $this->assertSame('text/plain', $result->matchedContentType);
+        $this->assertNull($result->skipReason);
     }
 
     #[Test]
