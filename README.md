@@ -87,7 +87,7 @@ composer require --dev studio-design/openapi-contract-testing
 
 ## Quick start
 
-Three steps to your first contract-tested endpoint with the Laravel adapter. For framework-agnostic usage, configuration knobs, opt-out attributes, and request-side validation, see [`docs/setup.md`](docs/setup.md).
+Three steps to your first contract-tested endpoint with the Laravel adapter. For the Symfony adapter, framework-agnostic usage, configuration knobs, opt-out attributes, and request-side validation, see [`docs/setup.md`](docs/setup.md).
 
 ### 1. Provide your OpenAPI spec
 
@@ -143,7 +143,7 @@ To validate every response automatically, set `'auto_assert' => true` and drop t
 
 | Topic | Reference |
 |---|---|
-| Full setup, framework-agnostic adapter, auto-assert, opt-out attributes, request validation, HTTP `$ref` | [`docs/setup.md`](docs/setup.md) |
+| Full setup, Laravel / Symfony / framework-agnostic adapters, auto-assert, opt-out attributes, request validation, HTTP `$ref` | [`docs/setup.md`](docs/setup.md) |
 | Pest plugin: `expect()->toMatchOpenApiResponseSchema()` and friends | [`docs/pest-plugin.md`](docs/pest-plugin.md) |
 | Schema-driven request fuzzing | [`docs/fuzzing.md`](docs/fuzzing.md) |
 | Enum drift detection | [`docs/enum-drift.md`](docs/enum-drift.md) |
