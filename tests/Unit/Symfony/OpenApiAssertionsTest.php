@@ -191,6 +191,56 @@ final class OpenApiAssertionsTest extends TestCase
     }
 
     #[Test]
+    public function literal_null_response_body_without_content_type_fails_loudly(): void
+    {
+        // Issue #246: a response body of the literal JSON `null` with no
+        // Content-Type is type-checked against the schema, not silently read
+        // as an absent body. GET /v1/pets declares a `type: object` 200
+        // schema, so a null body is a contract violation surfaced as a schema
+        // type error rather than the misleading "Response body is empty".
+        $request = Request::create('/v1/pets', 'GET');
+        $response = new Response('null', 200);
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('must match the type');
+
+        $this->assertResponseMatchesOpenApiSchema($request, $response);
+    }
+
+    #[Test]
+    public function scalar_response_body_without_content_type_is_type_checked(): void
+    {
+        // Issue #246: a scalar JSON body (here the integer `123`) is decoded
+        // and type-checked against the schema rather than being treated as no
+        // body. Regression guard — the Symfony adapter's `mixed` body shape
+        // already handled scalars; this pins that the #246 fix keeps it so.
+        $request = Request::create('/v1/pets', 'GET');
+        $response = new Response('123', 200);
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('must match the type');
+
+        $this->assertResponseMatchesOpenApiSchema($request, $response);
+    }
+
+    #[Test]
+    public function literal_null_request_body_without_content_type_fails_loudly(): void
+    {
+        // Issue #246: a request body of the literal JSON `null` with no
+        // Content-Type is type-checked against the requestBody schema. POST
+        // /v1/pets requires a `type: object` body, so a null body fails
+        // loudly. Request::create() forces a Content-Type on POST bodies;
+        // drop it so the no-Content-Type path runs.
+        $request = Request::create('/v1/pets', 'POST', [], [], [], [], 'null');
+        $request->headers->remove('Content-Type');
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('must match the type');
+
+        $this->assertRequestMatchesOpenApiSchema($request);
+    }
+
+    #[Test]
     public function non_json_response_body_passes_as_null_body(): void
     {
         $request = Request::create('/v1/pets/123', 'DELETE');

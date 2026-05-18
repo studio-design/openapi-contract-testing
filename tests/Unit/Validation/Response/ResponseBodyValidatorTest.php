@@ -6,6 +6,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Response;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
@@ -68,6 +69,89 @@ class ResponseBodyValidatorTest extends TestCase
 
         $this->assertCount(1, $result->errors);
         $this->assertStringContainsString('Response body is empty', $result->errors[0]);
+        $this->assertSame('application/json', $result->matchedContentType);
+    }
+
+    #[Test]
+    public function validate_type_checks_present_literal_null_body_against_object_schema(): void
+    {
+        // Issue #246: a response body of the literal JSON `null` (the four
+        // bytes `null` on the wire) is type-checked against the schema, not
+        // short-circuited as an absent body. Against `type: object` it is a
+        // contract violation and must surface a schema type error — NOT the
+        // "Response body is empty" message reserved for a genuinely absent
+        // body. The PresentJsonNull marker is how an adapter signals "the
+        // wire carried a body and its decoded value is null".
+        $content = [
+            'application/json' => ['schema' => ['type' => 'object']],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/pets',
+            200,
+            $content,
+            PresentJsonNull::Body,
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertNotEmpty($result->errors);
+        $this->assertStringContainsString('must match the type', $result->errors[0]);
+        $this->assertStringNotContainsString('Response body is empty', $result->errors[0]);
+        $this->assertSame('application/json', $result->matchedContentType);
+    }
+
+    #[Test]
+    public function validate_accepts_present_literal_null_body_against_oas_31_nullable_schema(): void
+    {
+        // OAS 3.1 `type: ["object", "null"]` explicitly permits a null body.
+        // A present literal `null` validates cleanly against it — the pre-#246
+        // "body is empty" short-circuit would have wrongly rejected it.
+        $content = [
+            'application/json' => ['schema' => ['type' => ['object', 'null']]],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/pets',
+            200,
+            $content,
+            PresentJsonNull::Body,
+            'application/json',
+            OpenApiVersion::V3_1,
+        );
+
+        $this->assertSame([], $result->errors);
+        $this->assertSame('application/json', $result->matchedContentType);
+    }
+
+    #[Test]
+    public function validate_accepts_present_literal_null_body_against_oas_30_nullable_schema(): void
+    {
+        // OAS 3.0 expresses a nullable body with `nullable: true`;
+        // OpenApiSchemaConverter lowers it to a `["object", "null"]` type
+        // array for Draft 07. A present literal `null` must validate cleanly
+        // against it — distinct conversion branch from the OAS 3.1 type-array
+        // form covered above.
+        $content = [
+            'application/json' => ['schema' => ['type' => 'object', 'nullable' => true]],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/pets',
+            200,
+            $content,
+            PresentJsonNull::Body,
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $result->errors);
         $this->assertSame('application/json', $result->matchedContentType);
     }
 

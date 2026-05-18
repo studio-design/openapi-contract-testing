@@ -6,6 +6,7 @@ namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Request;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
@@ -60,6 +61,153 @@ class RequestBodyValidatorTest extends TestCase
 
         $this->assertCount(1, $errors);
         $this->assertStringContainsString('Request body is empty', $errors[0]);
+    }
+
+    #[Test]
+    public function validate_flags_present_literal_null_body_against_object_schema_when_optional(): void
+    {
+        // Issue #246 — the core silent-pass bug. A request body of the literal
+        // JSON `null` against an OPTIONAL `type: object` body must NOT pass:
+        // before the fix the validator read the decoded `null` as "no body"
+        // and, because the body was optional, returned no errors — letting a
+        // malformed `null` body slip through unchecked. A present `null` is
+        // now type-checked against the schema and fails loudly.
+        $operation = [
+            'requestBody' => [
+                'required' => false,
+                'content' => [
+                    'application/json' => ['schema' => ['type' => 'object']],
+                ],
+            ],
+        ];
+
+        $errors = $this->validator->validate(
+            'spec',
+            'POST',
+            '/pets',
+            $operation,
+            PresentJsonNull::Body,
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertNotEmpty($errors);
+        $this->assertStringContainsString('must match the type', $errors[0]);
+    }
+
+    #[Test]
+    public function validate_flags_present_literal_null_body_against_object_schema_when_required(): void
+    {
+        // A present literal `null` against a REQUIRED object body fails with a
+        // schema type error, not the "Request body is empty" message — the
+        // body WAS present on the wire, it is simply the wrong type.
+        $operation = [
+            'requestBody' => [
+                'required' => true,
+                'content' => [
+                    'application/json' => ['schema' => ['type' => 'object']],
+                ],
+            ],
+        ];
+
+        $errors = $this->validator->validate(
+            'spec',
+            'POST',
+            '/pets',
+            $operation,
+            PresentJsonNull::Body,
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertNotEmpty($errors);
+        $this->assertStringContainsString('must match the type', $errors[0]);
+        $this->assertStringNotContainsString('Request body is empty', $errors[0]);
+    }
+
+    #[Test]
+    public function validate_accepts_present_literal_null_body_against_oas_31_nullable_schema(): void
+    {
+        // OAS 3.1 `type: ["object", "null"]` explicitly permits a null body.
+        $operation = [
+            'requestBody' => [
+                'required' => true,
+                'content' => [
+                    'application/json' => ['schema' => ['type' => ['object', 'null']]],
+                ],
+            ],
+        ];
+
+        $errors = $this->validator->validate(
+            'spec',
+            'POST',
+            '/pets',
+            $operation,
+            PresentJsonNull::Body,
+            'application/json',
+            OpenApiVersion::V3_1,
+        );
+
+        $this->assertSame([], $errors);
+    }
+
+    #[Test]
+    public function validate_accepts_present_literal_null_body_against_oas_30_nullable_schema(): void
+    {
+        // OAS 3.0 expresses a nullable body with `nullable: true`;
+        // OpenApiSchemaConverter lowers it to a `["object", "null"]` type
+        // array for Draft 07. A present literal `null` validates cleanly
+        // against it — distinct conversion branch from the OAS 3.1 type-array
+        // form covered above.
+        $operation = [
+            'requestBody' => [
+                'required' => true,
+                'content' => [
+                    'application/json' => ['schema' => ['type' => 'object', 'nullable' => true]],
+                ],
+            ],
+        ];
+
+        $errors = $this->validator->validate(
+            'spec',
+            'POST',
+            '/pets',
+            $operation,
+            PresentJsonNull::Body,
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $errors);
+    }
+
+    #[Test]
+    public function validate_still_treats_plain_null_as_absent_body(): void
+    {
+        // Regression guard for issue #246: a plain PHP `null` (absent body,
+        // raw content was empty) keeps the historical "no body" semantics —
+        // it is NOT type-checked. An optional absent body still passes; the
+        // PresentJsonNull marker is the ONLY value whose handling changed.
+        $operation = [
+            'requestBody' => [
+                'required' => false,
+                'content' => [
+                    'application/json' => ['schema' => ['type' => 'object']],
+                ],
+            ],
+        ];
+
+        $errors = $this->validator->validate(
+            'spec',
+            'POST',
+            '/pets',
+            $operation,
+            null,
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $errors);
     }
 
     #[Test]

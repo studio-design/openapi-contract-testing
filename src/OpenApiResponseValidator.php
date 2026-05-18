@@ -6,6 +6,7 @@ namespace Studio\OpenApiContractTesting;
 
 use InvalidArgumentException;
 use RuntimeException;
+use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
 use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
 use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
@@ -235,7 +236,10 @@ final class OpenApiResponseValidator
                 $matchedPath,
                 $statusCodeStr,
                 $bodyResult->matchedContentType,
-                $responseBody,
+                // Issue #246: unwrap the present-literal-null marker so the
+                // strict-required walker observes the real `null` value
+                // rather than the marker object.
+                $responseBody instanceof PresentJsonNull ? null : $responseBody,
             );
 
             return OpenApiValidationResult::success(
