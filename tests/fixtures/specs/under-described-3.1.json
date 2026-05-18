@@ -1,0 +1,25 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Strict required fixture (OAS 3.1)", "version": "1.0.0" },
+  "paths": {
+    "/nullable-object": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "ok; OAS 3.1 nullable object (type: [object, null]) — a literal JSON null body validates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": ["object", "null"],
+                  "properties": {
+                    "id": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

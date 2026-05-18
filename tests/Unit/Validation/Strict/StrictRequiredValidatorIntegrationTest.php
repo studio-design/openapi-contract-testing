@@ -9,6 +9,7 @@ use const E_USER_WARNING;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
+use Studio\OpenApiContractTesting\DecodedBody;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredAsserter;
@@ -197,6 +198,119 @@ final class StrictRequiredValidatorIntegrationTest extends TestCase
         );
 
         $this->assertSame([], StrictRequiredTracker::getObservations('under-described'));
+    }
+
+    #[Test]
+    public function present_literal_null_body_records_no_strict_required_pointer(): void
+    {
+        // Issues #248 / #249: a literal JSON `null` body reaches the
+        // validator as DecodedBody::present(null) — the envelope introduced
+        // in #248, distinct from an absent body. /nullable-object declares a
+        // `nullable: true` object schema, so the null body passes conformance
+        // and the validator reaches the Success path where
+        // maybeRecordStrictRequired() runs. This test pins that path: a
+        // present literal-null body validates (isValid true) and records no
+        // strict-required observation, because collectPointers() maps a real
+        // `null` to an empty pointer map.
+        //
+        // This is a characterization test for the literal-null Success path,
+        // not the unwrap guard: feeding the walker the DecodedBody envelope
+        // instead of `$body->value` would also yield `[]` here (a DecodedBody
+        // is neither array nor stdClass). The unwrap itself is pinned with
+        // teeth by the sibling test below.
+        $result = $this->validator->validate(
+            'under-described',
+            'GET',
+            '/nullable-object',
+            200,
+            DecodedBody::present(null),
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame([], StrictRequiredTracker::getObservations('under-described'));
+    }
+
+    #[Test]
+    public function present_literal_null_body_on_oas31_nullable_schema_records_no_pointer(): void
+    {
+        // The literal-null Success path is version-specific: OAS 3.0 spells a
+        // nullable object `nullable: true`, OAS 3.1 spells it
+        // `type: ["object", "null"]`, and OpenApiSchemaConverter routes the
+        // two through different branches. The sibling test above pins the 3.0
+        // form; this one pins the 3.1 form against under-described-3.1, so a
+        // converter regression on 3.1 type arrays — which would stop a null
+        // body from passing conformance — surfaces here.
+        $result = $this->validator->validate(
+            'under-described-3.1',
+            'GET',
+            '/nullable-object',
+            200,
+            DecodedBody::present(null),
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertSame([], StrictRequiredTracker::getObservations('under-described-3.1'));
+    }
+
+    #[Test]
+    public function absent_decoded_body_against_json_schema_fails_and_records_nothing(): void
+    {
+        // Issues #248 / #249: the framework adapters build the envelope
+        // directly, so the production path for a missing body is an explicit
+        // DecodedBody::absent() reaching validate() — not a bare null routed
+        // through fromLegacy() (the path null_body_is_not_recorded covers).
+        // Passing absent() against /nullable-object, which declares a JSON
+        // schema, must fail conformance ("empty body") and therefore record
+        // no strict-required observation — the mirror of the present-literal-
+        // null case above: present(null) validates, absent() does not. This
+        // pins the absent/present distinction the DecodedBody envelope exists
+        // to carry, on the direct adapter path.
+        $result = $this->validator->validate(
+            'under-described',
+            'GET',
+            '/nullable-object',
+            200,
+            DecodedBody::absent(),
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertSame([], StrictRequiredTracker::getObservations('under-described'));
+    }
+
+    #[Test]
+    public function decoded_body_envelope_is_unwrapped_before_strict_required_walk(): void
+    {
+        // Issue #249: the framework adapters pass a DecodedBody envelope to
+        // validate(); maybeRecordStrictRequired() must hand the strict-
+        // required walker the *unwrapped* decoded value (`$body->value`),
+        // not the DecodedBody object itself. If the unwrap were dropped, the
+        // walker would receive a DecodedBody instance — neither stdClass nor
+        // array — and collectPointers() would return `[]`, silently skipping
+        // the observation entirely (recordOn() is never reached). Asserting
+        // the `/` pointer carries the body's keys pins the unwrap: this test
+        // fails the moment `$body->value` becomes `$body`.
+        //
+        // The expected pointer keys come from this test's input body, not
+        // from the /signed-url spec schema (which declares no `required`).
+        $result = $this->validator->validate(
+            'under-described',
+            'PUT',
+            '/signed-url',
+            200,
+            DecodedBody::present(['expires' => 3600, 'signed_url' => 's3://...', 'url' => 'https://...']),
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid());
+
+        $observations = StrictRequiredTracker::getObservations('under-described');
+        $this->assertSame(
+            ['hits' => 1, 'pointers' => ['/' => ['expires', 'signed_url', 'url']]],
+            $observations['PUT /signed-url']['200:application/json'],
+        );
     }
 
     #[Test]
