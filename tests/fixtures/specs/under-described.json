@@ -328,7 +328,6 @@
                 "schema": {
                   "type": "object",
                   "nullable": true,
-                  "required": ["id"],
                   "properties": {
                     "id": { "type": "string" }
                   }

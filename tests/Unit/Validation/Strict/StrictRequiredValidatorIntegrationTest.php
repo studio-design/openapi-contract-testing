@@ -203,17 +203,21 @@ final class StrictRequiredValidatorIntegrationTest extends TestCase
     #[Test]
     public function present_literal_null_body_records_no_strict_required_pointer(): void
     {
-        // Issues #246 / #248 / #249: a literal JSON `null` body reaches the
-        // validator as DecodedBody::present(null) — distinct from an absent
-        // body. /nullable-object declares a `nullable: true` object schema,
-        // so the null body passes conformance and the validator hits the
-        // Success path where maybeRecordStrictRequired() runs. The strict-
-        // required walker must observe the unwrapped real `null`
-        // (OpenApiResponseValidator passes `$body->value`, not the envelope),
-        // which collectPointers() maps to an empty pointer map — so nothing
-        // is recorded. A regression that fed the walker a non-null marker /
-        // envelope would still record `[]` here, but the present-object
-        // sibling test below pins the unwrap with teeth.
+        // Issues #248 / #249: a literal JSON `null` body reaches the
+        // validator as DecodedBody::present(null) — the envelope introduced
+        // in #248, distinct from an absent body. /nullable-object declares a
+        // `nullable: true` object schema, so the null body passes conformance
+        // and the validator reaches the Success path where
+        // maybeRecordStrictRequired() runs. This test pins that path: a
+        // present literal-null body validates (isValid true) and records no
+        // strict-required observation, because collectPointers() maps a real
+        // `null` to an empty pointer map.
+        //
+        // This is a characterization test for the literal-null Success path,
+        // not the unwrap guard: feeding the walker the DecodedBody envelope
+        // instead of `$body->value` would also yield `[]` here (a DecodedBody
+        // is neither array nor stdClass). The unwrap itself is pinned with
+        // teeth by the sibling test below.
         $result = $this->validator->validate(
             'under-described',
             'GET',
@@ -235,10 +239,13 @@ final class StrictRequiredValidatorIntegrationTest extends TestCase
         // required walker the *unwrapped* decoded value (`$body->value`),
         // not the DecodedBody object itself. If the unwrap were dropped, the
         // walker would receive a DecodedBody instance — neither stdClass nor
-        // array — and collectPointers() would return `[]`, silently recording
-        // no observation. Asserting the `/` pointer carries the inner array's
-        // keys pins the unwrap: this test fails the moment `$body->value`
-        // becomes `$body`.
+        // array — and collectPointers() would return `[]`, silently skipping
+        // the observation entirely (recordOn() is never reached). Asserting
+        // the `/` pointer carries the body's keys pins the unwrap: this test
+        // fails the moment `$body->value` becomes `$body`.
+        //
+        // The expected pointer keys come from this test's input body, not
+        // from the /signed-url spec schema (which declares no `required`).
         $result = $this->validator->validate(
             'under-described',
             'PUT',
