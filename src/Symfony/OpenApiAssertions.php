@@ -16,6 +16,7 @@ use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver;
+use Symfony\Component\BrowserKit\Exception\BadMethodCallException;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\HttpKernelBrowser;
@@ -73,6 +74,12 @@ use function var_export;
 trait OpenApiAssertions
 {
     use OpenApiSpecResolver;
+
+    /**
+     * Validators are cached per test-case instance — not statically as in the
+     * Laravel adapter. PHPUnit builds a fresh TestCase per test method, so
+     * instance scope already gives per-test isolation with no reset hook.
+     */
     private ?OpenApiResponseValidator $cachedSymfonyResponseValidator = null;
     private ?OpenApiRequestValidator $cachedSymfonyRequestValidator = null;
 
@@ -85,8 +92,10 @@ trait OpenApiAssertions
      *
      * @param string[] $extraSkipResponseCodes additional status-code regex
      *                                         patterns (without delimiters or anchors) to skip body validation
-     *                                         for, merged with {@see OpenApiResponseValidator::DEFAULT_SKIP_RESPONSE_CODES}
-     *                                         for this call only
+     *                                         for. When non-empty they are merged with
+     *                                         {@see OpenApiResponseValidator::DEFAULT_SKIP_RESPONSE_CODES} into a
+     *                                         one-off validator for this call only; an empty array reuses the
+     *                                         cached validator unchanged.
      */
     public function assertResponseMatchesOpenApiSchema(
         Request $request,
@@ -213,7 +222,9 @@ trait OpenApiAssertions
      *
      * The request is validated first so the documented-4xx downgrade can see
      * the response status, matching the ordering of the Laravel adapter's
-     * auto-validate hook. Call `$client->request(...)` before this method.
+     * auto-validate hook. Call `$client->request(...)` before this method —
+     * otherwise the assertion fails with an actionable message rather than
+     * surfacing a raw framework exception.
      *
      * @param string[] $extraSkipResponseCodes forwarded to
      *                                         {@see self::assertResponseMatchesOpenApiSchema()}
@@ -222,10 +233,21 @@ trait OpenApiAssertions
         HttpKernelBrowser $client,
         array $extraSkipResponseCodes = [],
     ): void {
-        // getRequest() / getResponse() throw if no request was made yet;
-        // for a KernelBrowser they return HttpFoundation Request / Response.
-        $request = $client->getRequest();
-        $response = $client->getResponse();
+        // getRequest() / getResponse() throw BadMethodCallException when no
+        // request has been made yet. Convert it into a normal contract-test
+        // failure so client misuse is reported the same way as every other
+        // misuse in this trait (clean message, vendor frames stripped),
+        // rather than leaking a vendor-framed PHPUnit error.
+        try {
+            $request = $client->getRequest();
+            $response = $client->getResponse();
+        } catch (BadMethodCallException $e) {
+            $this->failOpenApi(
+                'assertClientMatchesOpenApiSchema() needs a completed request, but the test client '
+                . 'has not made one yet. Call $client->request(...) before asserting. '
+                . '(' . $e->getMessage() . ')',
+            );
+        }
 
         $this->assertRequestMatchesOpenApiSchema($request, $response->getStatusCode());
         $this->assertResponseMatchesOpenApiSchema($request, $response, $extraSkipResponseCodes);

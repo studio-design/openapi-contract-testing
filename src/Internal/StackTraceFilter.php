@@ -18,8 +18,9 @@ use function str_replace;
  * Trims this library's own frames (and known framework testing-concern
  * frames) out of an assertion-failure trace so a contract-test failure
  * points at the user's test line, not at vendor code. Consumed by the
- * Laravel traits (`ValidatesOpenApiSchema`, `ExploresOpenApiEndpoint`)
- * and the PHPUnit trait (`AssertsNoEnumDrift`).
+ * Laravel traits (`ValidatesOpenApiSchema`, `ExploresOpenApiEndpoint`),
+ * the Symfony trait (`OpenApiAssertions`), and the PHPUnit trait
+ * (`AssertsNoEnumDrift`).
  *
  * @internal Not part of the package's public API. Do not use from user code.
  */

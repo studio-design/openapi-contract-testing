@@ -71,6 +71,44 @@ final class OpenApiAssertionsClientTest extends TestCase
         $this->assertClientMatchesOpenApiSchema($client);
     }
 
+    #[Test]
+    public function client_without_a_request_fails_with_actionable_message(): void
+    {
+        // No $client->request(...) call — getRequest() throws BadMethodCallException,
+        // which the adapter converts into a clean contract-test failure.
+        $client = $this->clientReturning(new JsonResponse(['data' => []]));
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('Call $client->request(...) before asserting');
+
+        $this->assertClientMatchesOpenApiSchema($client);
+    }
+
+    #[Test]
+    public function client_request_failure_takes_precedence_over_response(): void
+    {
+        // POST /v1/pets requires a JSON body; the browser sends none, so the
+        // request fails validation first — before the off-schema response.
+        $client = $this->clientReturning(new JsonResponse(['wrong_key' => 'value']));
+        $client->request('POST', '/v1/pets');
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('OpenAPI request validation failed for POST /v1/pets');
+
+        $this->assertClientMatchesOpenApiSchema($client);
+    }
+
+    #[Test]
+    public function client_forwards_extra_skip_response_codes(): void
+    {
+        // The response is an undocumented 409 for GET /v1/pets; passing it as
+        // an extra skip code through the client wrapper suppresses validation.
+        $client = $this->clientReturning(new JsonResponse(['wrong_key' => 'value'], 409));
+        $client->request('GET', '/v1/pets');
+
+        $this->assertClientMatchesOpenApiSchema($client, ['409']);
+    }
+
     private function clientReturning(Response $response): HttpKernelBrowser
     {
         $kernel = new class ($response) implements HttpKernelInterface {

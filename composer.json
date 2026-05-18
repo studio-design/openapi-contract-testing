@@ -25,6 +25,7 @@
     "suggest": {
         "illuminate/testing": "Required for the Laravel adapter (ValidatesOpenApiSchema trait)",
         "symfony/http-foundation": "Required for the Symfony adapter (OpenApiAssertions trait), which validates HttpFoundation Request / Response objects directly",
+        "symfony/http-kernel": "Required for the Symfony adapter's assertClientMatchesOpenApiSchema(), which reads a KernelBrowser / HttpKernelBrowser test client",
         "symfony/yaml": "Required to load OpenAPI specs directly from .yaml / .yml files",
         "guzzlehttp/guzzle": "A PSR-18 HTTP client implementation for resolving external HTTP(S) $refs",
         "symfony/http-client": "A PSR-18 HTTP client implementation for resolving external HTTP(S) $refs",
