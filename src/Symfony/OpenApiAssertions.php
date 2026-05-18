@@ -10,8 +10,8 @@ use JsonException;
 use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\AssertionFailedError;
 use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\DecodedBody;
 use Studio\OpenApiContractTesting\HttpMethod;
-use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
 use Studio\OpenApiContractTesting\Internal\StackTraceFilter;
 use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
@@ -330,26 +330,26 @@ trait OpenApiAssertions
     /**
      * Decode a JSON request / response body in the shape the validators
      * expect. Mirrors the Laravel adapter: parse only when the Content-Type
-     * claims JSON (or is absent), stay `null` on empty or non-JSON bodies so
-     * the validator decides whether the spec required one.
+     * claims JSON (or is absent), report an absent body on empty or non-JSON
+     * content so the validator decides whether the spec required one.
      *
-     * Issue #246: when the raw content is non-empty but decodes to the literal
-     * JSON `null`, a {@see PresentJsonNull} marker is returned instead of a
-     * bare `null` so the validator type-checks the value against the schema
+     * Issues #246 / #248: when the raw content is non-empty but decodes to the
+     * literal JSON `null`, a present {@see DecodedBody} carrying `null` is
+     * returned so the validator type-checks the value against the schema
      * rather than mistaking it for an absent body. Non-null decoded values
-     * (scalars, arrays) pass through unchanged.
+     * (scalars, arrays) are wrapped in a present envelope unchanged.
      *
      * @param string $subject either `Request` or `Response`, used only for the
      *                        error message when the body is not valid JSON
      */
-    private function extractSymfonyJsonBody(string $content, string $contentType, string $subject): mixed
+    private function extractSymfonyJsonBody(string $content, string $contentType, string $subject): DecodedBody
     {
         if ($content === '') {
-            return null;
+            return DecodedBody::absent();
         }
 
         if ($contentType !== '' && !str_contains(strtolower($contentType), 'json')) {
-            return null;
+            return DecodedBody::absent();
         }
 
         // The return is inside the try so its dependence on a successful
@@ -359,7 +359,7 @@ trait OpenApiAssertions
             /** @var mixed $decoded */
             $decoded = json_decode($content, true, flags: JSON_THROW_ON_ERROR);
 
-            return $decoded ?? PresentJsonNull::Body;
+            return DecodedBody::present($decoded);
         } catch (JsonException $e) {
             $this->failOpenApi(sprintf(
                 '%s body could not be parsed as JSON: %s%s',

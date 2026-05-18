@@ -6,7 +6,6 @@ namespace Studio\OpenApiContractTesting;
 
 use InvalidArgumentException;
 use RuntimeException;
-use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
 use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
 use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
@@ -92,6 +91,12 @@ final class OpenApiResponseValidator
         ?string $responseContentType = null,
         ?array $responseHeaders = null,
     ): OpenApiValidationResult {
+        // The `mixed` body parameter is kept for backward compatibility.
+        // Framework adapters now pass a DecodedBody envelope directly; legacy
+        // direct callers pass a bare value, which fromLegacy() normalizes
+        // (a plain `null` becomes an absent body — see {@see DecodedBody}).
+        $body = DecodedBody::fromLegacy($responseBody);
+
         $spec = OpenApiSpecLoader::load($specName);
 
         $version = OpenApiVersion::fromSpec($spec);
@@ -183,7 +188,7 @@ final class OpenApiResponseValidator
             $matchedPath,
             $statusCode,
             $responseSpec,
-            $responseBody,
+            $body,
             $responseContentType,
             $version,
         );
@@ -236,10 +241,9 @@ final class OpenApiResponseValidator
                 $matchedPath,
                 $statusCodeStr,
                 $bodyResult->matchedContentType,
-                // Issue #246: unwrap the present-literal-null marker so the
-                // strict-required walker observes the real `null` value
-                // rather than the marker object.
-                $responseBody instanceof PresentJsonNull ? null : $responseBody,
+                // The strict-required walker observes the decoded body value;
+                // an absent body carries `null` (issues #246 / #248).
+                $body->value,
             );
 
             return OpenApiValidationResult::success(
@@ -370,7 +374,7 @@ final class OpenApiResponseValidator
         string $matchedPath,
         int $statusCode,
         array $responseSpec,
-        mixed $responseBody,
+        DecodedBody $responseBody,
         ?string $responseContentType,
         OpenApiVersion $version,
     ): ResponseBodyValidationResult {

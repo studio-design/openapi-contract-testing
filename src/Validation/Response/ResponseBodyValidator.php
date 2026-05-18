@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Validation\Response;
 
 use stdClass;
-use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
+use Studio\OpenApiContractTesting\DecodedBody;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiValidationResult;
 use Studio\OpenApiContractTesting\OpenApiVersion;
@@ -56,7 +56,7 @@ final class ResponseBodyValidator
         string $matchedPath,
         int $statusCode,
         array $content,
-        mixed $responseBody,
+        DecodedBody $responseBody,
         ?string $responseContentType,
         OpenApiVersion $version,
     ): ResponseBodyValidationResult {
@@ -107,18 +107,12 @@ final class ResponseBodyValidator
             return new ResponseBodyValidationResult([], $jsonContentType);
         }
 
-        // Issue #246: an adapter that saw non-empty raw content but decoded a
-        // literal JSON `null` passes the PresentJsonNull marker so the null is
-        // type-checked against the schema below, rather than short-circuiting
-        // as an absent body. Unwrap it to a real null and remember the body
-        // WAS present so the empty-body branch is bypassed.
-        $bodyWasPresent = false;
-        if ($responseBody instanceof PresentJsonNull) {
-            $responseBody = null;
-            $bodyWasPresent = true;
-        }
-
-        if ($responseBody === null && !$bodyWasPresent) {
+        // An absent body fails the contract: this validator only runs once the
+        // spec is known to declare a JSON-compatible schema for the response.
+        // A literal JSON `null` body is distinct — `$responseBody->present` is
+        // true with a `null` value (issues #246 / #248), so it falls through
+        // to schema type-checking below instead of taking this branch.
+        if (!$responseBody->present) {
             return new ResponseBodyValidationResult(
                 [
                     "Response body is empty but {$method} {$matchedPath} (status {$statusCode}) defines a JSON-compatible response schema in '{$specName}' spec.",
@@ -126,6 +120,8 @@ final class ResponseBodyValidator
                 $jsonContentType,
             );
         }
+
+        $bodyValue = $responseBody->value;
 
         /** @var array<string, mixed> $schema */
         $schema = $content[$jsonContentType]['schema'];
@@ -140,12 +136,12 @@ final class ResponseBodyValidator
         // error. Coerce `[]` → stdClass when the schema explicitly accepts
         // an object so the empty-object-against-type-object case (very
         // common for status acks and "no items yet" responses) validates.
-        if ($responseBody === [] && self::schemaAcceptsObject($schema)) {
-            $responseBody = new stdClass();
+        if ($bodyValue === [] && self::schemaAcceptsObject($schema)) {
+            $bodyValue = new stdClass();
         }
 
         $schemaObject = ObjectConverter::convert($jsonSchema);
-        $dataObject = ObjectConverter::convert($responseBody);
+        $dataObject = ObjectConverter::convert($bodyValue);
 
         $formatted = $this->runner->validate($schemaObject, $dataObject);
 

@@ -110,6 +110,12 @@ final class OpenApiRequestValidator
         array $cookies = [],
         ?int $responseStatusCode = null,
     ): OpenApiValidationResult {
+        // The `mixed` body parameter is kept for backward compatibility.
+        // Framework adapters now pass a DecodedBody envelope directly; legacy
+        // direct callers pass a bare value, which fromLegacy() normalizes
+        // (a plain `null` becomes an absent body — see {@see DecodedBody}).
+        $body = DecodedBody::fromLegacy($requestBody);
+
         $spec = OpenApiSpecLoader::load($specName);
 
         $version = OpenApiVersion::fromSpec($spec);
@@ -164,7 +170,7 @@ final class OpenApiRequestValidator
             ...ValidatorErrorBoundary::safely('query', $specName, $method, $matchedPath, fn(): array => $this->queryValidator->validate($method, $matchedPath, $collected->parameters, $queryParams, $version)),
             ...ValidatorErrorBoundary::safely('header', $specName, $method, $matchedPath, fn(): array => $this->headerValidator->validate($method, $matchedPath, $collected->parameters, $headers, $version)),
             ...ValidatorErrorBoundary::safely('security', $specName, $method, $matchedPath, fn(): array => $this->securityValidator->validate($method, $matchedPath, $spec, $operation, $headers, $queryParams, $cookies)),
-            ...ValidatorErrorBoundary::safely('request-body', $specName, $method, $matchedPath, fn(): array => $this->bodyValidator->validate($specName, $method, $matchedPath, $operation, $requestBody, $contentType, $version)),
+            ...ValidatorErrorBoundary::safely('request-body', $specName, $method, $matchedPath, fn(): array => $this->bodyValidator->validate($specName, $method, $matchedPath, $operation, $body, $contentType, $version)),
         ];
 
         if ($errors === []) {

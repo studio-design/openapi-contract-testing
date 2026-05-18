@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Validation\Request;
 
 use stdClass;
-use Studio\OpenApiContractTesting\Internal\PresentJsonNull;
+use Studio\OpenApiContractTesting\DecodedBody;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\SchemaContext;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
@@ -47,7 +47,7 @@ final class RequestBodyValidator
         string $method,
         string $matchedPath,
         array $operation,
-        mixed $requestBody,
+        DecodedBody $requestBody,
         ?string $contentType,
         OpenApiVersion $version,
     ): array {
@@ -142,17 +142,11 @@ final class RequestBodyValidator
             return [];
         }
 
-        // Issue #246: see the matching comment in ResponseBodyValidator. A
-        // PresentJsonNull marker means the wire carried a literal JSON `null`
-        // body; unwrap it and flag the body as present so it is type-checked
-        // against the schema instead of taking the empty-body branch.
-        $bodyWasPresent = false;
-        if ($requestBody instanceof PresentJsonNull) {
-            $requestBody = null;
-            $bodyWasPresent = true;
-        }
-
-        if ($requestBody === null && !$bodyWasPresent) {
+        // An absent body is acceptable unless the spec marks the requestBody
+        // `required`. A literal JSON `null` body is distinct — `->present` is
+        // true with a `null` value (issues #246 / #248), so it falls through
+        // to schema type-checking below instead of taking this branch.
+        if (!$requestBody->present) {
             if (!$required) {
                 return [];
             }
@@ -161,6 +155,8 @@ final class RequestBodyValidator
                 "Request body is empty but {$method} {$matchedPath} defines a required JSON request body schema in '{$specName}' spec.",
             ];
         }
+
+        $bodyValue = $requestBody->value;
 
         /** @var array<string, mixed> $schema */
         $schema = $content[$jsonContentType]['schema'];
@@ -175,12 +171,12 @@ final class RequestBodyValidator
         // the empty-object-against-type-object case (very common for
         // "create with defaults" bodies) validates. Mirrors the response-side
         // fix at ResponseBodyValidator::validate().
-        if ($requestBody === [] && self::schemaAcceptsObject($schema)) {
-            $requestBody = new stdClass();
+        if ($bodyValue === [] && self::schemaAcceptsObject($schema)) {
+            $bodyValue = new stdClass();
         }
 
         $schemaObject = ObjectConverter::convert($jsonSchema);
-        $dataObject = ObjectConverter::convert($requestBody);
+        $dataObject = ObjectConverter::convert($bodyValue);
 
         $formatted = $this->runner->validate($schemaObject, $dataObject);
 
