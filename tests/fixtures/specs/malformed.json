@@ -197,6 +197,20 @@
                 "responses": "this should have been an object"
             }
         },
+        "/null-path-item": null,
+        "/null-operation": {
+            "get": null
+        },
+        "/null-responses-map": {
+            "get": {
+                "summary": "responses map is an explicit null (not an object)",
+                "operationId": "nullResponsesMap",
+                "responses": null
+            }
+        },
+        "/scalar-operation-template/{id}": {
+            "get": "this should have been an object"
+        },
         "/path-scalar-parameter/{id}": {
             "parameters": [
                 "this should have been an object"

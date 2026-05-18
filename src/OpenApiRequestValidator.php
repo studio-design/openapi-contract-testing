@@ -20,7 +20,9 @@ use Studio\OpenApiContractTesting\Validation\Support\SpecResponseKeyResolver;
 use Studio\OpenApiContractTesting\Validation\Support\StatusCodePatternSet;
 use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
 
+use function array_key_exists;
 use function array_keys;
+use function get_debug_type;
 use function is_array;
 use function sprintf;
 use function strtolower;
@@ -129,15 +131,24 @@ final class OpenApiRequestValidator
 
         $version = OpenApiVersion::fromSpec($spec);
 
-        // A present-but-non-array `paths` is a malformed spec (stray scalar,
-        // e.g. a YAML/JSON node that decoded to the wrong type). `?? []`
-        // guards key *absence* only; a scalar value slips through to the
-        // `array_keys()` call below and raises an uncaught TypeError. Surface
-        // it as a loud spec error instead, mirroring the response-side
-        // traversal guards (issue #259).
-        if (isset($spec['paths']) && !is_array($spec['paths'])) {
+        // A present-but-non-array `paths` is a malformed spec — a stray
+        // scalar or an explicit `null` (a YAML `paths:` left empty, or a node
+        // that decoded to the wrong type). `array_key_exists` (not `isset`)
+        // is deliberate: `isset` is false for `null`, which would let a
+        // present-but-`null` `paths` slip through to `?? []` below and be
+        // silently coalesced to an empty map. A non-array value otherwise
+        // reaches the `array_keys()` call and raises an uncaught TypeError.
+        // Surface it as a loud spec error instead, mirroring the
+        // response-side traversal guards (issue #259).
+        if (array_key_exists('paths', $spec) && !is_array($spec['paths'])) {
             return OpenApiValidationResult::failure([
-                "Malformed 'paths' for {$method} {$requestPath} in '{$specName}' spec: expected object, got scalar.",
+                sprintf(
+                    "Malformed 'paths' for %s %s in '%s' spec: expected object, got %s.",
+                    $method,
+                    $requestPath,
+                    $specName,
+                    get_debug_type($spec['paths']),
+                ),
             ]);
         }
 
@@ -156,21 +167,35 @@ final class OpenApiRequestValidator
         $pathVariables = $matched['variables'];
 
         $lowerMethod = strtolower($method);
-        $pathSpec = $spec['paths'][$matchedPath] ?? [];
+        // `$matchedPath` is always a key of `$spec['paths']` (the matcher was
+        // built from its `array_keys()`), so `?? null` here only fires for an
+        // explicit `null` *value* — which the guard below then treats as
+        // malformed, exactly like a scalar path item.
+        $pathSpec = $spec['paths'][$matchedPath] ?? null;
 
         // A present-but-non-array path item is a malformed spec; without this
-        // guard a scalar `$pathSpec` produces a misleading "method not
-        // defined" diagnostic (the `isset()` below is false for a scalar) and
-        // would otherwise reach `ParameterCollector::collect()`'s `array
-        // $pathSpec` parameter. Surface it loudly instead (issue #259).
+        // guard a scalar/`null` `$pathSpec` reaches the `array_key_exists()`
+        // method lookup below (and `ParameterCollector::collect()`'s `array
+        // $pathSpec` parameter) and raises an uncaught TypeError. Surface it
+        // loudly instead (issue #259).
         if (!is_array($pathSpec)) {
             return OpenApiValidationResult::failure([
-                "Malformed 'paths[\"{$matchedPath}\"]' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
+                sprintf(
+                    "Malformed 'paths[\"%s\"]' for %s %s in '%s' spec: expected object, got %s.",
+                    $matchedPath,
+                    $method,
+                    $matchedPath,
+                    $specName,
+                    get_debug_type($pathSpec),
+                ),
             ], $matchedPath);
         }
 
         /** @var array<string, mixed> $pathSpec */
-        if (!isset($pathSpec[$lowerMethod])) {
+        // `array_key_exists` (not `isset`) so an explicit `{method}: null`
+        // reaches the operation guard below as malformed rather than being
+        // misreported as an undefined method.
+        if (!array_key_exists($lowerMethod, $pathSpec)) {
             return OpenApiValidationResult::failure([
                 PathDiagnosticsFormatter::methodNotDefined($specName, $method, $matchedPath, $spec),
             ], $matchedPath);
@@ -178,21 +203,28 @@ final class OpenApiRequestValidator
 
         $operation = $pathSpec[$lowerMethod];
 
-        // A present-but-non-array operation is a malformed spec; a scalar here
-        // would reach the `array $operation` parameters of
-        // `ParameterCollector::collect()` / `RequestBodyValidator::validate()`
-        // and raise an uncaught TypeError (issue #259).
+        // A present-but-non-array operation is a malformed spec; a scalar or
+        // `null` here would reach `ParameterCollector::collect()`'s `array
+        // $operation` parameter (the first scalar-typed sink) and raise an
+        // uncaught TypeError (issue #259).
         if (!is_array($operation)) {
             return OpenApiValidationResult::failure([
-                "Malformed 'paths[\"{$matchedPath}\"].{$lowerMethod}' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
+                sprintf(
+                    "Malformed 'paths[\"%s\"].%s' for %s %s in '%s' spec: expected object, got %s.",
+                    $matchedPath,
+                    $lowerMethod,
+                    $method,
+                    $matchedPath,
+                    $specName,
+                    get_debug_type($operation),
+                ),
             ], $matchedPath);
         }
-
-        /** @var array<string, mixed> $operation */
 
         // Collect merged path/operation parameters once so path + query + header
         // validation share a single view of the spec and malformed-entry errors
         // are surfaced only once.
+        /** @var array<string, mixed> $operation */
         $collected = ParameterCollector::collect($method, $matchedPath, $pathSpec, $operation);
 
         // Each sub-validator is wrapped in ValidatorErrorBoundary::safely() so a
