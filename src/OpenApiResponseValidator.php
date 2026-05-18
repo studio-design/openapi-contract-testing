@@ -412,7 +412,19 @@ final class OpenApiResponseValidator
             return new ResponseBodyValidationResult([], null);
         }
 
-        /** @var array<string, array<string, mixed>> $content */
+        // A present-but-non-array `content` is a malformed spec (stray scalar,
+        // e.g. an unresolved $ref). Surface it before it reaches
+        // ResponseBodyValidator::validate()'s `array $content` parameter, where
+        // it would raise an uncaught TypeError (TypeError extends Error, not
+        // RuntimeException, so the catch below would not see it). Mirrors
+        // RequestBodyValidator's `requestBody.content` guard (issue #256).
+        if (!is_array($responseSpec['content'])) {
+            return new ResponseBodyValidationResult([
+                "Malformed 'responses[{$statusCode}].content' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
+            ], null);
+        }
+
+        /** @var array<string, mixed> $content */
         $content = $responseSpec['content'];
 
         // Inlined try/catch mirrors ValidatorErrorBoundary::safely() for the

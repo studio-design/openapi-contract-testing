@@ -2059,4 +2059,30 @@ class OpenApiResponseValidatorTest extends TestCase
         $this->assertFalse($result->isValid());
         $this->assertStringContainsString('Response body is empty', $result->errorMessage());
     }
+
+    #[Test]
+    public function malformed_response_content_block_returns_failure(): void
+    {
+        // `responses.200.content` is a scalar. Without the guard the scalar
+        // reaches ResponseBodyValidator::validate()'s `array $content`
+        // parameter and raises an uncaught TypeError (TypeError extends Error,
+        // not RuntimeException, so validateBody()'s catch does not see it).
+        // The guard surfaces a loud spec error instead, mirroring the
+        // request-side `Malformed 'requestBody.content'` guard (issue #256).
+        $result = $this->validator->validate(
+            'malformed',
+            'GET',
+            '/response-scalar-content',
+            200,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'responses[200].content'",
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+    }
 }

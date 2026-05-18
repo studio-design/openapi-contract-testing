@@ -510,4 +510,121 @@ class ResponseBodyValidatorTest extends TestCase
         $this->assertStringContainsString('/id', $result->errors[0]);
         $this->assertSame('application/json', $result->matchedContentType);
     }
+
+    // ========================================
+    // Malformed-spec guards (issue #256) — symmetric with RequestBodyValidator
+    // ========================================
+
+    #[Test]
+    public function validate_flags_malformed_media_type_entry(): void
+    {
+        // `content: {"application/json": "oops"}` — a scalar where a media
+        // type object was expected. Without the guard the scalar slips past
+        // the downstream `isset(...['schema'])` presence check and the body
+        // is silently recorded as a clean pass. Surface a loud spec error,
+        // mirroring RequestBodyValidator's sibling guard.
+        $content = ['application/json' => 'oops'];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/pets',
+            200,
+            $content,
+            DecodedBody::present(['id' => 1]),
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString(
+            'Malformed \'responses[200].content["application/json"]\'',
+            $result->errors[0],
+        );
+        $this->assertStringContainsString('expected object, got scalar', $result->errors[0]);
+        $this->assertNull($result->matchedContentType);
+    }
+
+    #[Test]
+    public function validate_flags_malformed_media_type_schema_for_json_content_type(): void
+    {
+        // A non-array `schema` on a JSON media type would reach
+        // OpenApiSchemaConverter::convert() as a scalar and raise a confusing
+        // TypeError. The guard turns it into a spec-level error instead.
+        $content = ['application/json' => ['schema' => 'oops']];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/pets',
+            200,
+            $content,
+            DecodedBody::present(['id' => 1]),
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString(
+            'Malformed \'responses[200].content["application/json"].schema\'',
+            $result->errors[0],
+        );
+        $this->assertStringContainsString('expected object, got scalar', $result->errors[0]);
+        $this->assertNull($result->matchedContentType);
+    }
+
+    #[Test]
+    public function validate_flags_null_media_type_schema_for_json_content_type(): void
+    {
+        // Locks in `array_key_exists` over `isset`: an explicit `schema: null`
+        // must be flagged. With `isset` it would fall through the downstream
+        // presence check and accept any body — a silent pass.
+        $content = ['application/json' => ['schema' => null]];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/pets',
+            200,
+            $content,
+            DecodedBody::present(['id' => 1]),
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString(
+            'Malformed \'responses[200].content["application/json"].schema\'',
+            $result->errors[0],
+        );
+    }
+
+    #[Test]
+    public function validate_flags_null_media_type_schema_for_non_json_content_type(): void
+    {
+        // Before the guard, a non-JSON entry with `schema: null` slipped
+        // through the `isset(...['schema'])` skip check (issue #254) as a
+        // silent success — asymmetric with the request validator, which
+        // rejects the same `schema: null` loudly. The guard runs before
+        // content negotiation, so request and response now agree.
+        $content = ['text/plain' => ['schema' => null]];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/pets',
+            200,
+            $content,
+            DecodedBody::present('blob'),
+            'text/plain',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString(
+            'Malformed \'responses[200].content["text/plain"].schema\'',
+            $result->errors[0],
+        );
+        $this->assertNull($result->skipReason);
+    }
 }

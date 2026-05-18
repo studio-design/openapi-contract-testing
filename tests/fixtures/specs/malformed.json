@@ -119,6 +119,18 @@
                 }
             }
         },
+        "/response-scalar-content": {
+            "get": {
+                "summary": "responses[200].content is a scalar (not an object)",
+                "operationId": "responseScalarContent",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": "this should have been an object"
+                    }
+                }
+            }
+        },
         "/path-scalar-parameter/{id}": {
             "parameters": [
                 "this should have been an object"
