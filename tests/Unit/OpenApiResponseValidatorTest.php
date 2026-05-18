@@ -2153,4 +2153,30 @@ class OpenApiResponseValidatorTest extends TestCase
             $result->errors()[0],
         );
     }
+
+    #[Test]
+    public function malformed_response_status_entry_returns_failure(): void
+    {
+        // `responses["200"]` is a scalar instead of a response object. Without
+        // the guard the scalar reaches validateBody()/validateHeaders()' `array
+        // $responseSpec` parameter and raises an uncaught TypeError (TypeError
+        // extends Error, not RuntimeException). The guard surfaces a loud spec
+        // error, mirroring the content-level guards and RequestBodyValidator's
+        // `requestBody` guard (issue #258).
+        $result = $this->validator->validate(
+            'malformed-response',
+            'GET',
+            '/things',
+            200,
+            ['id' => 1],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString(
+            "Malformed 'responses[200]'",
+            $result->errors()[0],
+        );
+        $this->assertStringContainsString('expected object, got scalar', $result->errors()[0]);
+    }
 }
