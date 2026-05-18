@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
+use RuntimeException;
 use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Request\HeaderParameterValidator;
 use Studio\OpenApiContractTesting\Validation\Request\ParameterCollector;
 use Studio\OpenApiContractTesting\Validation\Request\PathParameterValidator;
 use Studio\OpenApiContractTesting\Validation\Request\QueryParameterValidator;
+use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidationResult;
 use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Request\SecurityValidator;
 use Studio\OpenApiContractTesting\Validation\Support\PathDiagnosticsFormatter;
@@ -171,16 +173,33 @@ final class OpenApiRequestValidator
         // The boundary is per-sub-validator and permissive: a capture at one stage
         // does NOT short-circuit later stages — every sub-validator still runs so
         // a single test run surfaces as much contract drift as possible.
+        // The body validator returns a richer DTO (errors + an optional
+        // skipReason) rather than a bare string[], so it cannot flow through
+        // ValidatorErrorBoundary::safely() like the other sub-validators.
+        // validateBody() runs it behind the same narrow RuntimeException
+        // boundary inline — mirrors OpenApiResponseValidator::validateBody().
+        $bodyResult = $this->validateBody($specName, $method, $matchedPath, $operation, $body, $contentType, $version);
+
         $errors = [
             ...$collected->specErrors,
             ...ValidatorErrorBoundary::safely('path', $specName, $method, $matchedPath, fn(): array => $this->pathValidator->validate($method, $matchedPath, $collected->parameters, $pathVariables, $version)),
             ...ValidatorErrorBoundary::safely('query', $specName, $method, $matchedPath, fn(): array => $this->queryValidator->validate($method, $matchedPath, $collected->parameters, $queryParams, $version)),
             ...ValidatorErrorBoundary::safely('header', $specName, $method, $matchedPath, fn(): array => $this->headerValidator->validate($method, $matchedPath, $collected->parameters, $headers, $version)),
             ...ValidatorErrorBoundary::safely('security', $specName, $method, $matchedPath, fn(): array => $this->securityValidator->validate($method, $matchedPath, $spec, $operation, $headers, $queryParams, $cookies)),
-            ...ValidatorErrorBoundary::safely('request-body', $specName, $method, $matchedPath, fn(): array => $this->bodyValidator->validate($specName, $method, $matchedPath, $operation, $body, $contentType, $version)),
+            ...$bodyResult->errors,
         ];
 
         if ($errors === []) {
+            // Issue #254: a non-JSON request Content-Type matched a spec
+            // media-type key declaring a `schema` this JSON-Schema engine
+            // cannot evaluate. No sibling validator failed, so the request
+            // is non-failing — but the body went unchecked, so surface a
+            // Skipped result (rather than a clean Success) and forward the
+            // reason to coverage tracking.
+            if ($bodyResult->skipReason !== null) {
+                return OpenApiValidationResult::skipped($matchedPath, $bodyResult->skipReason);
+            }
+
             return OpenApiValidationResult::success($matchedPath);
         }
 
@@ -227,6 +246,51 @@ final class OpenApiRequestValidator
         }
 
         return OpenApiValidationResult::failure($errors, $matchedPath);
+    }
+
+    /**
+     * Run the request-body validator behind the same narrow
+     * `RuntimeException` boundary {@see ValidatorErrorBoundary::safely()}
+     * applies to the other sub-validators: a `RuntimeException` (typically
+     * an opis/json-schema `SchemaException` raised from schema conversion
+     * or validation) is converted to an error string instead of aborting
+     * the orchestrator. The body validator returns a
+     * {@see RequestBodyValidationResult} DTO carrying an optional
+     * `skipReason`, so it cannot reuse the string[]-returning helper as-is
+     * — same reasoning as {@see OpenApiResponseValidator::validateBody()}.
+     * `\LogicException` and `\Error` still bubble so programmer bugs are
+     * not silently downgraded to contract errors.
+     *
+     * @param array<string, mixed> $operation
+     */
+    private function validateBody(
+        string $specName,
+        string $method,
+        string $matchedPath,
+        array $operation,
+        DecodedBody $body,
+        ?string $contentType,
+        OpenApiVersion $version,
+    ): RequestBodyValidationResult {
+        try {
+            return $this->bodyValidator->validate($specName, $method, $matchedPath, $operation, $body, $contentType, $version);
+        } catch (RuntimeException $e) {
+            $previous = $e->getPrevious();
+            $previousSuffix = $previous !== null
+                ? sprintf(' (caused by %s: %s)', $previous::class, $previous->getMessage())
+                : '';
+
+            return new RequestBodyValidationResult([sprintf(
+                "[%s] %s %s in '%s' spec: %s threw: %s%s",
+                'request-body',
+                $method,
+                $matchedPath,
+                $specName,
+                $e::class,
+                $e->getMessage(),
+                $previousSuffix,
+            )]);
+        }
     }
 
     /**

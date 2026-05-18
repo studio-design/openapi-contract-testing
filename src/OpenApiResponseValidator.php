@@ -209,15 +209,36 @@ final class OpenApiResponseValidator
             $version,
         );
 
-        // The body validator returns ([], null) for two distinct cases:
+        // The body validator matched a non-JSON media-type key that declares
+        // a `schema` this JSON-Schema engine cannot evaluate (issue #254).
+        // The body was not checked, so surface a Skipped result rather than
+        // a clean Success — but only when headers also passed; a real header
+        // failure must still fail loudly (it falls through to the error
+        // merge below). matchedContentType is forwarded so coverage records
+        // the skip against that exact media-type row.
+        if ($bodyResult->skipReason !== null && $headerErrors === []) {
+            return OpenApiValidationResult::skipped(
+                $matchedPath,
+                $bodyResult->skipReason,
+                $statusCodeStr,
+                $bodyResult->matchedContentType,
+            );
+        }
+
+        // The body validator returns `errors: []` + `matchedContentType: null`
+        // (and `skipReason: null`, so the branch above did not fire) for two
+        // distinct cases:
         // (a) 204-style — spec has no `content` block; nothing to validate,
         //     legitimately Success.
         // (b) Spec declares only non-JSON content types (e.g. `text/plain`)
-        //     and we have no schema engine for them; the result is "we
-        //     didn't actually check anything". Without this branch the
-        //     orchestrator would mark the response as a clean Success and
-        //     coverage would credit the spec's declared content-type as
-        //     validated even though no validation occurred.
+        //     with no `schema` and no actual response Content-Type was
+        //     supplied to look one up; the result is "we didn't actually
+        //     check anything". Without this branch the orchestrator would
+        //     mark the response as a clean Success and coverage would credit
+        //     the spec's declared content-type as validated even though no
+        //     validation occurred. (A non-JSON type that DID match a key
+        //     declaring a `schema` is handled by the skipReason branch above
+        //     and never reaches here.)
         // Distinguishing them requires looking at the spec — `content`
         // present + non-empty + bodyResult.matchedContentType null + body
         // had no errors → case (b).

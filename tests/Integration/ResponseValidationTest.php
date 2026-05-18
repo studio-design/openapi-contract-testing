@@ -118,11 +118,15 @@ class ResponseValidationTest extends TestCase
     }
 
     #[Test]
-    public function non_json_endpoint_with_explicit_content_type_marks_validated(): void
+    public function non_json_endpoint_with_explicit_content_type_records_skipped(): void
     {
         // Same endpoint, but the caller supplies the actual response
-        // Content-Type. The body validator can confirm `text/html` is in
-        // the spec's content map and credits the coverage row as validated.
+        // Content-Type. The spec's `text/html` 200 entry declares a `schema`,
+        // and OpenAPI permits a schema on any media type — but this engine
+        // only evaluates JSON Schema, so the body cannot be checked. Issue
+        // #254: matching the spec key must NOT credit the row as validated;
+        // the result is Skipped and coverage records the skip against the
+        // exact `text/html` media-type row (not the wildcard bucket).
         $result = $this->validator->validate(
             'petstore-3.0',
             'GET',
@@ -132,18 +136,36 @@ class ResponseValidationTest extends TestCase
             'text/html',
         );
         $this->assertTrue($result->isValid());
-        $this->assertFalse($result->isSkipped());
+        $this->assertTrue($result->isSkipped());
+        $this->assertSame('text/html', $result->matchedContentType());
+        $this->assertNotNull($result->skipReason());
 
         $this->recordResult('petstore-3.0', 'GET', $result);
 
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
         $endpoints = $this->indexEndpoints($coverage['endpoints']);
-        $this->assertSame(EndpointCoverageState::AllCovered, $endpoints['GET /v1/logout']['state']);
+        $logout = $endpoints['GET /v1/logout'];
+        $this->assertSame(EndpointCoverageState::Partial, $logout['state']);
+        $this->assertSame(1, $logout['skippedResponseCount']);
+
+        // The skip is recorded against the concrete `text/html` row, so the
+        // spec's declared media type is visibly accounted for as skipped.
+        $textHtmlRow = null;
+        foreach ($logout['responses'] as $row) {
+            if ($row['contentTypeKey'] === 'text/html') {
+                $textHtmlRow = $row;
+            }
+        }
+        $this->assertNotNull($textHtmlRow);
+        $this->assertSame(ResponseCoverageState::Skipped, $textHtmlRow['state']);
+        $this->assertNotNull($textHtmlRow['skipReason']);
     }
 
     #[Test]
-    public function content_negotiation_non_json_response_succeeds_and_records_coverage(): void
+    public function content_negotiation_non_json_response_is_skipped_and_records_coverage(): void
     {
+        // The 409 `text/html` entry declares a `schema`, so the matched
+        // non-JSON Content-Type is Skipped (issue #254), not validated.
         $result = $this->validator->validate(
             'petstore-3.0',
             'POST',
@@ -153,14 +175,26 @@ class ResponseValidationTest extends TestCase
             'text/html',
         );
         $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
+        $this->assertSame('text/html', $result->matchedContentType());
 
         $this->recordResult('petstore-3.0', 'POST', $result);
 
         $coverage = OpenApiCoverageTracker::computeCoverage('petstore-3.0');
         $endpoints = $this->indexEndpoints($coverage['endpoints']);
-        // text/html is one of two declared 409 content-types; the other (application/json)
+        // text/html is one of two declared 409 content-types; it is recorded
+        // as skipped (not validated), and the other (application/json)
         // remains uncovered, so the endpoint as a whole is partial.
         $this->assertSame(EndpointCoverageState::Partial, $endpoints['POST /v1/pets']['state']);
+
+        $textHtmlRow = null;
+        foreach ($endpoints['POST /v1/pets']['responses'] as $row) {
+            if ($row['statusKey'] === '409' && $row['contentTypeKey'] === 'text/html') {
+                $textHtmlRow = $row;
+            }
+        }
+        $this->assertNotNull($textHtmlRow);
+        $this->assertSame(ResponseCoverageState::Skipped, $textHtmlRow['state']);
     }
 
     #[Test]

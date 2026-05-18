@@ -26,7 +26,9 @@ final readonly class OpenApiValidationResult
      * `matchedContentType` is the spec media-type key (with the spec author's
      * original casing) the body was checked against, or null when no body
      * lookup occurred (204, non-JSON-only specs, content-type-not-in-spec
-     * failures, skipped responses).
+     * failures, and most skipped responses). A Skipped result carries it
+     * only for the issue #254 case — a non-JSON media type whose declared
+     * `schema` this JSON-Schema engine cannot evaluate.
      *
      * @param string[] $errors
      */
@@ -110,11 +112,20 @@ final readonly class OpenApiValidationResult
      * the spec response map is consulted. Coverage tracking reconciles the
      * literal status against any spec range keys (`5XX`/`5xx`/`default`) at
      * compute time, marking the spec-declared response as `skipped`.
+     *
+     * `matchedContentType` is null for most skip cases (status-code skip,
+     * non-JSON-only specs with no Content-Type header — no spec media-type
+     * key was resolved). It carries the spec media-type key only when the
+     * skip happened *after* a content-type lookup matched a declared key —
+     * the "non-JSON media type with an unvalidatable `schema`" case (issue
+     * #254). Passing it through lets coverage record the skip against that
+     * exact media-type row instead of the wildcard bucket.
      */
     public static function skipped(
         ?string $matchedPath = null,
         ?string $reason = null,
         ?string $matchedStatusCode = null,
+        ?string $matchedContentType = null,
     ): self {
         return new self(
             OpenApiValidationOutcome::Skipped,
@@ -122,7 +133,7 @@ final readonly class OpenApiValidationResult
             $matchedPath,
             $reason,
             $matchedStatusCode,
-            null,
+            $matchedContentType,
         );
     }
 

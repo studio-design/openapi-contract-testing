@@ -667,8 +667,12 @@ class OpenApiResponseValidatorTest extends TestCase
     // ========================================
 
     #[Test]
-    public function v30_mixed_content_type_with_non_json_response_content_type_succeeds(): void
+    public function v30_mixed_content_type_with_non_json_response_content_type_is_skipped(): void
     {
+        // The 409 response declares both `application/json` and a `text/html`
+        // entry that carries a `schema`. A `text/html` response matches the
+        // latter — a non-JSON schema this engine cannot evaluate — so the
+        // result is Skipped (issue #254), not a clean Success.
         $result = $this->validator->validate(
             'petstore-3.0',
             'POST',
@@ -679,7 +683,10 @@ class OpenApiResponseValidatorTest extends TestCase
         );
 
         $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
         $this->assertSame('/v1/pets', $result->matchedPath());
+        $this->assertSame('text/html', $result->matchedContentType());
+        $this->assertNotNull($result->skipReason());
     }
 
     #[Test]
@@ -835,8 +842,13 @@ class OpenApiResponseValidatorTest extends TestCase
     }
 
     #[Test]
-    public function v30_non_json_only_spec_with_matching_response_content_type_succeeds(): void
+    public function v30_non_json_only_spec_with_matching_response_content_type_is_skipped(): void
     {
+        // The spec's `text/html` 200 entry declares a `schema`. Matching the
+        // response Content-Type to that key does NOT make the body validated
+        // — this engine cannot evaluate a non-JSON schema (issue #254), so
+        // the result is Skipped (isValid() stays true) and carries the
+        // matched media-type key for coverage.
         $result = $this->validator->validate(
             'petstore-3.0',
             'GET',
@@ -847,7 +859,80 @@ class OpenApiResponseValidatorTest extends TestCase
         );
 
         $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
         $this->assertSame('/v1/logout', $result->matchedPath());
+        $this->assertSame('text/html', $result->matchedContentType());
+        $this->assertNotNull($result->skipReason());
+    }
+
+    #[Test]
+    public function non_json_response_content_type_with_a_schema_is_skipped(): void
+    {
+        // Issue #254: the spec declares `text/plain` WITH a `schema` for the
+        // 200 response. The response Content-Type matches that key, but a
+        // non-JSON schema cannot be evaluated by this JSON-Schema engine —
+        // the orchestrator must surface a Skipped result, not a clean
+        // Success, so the unvalidated body is not miscounted.
+        $result = $this->validator->validate(
+            'non-json-content-schema',
+            'GET',
+            '/text-with-schema',
+            200,
+            'plain body',
+            'text/plain',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
+        $this->assertSame('/text-with-schema', $result->matchedPath());
+        $this->assertSame('text/plain', $result->matchedContentType());
+        $this->assertNotNull($result->skipReason());
+        $this->assertStringContainsString('JSON Schema engine only', (string) $result->skipReason());
+    }
+
+    #[Test]
+    public function non_json_response_content_type_without_a_schema_succeeds(): void
+    {
+        // The `text/plain` 200 entry declares NO `schema` — there is nothing
+        // to validate, so the body is silently accepted (Success, not
+        // Skipped). This keeps coverage reports quiet for endpoints whose
+        // spec genuinely has no schema to check.
+        $result = $this->validator->validate(
+            'non-json-content-schema',
+            'GET',
+            '/text-without-schema',
+            200,
+            'plain body',
+            'text/plain',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertFalse($result->isSkipped());
+        $this->assertSame('/text-without-schema', $result->matchedPath());
+    }
+
+    #[Test]
+    public function non_json_body_skip_does_not_mask_a_missing_required_header(): void
+    {
+        // Regression guard for the `&& $headerErrors === []` gate on the
+        // issue #254 skip branch: the response body is skip-eligible (non-JSON
+        // `text/plain` with a schema), but the spec also requires an
+        // `X-Trace-Id` response header that the response omits. The header
+        // failure must still fail the result loudly — the body skip must not
+        // swallow it.
+        $result = $this->validator->validate(
+            'non-json-content-schema',
+            'GET',
+            '/text-with-schema-and-required-header',
+            200,
+            'plain body',
+            'text/plain',
+            [],
+        );
+
+        $this->assertFalse($result->isValid());
+        $this->assertFalse($result->isSkipped());
+        $this->assertStringContainsString('X-Trace-Id', $result->errorMessage());
     }
 
     // ========================================

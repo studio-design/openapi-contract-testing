@@ -10,7 +10,7 @@ Main validator class. Validates a response body against the spec.
 
 The constructor accepts a `maxErrors` parameter (default: `20`) that limits how many validation errors the underlying JSON Schema validator collects. Use `0` for unlimited, `1` to stop at the first error.
 
-The optional `responseContentType` parameter enables content negotiation: when provided, non-JSON content types (e.g., `text/html`) are checked for spec presence only, while JSON-compatible types proceed to full schema validation.
+The optional `responseContentType` parameter enables content negotiation: when provided, non-JSON content types (e.g., `text/html`) are checked for spec presence only, while JSON-compatible types proceed to full schema validation. When a non-JSON content type matches a spec media-type key that declares a `schema`, the body cannot be evaluated by the JSON Schema engine — the result is reported as `Skipped` (with a `skipReason`) rather than a clean success, so the unvalidated body is not miscounted.
 
 ```php
 $validator = new OpenApiResponseValidator(maxErrors: 20);

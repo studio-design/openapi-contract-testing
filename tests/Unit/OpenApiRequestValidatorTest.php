@@ -289,10 +289,14 @@ class OpenApiRequestValidatorTest extends TestCase
     // ========================================
 
     #[Test]
-    public function v30_non_json_content_type_with_spec_match_succeeds(): void
+    public function v30_non_json_content_type_with_spec_match_is_skipped(): void
     {
-        // Body intentionally violates the JSON pet schema (integer, not an object with "name").
-        // If the non-JSON short-circuit ever regresses into schema validation this will fail.
+        // Body intentionally violates the JSON pet schema (integer, not an
+        // object with "name"). The `text/plain` requestBody entry declares a
+        // `schema`, but this JSON-Schema engine cannot evaluate a non-JSON
+        // schema — issue #254 surfaces this as Skipped (isValid() stays
+        // true) rather than a clean Success. If the non-JSON short-circuit
+        // ever regresses into schema validation, isValid() would turn false.
         $result = $this->validator->validate(
             'petstore-3.0',
             'POST',
@@ -304,6 +308,8 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
+        $this->assertNotNull($result->skipReason());
     }
 
     #[Test]
@@ -320,6 +326,51 @@ class OpenApiRequestValidatorTest extends TestCase
         );
 
         $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
+    }
+
+    #[Test]
+    public function non_json_request_content_type_with_a_schema_is_skipped(): void
+    {
+        // Issue #254: the `text/plain` requestBody entry declares a `schema`.
+        // The request Content-Type matches that key, but a non-JSON schema
+        // cannot be evaluated — the orchestrator surfaces a Skipped result so
+        // the unvalidated body is not miscounted as a clean validated request.
+        $result = $this->validator->validate(
+            'non-json-content-schema',
+            'POST',
+            '/text-with-schema',
+            [],
+            [],
+            'plain body',
+            'text/plain',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertTrue($result->isSkipped());
+        $this->assertSame('/text-with-schema', $result->matchedPath());
+        $this->assertNotNull($result->skipReason());
+        $this->assertStringContainsString('JSON Schema engine only', (string) $result->skipReason());
+    }
+
+    #[Test]
+    public function non_json_request_content_type_without_a_schema_succeeds(): void
+    {
+        // The `text/plain` requestBody entry declares NO `schema` — nothing to
+        // validate, so the request is a clean Success, not Skipped.
+        $result = $this->validator->validate(
+            'non-json-content-schema',
+            'POST',
+            '/text-without-schema',
+            [],
+            [],
+            'plain body',
+            'text/plain',
+        );
+
+        $this->assertTrue($result->isValid());
+        $this->assertFalse($result->isSkipped());
+        $this->assertSame('/text-without-schema', $result->matchedPath());
     }
 
     #[Test]

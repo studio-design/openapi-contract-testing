@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Response;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\DecodedBody;
 use Studio\OpenApiContractTesting\OpenApiVersion;
+use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidationResult;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 
@@ -156,8 +158,15 @@ class ResponseBodyValidatorTest extends TestCase
     }
 
     #[Test]
-    public function validate_accepts_non_json_content_type_when_defined_in_spec(): void
+    public function validate_skips_non_json_content_type_when_spec_entry_has_a_schema(): void
     {
+        // Issue #254: the response Content-Type matched the spec's `text/plain`
+        // media-type key, and that key declares a `schema`. OpenAPI permits a
+        // schema on any media type, but this engine only evaluates JSON Schema
+        // — the body cannot be checked. The validator must surface a skip
+        // (empty errors + non-null skipReason) so the unvalidated body is not
+        // recorded as a clean pass. matchedContentType is still the matched
+        // key so coverage records the skip against that exact media-type row.
         $content = [
             'text/plain' => ['schema' => ['type' => 'string']],
         ];
@@ -175,6 +184,86 @@ class ResponseBodyValidatorTest extends TestCase
 
         $this->assertSame([], $result->errors);
         $this->assertSame('text/plain', $result->matchedContentType);
+        $this->assertNotNull($result->skipReason);
+        $this->assertStringContainsString('text/plain', $result->skipReason);
+        $this->assertStringContainsString('JSON Schema engine only', $result->skipReason);
+    }
+
+    #[Test]
+    public function validate_does_not_skip_non_json_content_type_without_a_schema(): void
+    {
+        // A non-JSON media type with NO `schema` has nothing to validate — it
+        // stays silently successful (no errors, no skipReason) so it is not
+        // noisily surfaced in coverage as an unvalidated endpoint.
+        $content = [
+            'text/plain' => [],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/robots.txt',
+            200,
+            $content,
+            DecodedBody::present('User-agent: *'),
+            'text/plain; charset=utf-8',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $result->errors);
+        $this->assertSame('text/plain', $result->matchedContentType);
+        $this->assertNull($result->skipReason);
+    }
+
+    #[Test]
+    public function validate_skips_non_json_content_type_matched_via_wildcard_range_with_a_schema(): void
+    {
+        // Issue #254 skip detection keys off `findContentTypeKey()`, which
+        // also matches `<type>/*` ranges. A non-JSON Content-Type that
+        // matches a wildcard spec key declaring a `schema` must skip too —
+        // not just exact-key matches.
+        $content = [
+            'application/*' => ['schema' => ['type' => 'string']],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'GET',
+            '/blob',
+            200,
+            $content,
+            DecodedBody::present('binary-ish blob'),
+            'application/octet-stream',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $result->errors);
+        $this->assertSame('application/*', $result->matchedContentType);
+        $this->assertNotNull($result->skipReason);
+    }
+
+    #[Test]
+    public function result_rejects_a_skip_reason_alongside_errors(): void
+    {
+        // A skip means the body was deliberately not checked — mutually
+        // exclusive with reporting errors. The DTO guard makes the
+        // contradictory state unconstructable.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('cannot also carry errors');
+
+        new ResponseBodyValidationResult(['some error'], 'text/plain', 'a skip reason');
+    }
+
+    #[Test]
+    public function result_rejects_a_skip_reason_without_a_matched_content_type(): void
+    {
+        // A skip is only reached after a media-type key matched, so a skip
+        // must always name that key — otherwise coverage would record the
+        // skip against the wildcard bucket instead of the real row.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('must name the matched');
+
+        new ResponseBodyValidationResult([], null, 'a skip reason');
     }
 
     #[Test]

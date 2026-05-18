@@ -19,6 +19,7 @@ use function implode;
 use function in_array;
 use function is_array;
 use function is_string;
+use function sprintf;
 
 /**
  * @internal Not part of the package's public API. Do not use from user code.
@@ -32,15 +33,16 @@ final class RequestBodyValidator
     /**
      * Validate the request body against the operation's `requestBody` schema.
      *
-     * Returns an empty list when the body is acceptable (including when the
-     * spec defines no body, no content, no JSON content type, or no schema).
-     * Hard spec-level errors (malformed `requestBody` / `content`) are
-     * reported as standard error entries so the orchestrator can accumulate
-     * them alongside other validators' errors.
+     * Returns a {@see RequestBodyValidationResult} with an empty `errors`
+     * list when the body is acceptable (including when the spec defines no
+     * body, no content, no JSON content type, or no schema). Hard spec-level
+     * errors (malformed `requestBody` / `content`) are reported as error
+     * entries so the orchestrator can accumulate them alongside other
+     * validators' errors. A non-JSON Content-Type that matched a spec
+     * media-type key declaring a `schema` this engine cannot evaluate yields
+     * an empty `errors` list plus a non-null `skipReason` (issue #254).
      *
      * @param array<string, mixed> $operation
-     *
-     * @return string[]
      */
     public function validate(
         string $specName,
@@ -50,18 +52,18 @@ final class RequestBodyValidator
         DecodedBody $requestBody,
         ?string $contentType,
         OpenApiVersion $version,
-    ): array {
+    ): RequestBodyValidationResult {
         // OpenAPI: a missing requestBody means the operation accepts no body — treat as success.
         if (!isset($operation['requestBody'])) {
-            return [];
+            return new RequestBodyValidationResult([]);
         }
 
         // A present-but-non-array requestBody signals a malformed spec (stray scalar).
         // Contract-testing tools should surface this, not mask it as "no body".
         if (!is_array($operation['requestBody'])) {
-            return [
+            return new RequestBodyValidationResult([
                 "Malformed 'requestBody' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
-            ];
+            ]);
         }
 
         /** @var array<string, mixed> $requestBodySpec */
@@ -70,13 +72,13 @@ final class RequestBodyValidator
         $required = ($requestBodySpec['required'] ?? false) === true;
 
         if (!isset($requestBodySpec['content'])) {
-            return [];
+            return new RequestBodyValidationResult([]);
         }
 
         if (!is_array($requestBodySpec['content'])) {
-            return [
+            return new RequestBodyValidationResult([
                 "Malformed 'requestBody.content' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
-            ];
+            ]);
         }
 
         /** @var array<string, mixed> $content */
@@ -88,9 +90,9 @@ final class RequestBodyValidator
             // would TypeError on downstream array accesses. Surface it as a loud spec
             // error instead, matching the sibling guard on `requestBody.content` above.
             if (!is_array($mediaTypeSpec)) {
-                return [
+                return new RequestBodyValidationResult([
                     "Malformed 'requestBody.content[\"{$mediaType}\"]' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
-                ];
+                ]);
             }
 
             // `schema: "oops"` (or any other non-array scalar) would slip past the
@@ -99,9 +101,9 @@ final class RequestBodyValidator
             // TypeError instead of a spec-level error. array_key_exists rather than
             // isset so an explicit `schema: null` is also flagged.
             if (array_key_exists('schema', $mediaTypeSpec) && !is_array($mediaTypeSpec['schema'])) {
-                return [
+                return new RequestBodyValidationResult([
                     "Malformed 'requestBody.content[\"{$mediaType}\"].schema' for {$method} {$matchedPath} in '{$specName}' spec: expected object, got scalar.",
-                ];
+                ]);
             }
         }
 
@@ -112,15 +114,41 @@ final class RequestBodyValidator
             $normalizedType = ContentTypeMatcher::normalizeMediaType($contentType);
 
             if (!ContentTypeMatcher::isJsonContentType($normalizedType)) {
-                if (ContentTypeMatcher::isContentTypeInSpec($normalizedType, $content)) {
-                    return [];
+                $matchedKey = ContentTypeMatcher::findContentTypeKey($normalizedType, $content);
+                if ($matchedKey !== null) {
+                    // A matched non-JSON media type that declares a `schema`
+                    // is an unvalidatable contract: OpenAPI permits a schema
+                    // on any media type, but this engine only evaluates JSON
+                    // Schema. Surface a skip (issue #254) so the unchecked
+                    // body is not recorded as a clean pass. A non-JSON entry
+                    // with no `schema` has nothing to validate — stay
+                    // silently successful, as before.
+                    //
+                    // `isset` (not `array_key_exists`) is deliberate: an
+                    // explicit `schema: null` is a degenerate entry, and the
+                    // per-media-type malformed-schema guard above already
+                    // rejected it loudly before this point — so it never
+                    // reaches here as a silent "no schema" case.
+                    if (isset($content[$matchedKey]['schema'])) {
+                        return new RequestBodyValidationResult(
+                            [],
+                            sprintf(
+                                "request Content-Type '%s' matched non-JSON spec media type '%s', "
+                                . 'which declares a schema this validator cannot evaluate (JSON Schema engine only)',
+                                $normalizedType,
+                                $matchedKey,
+                            ),
+                        );
+                    }
+
+                    return new RequestBodyValidationResult([]);
                 }
 
                 $defined = implode(', ', array_keys($content));
 
-                return [
+                return new RequestBodyValidationResult([
                     "Request Content-Type '{$normalizedType}' is not defined for {$method} {$matchedPath} in '{$specName}' spec. Defined content types: {$defined}",
-                ];
+                ]);
             }
 
             // JSON-compatible request: fall through to existing JSON schema validation.
@@ -135,11 +163,11 @@ final class RequestBodyValidator
         // This validator only handles JSON schemas; non-JSON types (e.g. application/xml,
         // application/octet-stream) are outside its scope.
         if ($jsonContentType === null) {
-            return [];
+            return new RequestBodyValidationResult([]);
         }
 
         if (!isset($content[$jsonContentType]['schema'])) {
-            return [];
+            return new RequestBodyValidationResult([]);
         }
 
         // An absent body is acceptable unless the spec marks the requestBody
@@ -148,12 +176,12 @@ final class RequestBodyValidator
         // to schema type-checking below instead of taking this branch.
         if (!$requestBody->present) {
             if (!$required) {
-                return [];
+                return new RequestBodyValidationResult([]);
             }
 
-            return [
+            return new RequestBodyValidationResult([
                 "Request body is empty but {$method} {$matchedPath} defines a required JSON request body schema in '{$specName}' spec.",
-            ];
+            ]);
         }
 
         $bodyValue = $requestBody->value;
@@ -187,7 +215,7 @@ final class RequestBodyValidator
             }
         }
 
-        return $errors;
+        return new RequestBodyValidationResult($errors);
     }
 
     /**

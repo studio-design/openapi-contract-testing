@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Request;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\DecodedBody;
 use Studio\OpenApiContractTesting\OpenApiVersion;
+use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidationResult;
 use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 
@@ -24,7 +26,7 @@ class RequestBodyValidatorTest extends TestCase
     #[Test]
     public function validate_returns_empty_when_operation_defines_no_body(): void
     {
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'GET',
             '/pets',
@@ -34,7 +36,7 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertSame([], $errors);
+        $this->assertSame([], $result->errors);
     }
 
     #[Test]
@@ -49,7 +51,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/pets',
@@ -59,8 +61,8 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertCount(1, $errors);
-        $this->assertStringContainsString('Request body is empty', $errors[0]);
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString('Request body is empty', $result->errors[0]);
     }
 
     #[Test]
@@ -81,7 +83,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/pets',
@@ -91,8 +93,8 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertNotEmpty($errors);
-        $this->assertStringContainsString('must match the type', $errors[0]);
+        $this->assertNotEmpty($result->errors);
+        $this->assertStringContainsString('must match the type', $result->errors[0]);
     }
 
     #[Test]
@@ -110,7 +112,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/pets',
@@ -120,9 +122,9 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertNotEmpty($errors);
-        $this->assertStringContainsString('must match the type', $errors[0]);
-        $this->assertStringNotContainsString('Request body is empty', $errors[0]);
+        $this->assertNotEmpty($result->errors);
+        $this->assertStringContainsString('must match the type', $result->errors[0]);
+        $this->assertStringNotContainsString('Request body is empty', $result->errors[0]);
     }
 
     #[Test]
@@ -138,7 +140,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/pets',
@@ -148,7 +150,7 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_1,
         );
 
-        $this->assertSame([], $errors);
+        $this->assertSame([], $result->errors);
     }
 
     #[Test]
@@ -168,7 +170,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/pets',
@@ -178,7 +180,7 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertSame([], $errors);
+        $this->assertSame([], $result->errors);
     }
 
     #[Test]
@@ -197,7 +199,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/pets',
@@ -207,7 +209,7 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertSame([], $errors);
+        $this->assertSame([], $result->errors);
     }
 
     #[Test]
@@ -221,7 +223,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/pets',
@@ -231,8 +233,8 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertCount(1, $errors);
-        $this->assertStringContainsString("Content-Type 'application/xml' is not defined", $errors[0]);
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString("Content-Type 'application/xml' is not defined", $result->errors[0]);
     }
 
     #[Test]
@@ -240,7 +242,7 @@ class RequestBodyValidatorTest extends TestCase
     {
         $operation = ['requestBody' => 'oops'];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/pets',
@@ -250,8 +252,8 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertCount(1, $errors);
-        $this->assertStringContainsString("Malformed 'requestBody'", $errors[0]);
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString("Malformed 'requestBody'", $result->errors[0]);
     }
 
     #[Test]
@@ -265,7 +267,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/pets',
@@ -275,9 +277,9 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertCount(1, $errors);
-        $this->assertStringContainsString('.schema\'', $errors[0]);
-        $this->assertStringContainsString('expected object, got scalar', $errors[0]);
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString('.schema\'', $result->errors[0]);
+        $this->assertStringContainsString('expected object, got scalar', $result->errors[0]);
     }
 
     #[Test]
@@ -297,7 +299,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/pets',
@@ -307,7 +309,7 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertSame([], $errors);
+        $this->assertSame([], $result->errors);
     }
 
     #[Test]
@@ -327,7 +329,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/p',
@@ -337,7 +339,7 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertSame([], $errors);
+        $this->assertSame([], $result->errors);
     }
 
     #[Test]
@@ -353,7 +355,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/p',
@@ -363,7 +365,7 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_1,
         );
 
-        $this->assertSame([], $errors);
+        $this->assertSame([], $result->errors);
     }
 
     #[Test]
@@ -386,7 +388,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/p',
@@ -398,7 +400,7 @@ class RequestBodyValidatorTest extends TestCase
 
         // No error AND no coercion fired — the property bag is permissive
         // so empty input passes for either array or object interpretation.
-        $this->assertSame([], $errors);
+        $this->assertSame([], $result->errors);
     }
 
     #[Test]
@@ -424,7 +426,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/p',
@@ -441,8 +443,8 @@ class RequestBodyValidatorTest extends TestCase
         // a `required` (missing foo) error instead of a type-mismatch error.
         // The substring "must match the type" only appears in the pre-coercion
         // world; the post-coercion world would say "required properties".
-        $this->assertNotEmpty($errors);
-        $this->assertStringContainsString('must match the type', $errors[0]);
+        $this->assertNotEmpty($result->errors);
+        $this->assertStringContainsString('must match the type', $result->errors[0]);
     }
 
     #[Test]
@@ -462,7 +464,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/p',
@@ -472,7 +474,7 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertSame([], $errors);
+        $this->assertSame([], $result->errors);
     }
 
     #[Test]
@@ -501,7 +503,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/p',
@@ -511,8 +513,8 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertNotEmpty($errors);
-        $this->assertStringContainsString('required properties (foo)', $errors[0]);
+        $this->assertNotEmpty($result->errors);
+        $this->assertStringContainsString('required properties (foo)', $result->errors[0]);
     }
 
     #[Test]
@@ -533,7 +535,7 @@ class RequestBodyValidatorTest extends TestCase
             ],
         ];
 
-        $errors = $this->validator->validate(
+        $result = $this->validator->validate(
             'spec',
             'POST',
             '/p',
@@ -543,6 +545,110 @@ class RequestBodyValidatorTest extends TestCase
             OpenApiVersion::V3_0,
         );
 
-        $this->assertSame([], $errors);
+        $this->assertSame([], $result->errors);
+    }
+
+    #[Test]
+    public function validate_skips_non_json_content_type_when_spec_entry_has_a_schema(): void
+    {
+        // Issue #254: the request Content-Type is a non-JSON media type that
+        // matches a spec media-type key, and that key declares a `schema`.
+        // OpenAPI permits a schema on any media type, but this engine only
+        // evaluates JSON Schema — the body cannot be checked. The validator
+        // must surface a skip (empty errors + non-null skipReason) so the
+        // unvalidated body is not recorded as a clean pass.
+        $operation = [
+            'requestBody' => [
+                'content' => [
+                    'text/plain' => ['schema' => ['type' => 'string']],
+                ],
+            ],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'POST',
+            '/pets',
+            $operation,
+            DecodedBody::present('raw pet body'),
+            'text/plain; charset=utf-8',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $result->errors);
+        $this->assertNotNull($result->skipReason);
+        $this->assertStringContainsString('text/plain', $result->skipReason);
+        $this->assertStringContainsString('JSON Schema engine only', $result->skipReason);
+    }
+
+    #[Test]
+    public function validate_does_not_skip_non_json_content_type_without_a_schema(): void
+    {
+        // A non-JSON media type with NO `schema` has nothing to validate —
+        // it stays silently successful (no errors, no skipReason), so it is
+        // not noisily surfaced in coverage as an unvalidated endpoint.
+        $operation = [
+            'requestBody' => [
+                'content' => [
+                    'text/plain' => [],
+                ],
+            ],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'POST',
+            '/pets',
+            $operation,
+            DecodedBody::present('raw pet body'),
+            'text/plain',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $result->errors);
+        $this->assertNull($result->skipReason);
+    }
+
+    #[Test]
+    public function validate_skips_non_json_content_type_matched_via_wildcard_range_with_a_schema(): void
+    {
+        // Issue #254 skip detection keys off `findContentTypeKey()`, which
+        // also matches `<type>/*` ranges. A non-JSON Content-Type that
+        // matches a wildcard spec key declaring a `schema` must skip too —
+        // not just exact-key matches.
+        $operation = [
+            'requestBody' => [
+                'content' => [
+                    'application/*' => ['schema' => ['type' => 'string']],
+                ],
+            ],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'POST',
+            '/blob',
+            $operation,
+            DecodedBody::present('binary-ish blob'),
+            'application/octet-stream',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertSame([], $result->errors);
+        $this->assertNotNull($result->skipReason);
+        $this->assertStringContainsString('application/*', $result->skipReason);
+    }
+
+    #[Test]
+    public function result_rejects_a_skip_reason_alongside_errors(): void
+    {
+        // A skip means the body was deliberately not checked — that is
+        // mutually exclusive with reporting errors. The DTO guard makes the
+        // contradictory state unconstructable so a future producer bug fails
+        // loudly instead of silently miscounting an errored body as a skip.
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('cannot also carry errors');
+
+        new RequestBodyValidationResult(['some error'], 'a skip reason');
     }
 }
