@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
 use Studio\OpenApiContractTesting\Coverage\MarkdownCoverageRenderer;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
 
 use function dirname;
@@ -23,6 +24,10 @@ use function sys_get_temp_dir;
 use function tempnam;
 use function unlink;
 
+/**
+ * @phpstan-import-type CoverageResult from OpenApiCoverageTracker
+ * @phpstan-import-type EndpointSummary from OpenApiCoverageTracker
+ */
 final class MarkdownCoverageRendererLintTest extends TestCase
 {
     #[Test]
@@ -38,7 +43,7 @@ final class MarkdownCoverageRendererLintTest extends TestCase
     }
 
     /**
-     * @return array<string, array<string, mixed>>
+     * @return array<string, CoverageResult>
      */
     private static function standardFixture(): array
     {
@@ -88,7 +93,7 @@ final class MarkdownCoverageRendererLintTest extends TestCase
     }
 
     /**
-     * @return array<string, array<string, mixed>>
+     * @return array<string, CoverageResult>
      */
     private static function edgeCasesFixture(): array
     {
@@ -137,7 +142,7 @@ final class MarkdownCoverageRendererLintTest extends TestCase
      * @param list<array{statusKey: string, contentTypeKey: string, state: ResponseCoverageState, hits: int, skipReason: ?string}> $responses
      * @param list<array{statusKey: string, contentTypeKey: string}> $unexpectedObservations
      *
-     * @return array<string, mixed>
+     * @return EndpointSummary
      */
     private static function endpoint(
         string $endpoint,
@@ -187,7 +192,7 @@ final class MarkdownCoverageRendererLintTest extends TestCase
     }
 
     /**
-     * @param array<string, array<string, mixed>> $results
+     * @param array<string, CoverageResult> $results
      */
     private function assertRenderedMarkdownPassesLint(array $results): void
     {

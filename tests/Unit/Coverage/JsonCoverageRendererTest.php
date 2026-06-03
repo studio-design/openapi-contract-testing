@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
 use Studio\OpenApiContractTesting\Coverage\JsonCoverageRenderer;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
 
 use function array_keys;
@@ -17,6 +18,9 @@ use function explode;
 use function is_array;
 use function json_decode;
 
+/**
+ * @phpstan-import-type CoverageResult from OpenApiCoverageTracker
+ */
 class JsonCoverageRendererTest extends TestCase
 {
     private const FIXED_TIMESTAMP = '2026-05-11T12:34:56+00:00';
@@ -442,7 +446,7 @@ class JsonCoverageRendererTest extends TestCase
     }
 
     /**
-     * @return array<string, array<string, mixed>>
+     * @return array<string, CoverageResult>
      */
     private function oneSpecResults(): array
     {

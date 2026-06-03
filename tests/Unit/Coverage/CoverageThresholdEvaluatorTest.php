@@ -7,12 +7,16 @@ namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Coverage\CoverageThresholdEvaluator;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 
 use function explode;
 use function str_repeat;
 use function substr;
 use function trim;
 
+/**
+ * @phpstan-import-type CoverageResult from OpenApiCoverageTracker
+ */
 class CoverageThresholdEvaluatorTest extends TestCase
 {
     #[Test]
@@ -240,7 +244,7 @@ class CoverageThresholdEvaluatorTest extends TestCase
      * defaults match the empty/zero shape so a typo can't accidentally inflate
      * a metric.
      *
-     * @return array<string, mixed>
+     * @return CoverageResult
      */
     private static function counts(
         int $endpointFullyCovered,

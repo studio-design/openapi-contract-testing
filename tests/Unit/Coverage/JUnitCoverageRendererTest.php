@@ -9,11 +9,15 @@ use PHPUnit\Framework\TestCase;
 use SimpleXMLElement;
 use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
 use Studio\OpenApiContractTesting\Coverage\JUnitCoverageRenderer;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
 
 use function explode;
 use function simplexml_load_string;
 
+/**
+ * @phpstan-import-type EndpointSummary from OpenApiCoverageTracker
+ */
 class JUnitCoverageRendererTest extends TestCase
 {
     #[Test]
@@ -388,7 +392,7 @@ class JUnitCoverageRendererTest extends TestCase
     /**
      * Convenience: render a single-endpoint coverage result for a single spec.
      *
-     * @param array<string, mixed> $endpoint
+     * @param EndpointSummary $endpoint
      */
     private function renderOne(
         string $specName,

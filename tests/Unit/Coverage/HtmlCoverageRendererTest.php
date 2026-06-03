@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
 use Studio\OpenApiContractTesting\Coverage\HtmlCoverageRenderer;
+use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
 
 use function array_unique;
@@ -16,6 +17,9 @@ use function preg_match_all;
 use function sort;
 use function substr_count;
 
+/**
+ * @phpstan-import-type EndpointSummary from OpenApiCoverageTracker
+ */
 class HtmlCoverageRendererTest extends TestCase
 {
     #[Test]
@@ -560,7 +564,7 @@ class HtmlCoverageRendererTest extends TestCase
     }
 
     /**
-     * @param array<string, mixed> $endpoint
+     * @param EndpointSummary $endpoint
      */
     private function renderOne(
         string $specName,
