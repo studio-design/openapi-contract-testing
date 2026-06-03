@@ -231,6 +231,38 @@ class FixtureCoverageTest extends TestCase
     }
 
     #[Test]
+    public function jwks_request_body_enforces_discriminator(): void
+    {
+        // The request-side path enforces the mapping too. Unlike composition's
+        // self-constraining Cat/Dog, the JWKS subtypes do NOT pin `kty`
+        // themselves, so a lying body passes the bare union and is caught ONLY
+        // by the lowered discriminator — proving request-side enforcement
+        // rather than incidental union rejection.
+        $valid = $this->requestValidator->validate(
+            'jwks',
+            'POST',
+            '/v1/jwks',
+            [],
+            [],
+            ['kty' => 'RSA', 'n' => 'sXch…', 'e' => 'AQAB'],
+            'application/json',
+        );
+        $this->assertTrue($valid->isValid(), implode(' | ', $valid->errors()));
+
+        $lying = $this->requestValidator->validate(
+            'jwks',
+            'POST',
+            '/v1/jwks',
+            [],
+            [],
+            ['kty' => 'RSA', 'crv' => 'P-256', 'x' => 'f83O…', 'y' => 'x_FE…'],
+            'application/json',
+        );
+        $this->assertFalse($lying->isValid(), 'request body lying about its key type must fail');
+        $this->assertNotEmpty($lying->errors());
+    }
+
+    #[Test]
     public function composition_anyof_accepts_either_shape(): void
     {
         $byName = $this->requestValidator->validate(
