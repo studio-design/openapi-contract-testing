@@ -505,7 +505,7 @@ final class CoverageMergeCommand
      * caller decides what to do with the return value (only `strict=true`
      * misses propagate to a non-zero exit).
      *
-     * @param array<string, array<string, mixed>> $results
+     * @param array<string, CoverageResult> $results
      */
     private function evaluateThresholdGate(
         array $results,
@@ -517,7 +517,6 @@ final class CoverageMergeCommand
             return false;
         }
 
-        /** @var array<string, array{endpoints: list<mixed>, endpointTotal: int, endpointFullyCovered: int, endpointPartial: int, endpointUncovered: int, endpointRequestOnly: int, responseTotal: int, responseCovered: int, responseSkipped: int, responseUncovered: int}> $results */
         $evaluation = CoverageThresholdEvaluator::evaluate($results, $minEndpointPct, $minResponsePct, $strict);
 
         if ($evaluation['passed']) {
@@ -654,7 +653,7 @@ final class CoverageMergeCommand
     /**
      * @param list<string> $specs
      *
-     * @return array<string, array<string, mixed>>
+     * @return array<string, CoverageResult>
      */
     private function computeResults(array $specs, OpenApiCoverageTracker $tracker): array
     {
