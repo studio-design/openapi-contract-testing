@@ -12,6 +12,16 @@ return [
     // 0 = unlimited (reports all errors).
     'max_errors' => 20,
 
+    // When true (the default), a schema's `discriminator` + `mapping` is
+    // lowered into Draft-07 `if`/`then` conditionals so the discriminator
+    // value actually steers validation toward a single branch — a body that
+    // lies about its type (e.g. `kty: RSA` carrying EC-only fields) fails
+    // instead of passing the underlying oneOf/anyOf union. Set to false to
+    // restore the historical behaviour (discriminator stripped, mapping not
+    // enforced) for specs that rely on the loose union semantics. See
+    // docs/supported-features.md "Discriminator" for the full note.
+    'enforce_discriminator' => true,
+
     // When true, every TestResponse produced by Laravel HTTP test helpers
     // (get(), post(), etc.) is validated against the OpenAPI spec at creation
     // time, without requiring an explicit assertResponseMatchesOpenApiSchema()

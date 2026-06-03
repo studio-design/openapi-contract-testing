@@ -13,6 +13,7 @@ use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorEnforcement;
 
 use function implode;
 use function restore_error_handler;
@@ -48,6 +49,9 @@ class FixtureCoverageTest extends TestCase
         OpenApiSpecLoader::reset();
         OpenApiCoverageTracker::reset();
         OpenApiSchemaConverter::resetWarningStateForTesting();
+        // Default ON; reset here so these end-to-end tests are not affected by
+        // a prior test that toggled the process-global gate (#262).
+        DiscriminatorEnforcement::reset();
         OpenApiSpecLoader::configure(__DIR__ . '/../fixtures/specs');
         $this->responseValidator = new OpenApiResponseValidator();
         $this->requestValidator = new OpenApiRequestValidator();
@@ -58,6 +62,7 @@ class FixtureCoverageTest extends TestCase
         OpenApiCoverageTracker::reset();
         OpenApiSpecLoader::reset();
         OpenApiSchemaConverter::resetWarningStateForTesting();
+        DiscriminatorEnforcement::reset();
         parent::tearDown();
     }
 
@@ -68,31 +73,28 @@ class FixtureCoverageTest extends TestCase
     #[Test]
     public function composition_oneof_accepts_each_branch_independently(): void
     {
-        // /v1/pets/oneOf carries discriminator.mapping for documentation
-        // purposes; the schema converter now warns once per process about it.
-        // This test focuses on the union-validates-each-branch behaviour, so
-        // the warning is suppressed locally — it's covered explicitly by
-        // composition_discriminator_mapping_is_silently_stripped.
-        [$cat, $dog] = $this->suppressSchemaWarnings(['discriminator.mapping'], fn() => [
-            $this->requestValidator->validate(
-                'composition',
-                'POST',
-                '/v1/pets/oneOf',
-                [],
-                [],
-                ['kind' => 'cat', 'meow' => true],
-                'application/json',
-            ),
-            $this->requestValidator->validate(
-                'composition',
-                'POST',
-                '/v1/pets/oneOf',
-                [],
-                [],
-                ['kind' => 'dog', 'bark' => false],
-                'application/json',
-            ),
-        ]);
+        // /v1/pets/oneOf carries discriminator.mapping. With enforcement on
+        // (the default, #262) a valid Cat / Dog body still passes — it
+        // satisfies both the union and the discriminator-selected branch.
+        // No warning is emitted any more, so no suppression is needed.
+        $cat = $this->requestValidator->validate(
+            'composition',
+            'POST',
+            '/v1/pets/oneOf',
+            [],
+            [],
+            ['kind' => 'cat', 'meow' => true],
+            'application/json',
+        );
+        $dog = $this->requestValidator->validate(
+            'composition',
+            'POST',
+            '/v1/pets/oneOf',
+            [],
+            [],
+            ['kind' => 'dog', 'bark' => false],
+            'application/json',
+        );
 
         $this->assertTrue($cat->isValid(), 'cat branch: ' . implode(' | ', $cat->errors()));
         $this->assertTrue($dog->isValid(), 'dog branch: ' . implode(' | ', $dog->errors()));
@@ -101,9 +103,9 @@ class FixtureCoverageTest extends TestCase
     #[Test]
     public function composition_oneof_rejects_body_matching_no_branch(): void
     {
-        // Neither shape: no `kind`, no `meow` / `bark`. discriminator.mapping
-        // warning suppressed — see composition_oneof_accepts_each_branch_independently.
-        $result = $this->suppressSchemaWarnings(['discriminator.mapping'], fn() => $this->requestValidator->validate(
+        // Neither shape: no `kind`, no `meow` / `bark`. Fails both the union
+        // and the discriminator unknown-value guard.
+        $result = $this->requestValidator->validate(
             'composition',
             'POST',
             '/v1/pets/oneOf',
@@ -111,28 +113,24 @@ class FixtureCoverageTest extends TestCase
             [],
             ['unrelated' => 'value'],
             'application/json',
-        ));
+        );
 
         $this->assertFalse($result->isValid());
         $this->assertNotEmpty($result->errors());
     }
 
     #[Test]
-    public function composition_discriminator_mapping_is_silently_stripped(): void
+    public function composition_discriminator_mapping_is_enforced_without_warning(): void
     {
-        // README explicitly documents: `discriminator.mapping` is dropped, the
-        // underlying oneOf still validates as a plain union. Pin this so a
-        // future change that wires up real mapping support surfaces here as
-        // a behaviour change. A body whose `kind` would route to the WRONG
-        // branch (Cat) by mapping but matches the OTHER branch's shape (Dog)
-        // would FAIL with mapping enforced — but PASS today because mapping
-        // is stripped and the body is judged against the oneOf union.
-        //
-        // The strip now also fires a one-shot E_USER_WARNING; capture it here
-        // so the silent-pass-plus-warning contract is pinned end-to-end.
+        // Behaviour change (#262): `discriminator.mapping` is now lowered into
+        // enforceable if/then conditionals instead of being stripped with a
+        // one-shot E_USER_WARNING. A truthful body routes to and satisfies its
+        // mapped branch, and — critically for Laravel consumers whose error
+        // handler turns E_USER_WARNING into a fatal ErrorException — NO warning
+        // is emitted.
         $captured = null;
         set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
-            if ($errno === E_USER_WARNING && str_contains($errstr, 'discriminator.mapping')) {
+            if ($errno === E_USER_WARNING && str_contains($errstr, 'discriminator')) {
                 $captured = $errstr;
 
                 return true;
@@ -148,10 +146,6 @@ class FixtureCoverageTest extends TestCase
                 '/v1/pets/oneOf',
                 [],
                 [],
-                // kind=dog routes to Dog by mapping; body is a valid Dog.
-                // If mapping were enforced and kind said "cat", we would route
-                // to Cat and fail. As-is, the body passes the union because
-                // it satisfies Dog's branch.
                 ['kind' => 'dog', 'bark' => true],
                 'application/json',
             );
@@ -160,7 +154,112 @@ class FixtureCoverageTest extends TestCase
         }
 
         $this->assertTrue($result->isValid(), implode(' | ', $result->errors()));
-        $this->assertNotNull($captured, 'discriminator.mapping strip must fire its silent-pass warning');
+        $this->assertNull($captured, 'discriminator.mapping must no longer emit an E_USER_WARNING');
+    }
+
+    // ============================================================
+    // jwks.json — implicit-inheritance discriminator enforcement (#262)
+    // ============================================================
+
+    #[Test]
+    public function jwks_valid_rsa_key_passes(): void
+    {
+        // kty=RSA routes to RsaJsonWebKey (requires n, e) — a truthful RSA key
+        // validates.
+        $result = $this->responseValidator->validate(
+            'jwks',
+            'GET',
+            '/v1/jwks',
+            200,
+            ['kty' => 'RSA', 'n' => 'sXch…', 'e' => 'AQAB'],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid(), implode(' | ', $result->errors()));
+    }
+
+    #[Test]
+    public function jwks_valid_ec_key_passes(): void
+    {
+        $result = $this->responseValidator->validate(
+            'jwks',
+            'GET',
+            '/v1/jwks',
+            200,
+            ['kty' => 'EC', 'crv' => 'P-256', 'x' => 'f83O…', 'y' => 'x_FE…'],
+            'application/json',
+        );
+
+        $this->assertTrue($result->isValid(), implode(' | ', $result->errors()));
+    }
+
+    #[Test]
+    public function jwks_lying_type_fails(): void
+    {
+        // The issue #262 motivating case: a body that claims kty=RSA but
+        // carries EC-only fields (and lacks n / e) passes the loose union but
+        // MUST fail with the mapping enforced — RSA routes to RsaJsonWebKey,
+        // whose required n / e are absent.
+        $result = $this->responseValidator->validate(
+            'jwks',
+            'GET',
+            '/v1/jwks',
+            200,
+            ['kty' => 'RSA', 'crv' => 'P-256', 'x' => 'f83O…', 'y' => 'x_FE…'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid(), 'a body lying about its key type must fail');
+        $this->assertNotEmpty($result->errors());
+    }
+
+    #[Test]
+    public function jwks_unknown_kty_fails(): void
+    {
+        // kty=oct is not in the mapping — the unknown-value guard rejects it.
+        $result = $this->responseValidator->validate(
+            'jwks',
+            'GET',
+            '/v1/jwks',
+            200,
+            ['kty' => 'oct', 'k' => 'GawgguF…'],
+            'application/json',
+        );
+
+        $this->assertFalse($result->isValid(), 'an unknown discriminator value must fail');
+        $this->assertNotEmpty($result->errors());
+    }
+
+    #[Test]
+    public function jwks_request_body_enforces_discriminator(): void
+    {
+        // The request-side path enforces the mapping too. Unlike composition's
+        // self-constraining Cat/Dog, the JWKS subtypes do NOT pin `kty`
+        // themselves, so a lying body passes the bare union and is caught ONLY
+        // by the lowered discriminator — proving request-side enforcement
+        // rather than incidental union rejection.
+        $valid = $this->requestValidator->validate(
+            'jwks',
+            'POST',
+            '/v1/jwks',
+            [],
+            [],
+            ['kty' => 'RSA', 'n' => 'sXch…', 'e' => 'AQAB'],
+            'application/json',
+        );
+        $this->assertTrue($valid->isValid(), implode(' | ', $valid->errors()));
+
+        $lying = $this->requestValidator->validate(
+            'jwks',
+            'POST',
+            '/v1/jwks',
+            [],
+            [],
+            ['kty' => 'RSA', 'crv' => 'P-256', 'x' => 'f83O…', 'y' => 'x_FE…'],
+            'application/json',
+        );
+        $this->assertFalse($lying->isValid(), 'request body lying about its key type must fail');
+        $this->assertNotEmpty($lying->errors());
     }
 
     #[Test]
@@ -840,46 +939,5 @@ class FixtureCoverageTest extends TestCase
             'lastSeen' => '2026-04-30T12:34:56Z',
             'userId' => '01234567-89ab-cdef-0123-456789abcdef',
         ];
-    }
-
-    /**
-     * Run a callable while absorbing only the converter warnings whose
-     * messages match one of the explicitly-allowed substrings. Any other
-     * `E_USER_WARNING` falls through (returns `false` from the handler) so
-     * unrelated warnings still surface — preventing this helper from
-     * silently absorbing future converter warnings the test was not written
-     * to cover.
-     *
-     * Earlier revisions of this helper filtered by the broad `[OpenAPI
-     * Schema]` prefix and would have silently absorbed every converter
-     * warning emitted in the wrapped call. A code-review audit flagged
-     * that as a silent-failure trap; the explicit allowlist keeps the
-     * suppression intent-driven and self-documenting at the call site.
-     *
-     * @param string[] $allowedSubstrings non-empty list of substrings.
-     *                                    A warning is absorbed iff its
-     *                                    message contains at least one.
-     */
-    private function suppressSchemaWarnings(array $allowedSubstrings, callable $fn): mixed
-    {
-        set_error_handler(static function (int $errno, string $errstr) use ($allowedSubstrings): bool {
-            if ($errno !== E_USER_WARNING) {
-                return false;
-            }
-
-            foreach ($allowedSubstrings as $needle) {
-                if (str_contains($errstr, $needle)) {
-                    return true;
-                }
-            }
-
-            return false;
-        });
-
-        try {
-            return $fn();
-        } finally {
-            restore_error_handler();
-        }
     }
 }

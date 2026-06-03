@@ -161,6 +161,41 @@ final class OpenApiRefResolver
     }
 
     /**
+     * Resolve a local JSON Pointer (`#/...` form) against an already-loaded,
+     * fully-resolved root document and return `[found, value]`.
+     *
+     * Public seam over the private {@see self::lookup()} so other components
+     * that need pointer resolution — notably {@see OpenApiSchemaConverter}
+     * lowering `discriminator.mapping` (Issue #262) — reuse the exact same
+     * segment-unescape rules (`~0` / `~1`, percent-decode) instead of
+     * re-implementing them and drifting. `found=false` distinguishes a
+     * missing segment from a literal `null` leaf.
+     *
+     * @param array<string, mixed> $root
+     *
+     * @return array{0: bool, 1: mixed}
+     */
+    public static function resolvePointer(string $pointer, array $root): array
+    {
+        return self::lookup($pointer, $root);
+    }
+
+    /**
+     * Escape a single path segment for embedding in a JSON Pointer — the
+     * inverse of {@see self::unescapePointerSegment()}. `~` must be encoded
+     * before `/` so a literal `/` does not turn into `~1` and then have its
+     * `~` re-encoded. Used to build `#/components/schemas/{name}` from the
+     * OAS discriminator-mapping bare-name shorthand, where `{name}` may
+     * (exotically) contain `~` or `/`.
+     */
+    public static function escapePointerSegment(string $segment): string
+    {
+        $segment = str_replace('~', '~0', $segment);
+
+        return str_replace('/', '~1', $segment);
+    }
+
+    /**
      * @param array<int|string, mixed> $node
      * @param array<string, mixed> $root currently-walked document's root
      * @param list<string> $chain canonical pointer-refs already on the resolution stack — used to detect cycles

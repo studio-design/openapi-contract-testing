@@ -12,6 +12,7 @@ use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\SchemaContext;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
 use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
 use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
@@ -55,6 +56,10 @@ final class ResponseBodyValidator
      *                                      Values are media-type objects, but a malformed spec can
      *                                      carry a scalar — the guard loop below rejects those loudly
      *                                      before any value is dereferenced as an array.
+     * @param null|DiscriminatorContext $discriminatorContext carries the resolved root + enforce gate
+     *                                                        for `discriminator.mapping` lowering (Issue
+     *                                                        #262). `null` (the default for direct
+     *                                                        callers) means no enforcement.
      */
     public function validate(
         string $specName,
@@ -65,6 +70,7 @@ final class ResponseBodyValidator
         DecodedBody $responseBody,
         ?string $responseContentType,
         OpenApiVersion $version,
+        ?DiscriminatorContext $discriminatorContext = null,
     ): ResponseBodyValidationResult {
         // Pre-scan the content map for malformed media-type entries before any
         // content negotiation runs. This mirrors RequestBodyValidator's
@@ -200,7 +206,7 @@ final class ResponseBodyValidator
 
         /** @var array<string, mixed> $schema */
         $schema = $content[$jsonContentType]['schema'];
-        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Response);
+        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Response, $discriminatorContext);
 
         // PHP's `json_decode($json, true)` returns `[]` for both `[]` and `{}`.
         // The Laravel trait's response decoder uses associative-array decoding

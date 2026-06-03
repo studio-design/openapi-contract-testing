@@ -30,6 +30,7 @@ use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredMode;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallChecker;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallMode;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorEnforcement;
 
 use function array_filter;
 use function array_map;
@@ -307,6 +308,17 @@ final class OpenApiCoverageExtension implements Extension
         $strictRequiredPerCallMode = self::resolveStrictRequiredPerCallMode($parameters, $githubSummaryPath);
         StrictRequiredPerCallChecker::reset();
         StrictRequiredPerCallChecker::configure($strictRequiredPerCallMode);
+
+        // Issue #262: discriminator.mapping enforcement gate. Default ON —
+        // enforcement is the correct contract-testing behaviour; `value="false"`
+        // (or `0` / `no`) is the escape hatch for specs that rely on the loose
+        // union semantics. resolveBooleanFlag reads the `enforce_discriminator`
+        // parameter (absent → the default), and configure() overwrites
+        // unconditionally so a process reused across bootstraps reflects the
+        // current run.
+        DiscriminatorEnforcement::configure(
+            self::resolveBooleanFlag($parameters, 'enforce_discriminator', true),
+        );
 
         if ($facade === null) {
             return;

@@ -24,6 +24,7 @@ use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallChecker;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallMode;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorEnforcement;
 
 use function fclose;
 use function file_get_contents;
@@ -1126,6 +1127,49 @@ class OpenApiCoverageExtensionTest extends TestCase
             $this->assertSame(StrictRequiredPerCallMode::Off, StrictRequiredPerCallChecker::mode());
         } finally {
             StrictRequiredPerCallChecker::reset();
+        }
+    }
+
+    #[Test]
+    public function enforce_discriminator_false_disables_gate_at_bootstrap(): void
+    {
+        DiscriminatorEnforcement::reset();
+
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => 'refs-valid',
+            'enforce_discriminator' => 'false',
+        ]);
+
+        try {
+            $extension->setupExtension(null, $parameters, null);
+            $this->assertFalse(DiscriminatorEnforcement::isEnabled());
+        } finally {
+            DiscriminatorEnforcement::reset();
+        }
+    }
+
+    #[Test]
+    public function enforce_discriminator_absent_keeps_gate_enabled(): void
+    {
+        // Default ON (#262): the headline behaviour must stay enabled when the
+        // parameter is omitted. Reset to a non-default first so the assertion
+        // proves bootstrap re-enabled it rather than merely inheriting the
+        // default.
+        DiscriminatorEnforcement::configure(false);
+
+        $extension = new OpenApiCoverageExtension();
+        $parameters = ParameterCollection::fromArray([
+            'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+            'specs' => 'refs-valid',
+        ]);
+
+        try {
+            $extension->setupExtension(null, $parameters, null);
+            $this->assertTrue(DiscriminatorEnforcement::isEnabled());
+        } finally {
+            DiscriminatorEnforcement::reset();
         }
     }
 

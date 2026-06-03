@@ -6,8 +6,11 @@ namespace Studio\OpenApiContractTesting\Spec;
 
 use const E_USER_WARNING;
 
+use Studio\OpenApiContractTesting\Exception\MalformedDiscriminatorException;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\SchemaContext;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
+use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
 
 use function array_is_list;
 use function array_key_exists;
@@ -17,7 +20,9 @@ use function in_array;
 use function is_array;
 use function is_bool;
 use function is_string;
+use function sort;
 use function sprintf;
+use function str_starts_with;
 use function trigger_error;
 
 /**
@@ -37,7 +42,6 @@ final class OpenApiSchemaConverter
      * draft consistent with what the converter actually produces.
      */
     private const OPENAPI_COMMON_KEYS = [
-        'discriminator',
         'xml',
         'externalDocs',
         'example',
@@ -138,6 +142,12 @@ final class OpenApiSchemaConverter
      * context the same happens for `writeOnly`. See `SchemaContext` for the
      * motivating OpenAPI semantics.
      *
+     * `$discriminator` carries the resolved root + enforce gate for
+     * `discriminator.mapping` lowering (Issue #262). `null` (the default for
+     * callers that cannot enforce — parameter / header validators, the fuzz
+     * explorer) is normalised to {@see DiscriminatorContext::disabled()}, under
+     * which `discriminator` is stripped rather than enforced.
+     *
      * @param array<string, mixed> $schema
      *
      * @return array<string, mixed>
@@ -146,8 +156,9 @@ final class OpenApiSchemaConverter
         array $schema,
         OpenApiVersion $version = OpenApiVersion::V3_0,
         SchemaContext $context = SchemaContext::Response,
+        ?DiscriminatorContext $discriminator = null,
     ): array {
-        self::convertInPlace($schema, $version, $context);
+        self::convertInPlace($schema, $version, $context, $discriminator ?? DiscriminatorContext::disabled());
 
         return $schema;
     }
@@ -167,8 +178,12 @@ final class OpenApiSchemaConverter
     /**
      * @param array<string, mixed> $schema
      */
-    private static function convertInPlace(array &$schema, OpenApiVersion $version, SchemaContext $context): void
-    {
+    private static function convertInPlace(
+        array &$schema,
+        OpenApiVersion $version,
+        SchemaContext $context,
+        DiscriminatorContext $discriminator,
+    ): void {
         if ($version === OpenApiVersion::V3_0) {
             self::handleNullable($schema);
         } else {
@@ -182,15 +197,16 @@ final class OpenApiSchemaConverter
         // just as risky there.
         self::warnIfUsesUnsupportedKeywords($schema);
 
-        // Run discriminator warning BEFORE the common-key removal below —
-        // once `discriminator` is stripped its `mapping` is gone, and the
-        // "this constraint was silently lost" signal would be impossible to
-        // emit. `format` is not in OPENAPI_COMMON_KEYS so its order is
-        // independent.
-        self::warnIfDiscriminatorMappingPresent($schema);
         self::warnIfDependentKeywordsPresent($schema);
         self::warnIfUnknownFormat($schema);
 
+        // `discriminator` is OAS-only (not a JSON Schema keyword) and is
+        // therefore no longer in OPENAPI_COMMON_KEYS — it is consumed by
+        // lowerDiscriminator() at the end of this method, which either lowers
+        // its `mapping` into enforceable `if`/`then` conditionals or strips it
+        // (see Issue #262). Running the lowering last lets it convert the
+        // resolved subtype it inlines into each `then` with the recursion guard
+        // active, without the generic combiner recursion below re-visiting it.
         self::removeKeys($schema, self::OPENAPI_COMMON_KEYS);
 
         // Enforce readOnly/writeOnly on this object's own `properties` before
@@ -210,7 +226,7 @@ final class OpenApiSchemaConverter
         if (isset($schema['properties']) && is_array($schema['properties'])) {
             foreach ($schema['properties'] as &$property) {
                 if (is_array($property)) {
-                    self::convertInPlace($property, $version, $context);
+                    self::convertInPlace($property, $version, $context, $discriminator);
                 }
             }
             unset($property);
@@ -220,12 +236,12 @@ final class OpenApiSchemaConverter
             if (array_is_list($schema['items'])) {
                 foreach ($schema['items'] as &$item) {
                     if (is_array($item)) {
-                        self::convertInPlace($item, $version, $context);
+                        self::convertInPlace($item, $version, $context, $discriminator);
                     }
                 }
                 unset($item);
             } else {
-                self::convertInPlace($schema['items'], $version, $context);
+                self::convertInPlace($schema['items'], $version, $context, $discriminator);
             }
         }
 
@@ -236,14 +252,14 @@ final class OpenApiSchemaConverter
         // directly. None of the other recursion sites in convertInPlace
         // descend into it, so route it through here.
         if (isset($schema['additionalItems']) && is_array($schema['additionalItems'])) {
-            self::convertInPlace($schema['additionalItems'], $version, $context);
+            self::convertInPlace($schema['additionalItems'], $version, $context, $discriminator);
         }
 
         foreach (['allOf', 'oneOf', 'anyOf'] as $combiner) {
             if (isset($schema[$combiner]) && is_array($schema[$combiner])) {
                 foreach ($schema[$combiner] as &$item) {
                     if (is_array($item)) {
-                        self::convertInPlace($item, $version, $context);
+                        self::convertInPlace($item, $version, $context, $discriminator);
                     }
                 }
                 unset($item);
@@ -251,11 +267,11 @@ final class OpenApiSchemaConverter
         }
 
         if (isset($schema['additionalProperties']) && is_array($schema['additionalProperties'])) {
-            self::convertInPlace($schema['additionalProperties'], $version, $context);
+            self::convertInPlace($schema['additionalProperties'], $version, $context, $discriminator);
         }
 
         if (isset($schema['not']) && is_array($schema['not'])) {
-            self::convertInPlace($schema['not'], $version, $context);
+            self::convertInPlace($schema['not'], $version, $context, $discriminator);
         }
 
         // Descend into the remaining subschema positions opis Draft 07
@@ -268,14 +284,14 @@ final class OpenApiSchemaConverter
         // the other map-of-schemas positions.
         foreach (['if', 'then', 'else', 'propertyNames', 'contains'] as $key) {
             if (isset($schema[$key]) && is_array($schema[$key])) {
-                self::convertInPlace($schema[$key], $version, $context);
+                self::convertInPlace($schema[$key], $version, $context, $discriminator);
             }
         }
 
         if (isset($schema['patternProperties']) && is_array($schema['patternProperties'])) {
             foreach ($schema['patternProperties'] as &$sub) {
                 if (is_array($sub)) {
-                    self::convertInPlace($sub, $version, $context);
+                    self::convertInPlace($sub, $version, $context, $discriminator);
                 }
             }
             unset($sub);
@@ -290,11 +306,19 @@ final class OpenApiSchemaConverter
                 // schema lowering — the same silent-defect class the rest
                 // of this method exists to surface.
                 if (is_array($sub) && !array_is_list($sub)) {
-                    self::convertInPlace($sub, $version, $context);
+                    self::convertInPlace($sub, $version, $context, $discriminator);
                 }
             }
             unset($sub);
         }
+
+        // Consume `discriminator` last: when enforcing, lower its `mapping`
+        // into `if`/`then` conditionals (resolving + converting each subtype
+        // it references); otherwise strip it. Running after the combiner
+        // recursion above means the lowered `allOf` entries we append are
+        // already converted by lowerDiscriminator itself and are not
+        // re-visited here. See Issue #262.
+        self::lowerDiscriminator($schema, $version, $context, $discriminator);
     }
 
     /**
@@ -461,40 +485,211 @@ final class OpenApiSchemaConverter
     }
 
     /**
-     * Issue a one-shot E_USER_WARNING when a schema declares a non-empty
-     * `discriminator.mapping`. The converter strips the entire `discriminator`
-     * keyword (it's OAS-only, not a JSON Schema keyword) before handing the
-     * schema to opis — the underlying `oneOf` / `anyOf` is still validated
-     * as a plain union, but the mapping does not steer validation toward a
-     * single branch. A polymorphic body with the wrong discriminator value
-     * passes as long as it satisfies any branch, masking serialiser bugs.
+     * Lower a schema's `discriminator` into enforceable Draft-07 conditionals,
+     * or strip it when enforcement is off (Issue #262).
      *
-     * Dedup key is the literal `discriminator.mapping` string — fired at
-     * most once per process regardless of how many polymorphic schemas
-     * carry the keyword.
+     * `discriminator` is OAS-only — opis (Draft 07) cannot interpret it, so
+     * historically the converter stripped it and the underlying `oneOf` /
+     * `anyOf` was validated as a plain union: a body that lied about its type
+     * (e.g. `kty=RSA` carrying EC-only fields) passed as long as it matched any
+     * branch. When `$discriminator->enforce` is on, this rewrites the block
+     * into an `allOf` the union-agnostic validator DOES honour:
+     *
+     *  - an unknown-value guard requiring the discriminator property to be
+     *    present and one of the mapping keys; and
+     *  - one `if`/`then` per mapping value, where `then` is the resolved
+     *    subtype schema — so the discriminator value steers validation toward a
+     *    single branch.
+     *
+     * Each resolved subtype is itself run through {@see convertInPlace()} with
+     * the discriminator's signature added to the recursion guard: `$ref` is
+     * eagerly inlined at load time, so a subtype typically re-contains the
+     * base's `discriminator` (`allOf:[{$ref base}, …]`) and an unguarded
+     * lowering would recurse forever.
+     *
+     * Structural defects (missing / non-string `propertyName`, non-array
+     * `mapping`, non-string mapping value, unresolvable pointer, non-object
+     * target) throw {@see MalformedDiscriminatorException} — caught by the body
+     * validators' boundary and surfaced as one loud failure, consistent with
+     * the {@see MalformedSpecNode}
+     * guards. A bare `propertyName`-only discriminator, an empty `mapping`, the
+     * off gate, and the no-root sentinel all strip silently (the historical
+     * behaviour, minus the removed warning).
      *
      * @param array<string, mixed> $schema
      */
-    private static function warnIfDiscriminatorMappingPresent(array $schema): void
+    private static function lowerDiscriminator(
+        array &$schema,
+        OpenApiVersion $version,
+        SchemaContext $context,
+        DiscriminatorContext $discriminator,
+    ): void {
+        if (!array_key_exists('discriminator', $schema)) {
+            return;
+        }
+
+        // Off, or no root to resolve mapping pointers against → strip, matching
+        // the pre-#262 behaviour (now without the E_USER_WARNING).
+        if (!$discriminator->enforce || $discriminator->root === []) {
+            unset($schema['discriminator']);
+
+            return;
+        }
+
+        $block = $schema['discriminator'];
+        if (!is_array($block)) {
+            throw new MalformedDiscriminatorException(sprintf(
+                "Malformed 'discriminator': expected object, got %s.",
+                get_debug_type($block),
+            ));
+        }
+
+        $propertyName = $block['propertyName'] ?? null;
+        if (!is_string($propertyName) || $propertyName === '') {
+            throw new MalformedDiscriminatorException(sprintf(
+                "Malformed 'discriminator.propertyName': expected a non-empty string, got %s.",
+                get_debug_type($block['propertyName'] ?? null),
+            ));
+        }
+
+        // A bare discriminator (no mapping) is documentation-only — strip it.
+        if (!array_key_exists('mapping', $block)) {
+            unset($schema['discriminator']);
+
+            return;
+        }
+
+        $mapping = $block['mapping'];
+        if (!is_array($mapping)) {
+            throw new MalformedDiscriminatorException(sprintf(
+                "Malformed 'discriminator.mapping': expected object, got %s.",
+                get_debug_type($mapping),
+            ));
+        }
+        if ($mapping === []) {
+            unset($schema['discriminator']);
+
+            return;
+        }
+
+        // Self-referential re-appearance via eager $ref inlining: the outer
+        // lowering already enforces this exact discriminator on the matched
+        // branch, so strip without re-lowering. This both terminates the
+        // recursion and avoids combinatorial blow-up for large mappings.
+        $signature = self::discriminatorSignature($propertyName, $mapping);
+        if ($discriminator->hasSignature($signature)) {
+            unset($schema['discriminator']);
+
+            return;
+        }
+
+        $childContext = $discriminator->withSignature($signature);
+        $knownValues = [];
+        $branches = [];
+        foreach ($mapping as $value => $pointer) {
+            $value = (string) $value;
+            $knownValues[] = $value;
+
+            if (!is_string($pointer)) {
+                throw new MalformedDiscriminatorException(sprintf(
+                    "Malformed 'discriminator.mapping[%s]': expected a string reference, got %s.",
+                    $value,
+                    get_debug_type($pointer),
+                ));
+            }
+
+            $subschema = self::resolveMappingTarget($value, $pointer, $discriminator->root);
+            self::convertInPlace($subschema, $version, $context, $childContext);
+
+            $branches[] = [
+                'if' => [
+                    'properties' => [$propertyName => ['enum' => [$value]]],
+                    'required' => [$propertyName],
+                ],
+                'then' => $subschema,
+            ];
+        }
+
+        $allOf = (isset($schema['allOf']) && is_array($schema['allOf'])) ? $schema['allOf'] : [];
+        // Unknown-value guard first so its failure surfaces before the
+        // per-branch conditionals: the discriminator property must be present
+        // and one of the declared mapping keys.
+        $allOf[] = [
+            'properties' => [$propertyName => ['enum' => $knownValues]],
+            'required' => [$propertyName],
+        ];
+        foreach ($branches as $branch) {
+            $allOf[] = $branch;
+        }
+        $schema['allOf'] = $allOf;
+
+        unset($schema['discriminator']);
+    }
+
+    /**
+     * Resolve a single `discriminator.mapping` value to its subtype schema in
+     * the root document. The value is either a JSON Pointer (`#/...`) or the
+     * OAS bare-name shorthand, which resolves to `#/components/schemas/{name}`.
+     * Reuses {@see OpenApiRefResolver}'s pointer logic so escape handling stays
+     * in one place.
+     *
+     * @param array<string, mixed> $root
+     *
+     * @return array<string, mixed>
+     */
+    private static function resolveMappingTarget(string $value, string $pointer, array $root): array
     {
-        if (!isset($schema['discriminator']) || !is_array($schema['discriminator'])) {
-            return;
+        $jsonPointer = str_starts_with($pointer, '#/')
+            ? $pointer
+            : '#/components/schemas/' . OpenApiRefResolver::escapePointerSegment($pointer);
+
+        [$found, $target] = OpenApiRefResolver::resolvePointer($jsonPointer, $root);
+        if (!$found) {
+            throw new MalformedDiscriminatorException(sprintf(
+                "Malformed 'discriminator.mapping[%s]': '%s' does not resolve to a schema in the spec.",
+                $value,
+                $pointer,
+            ));
         }
-        $mapping = $schema['discriminator']['mapping'] ?? null;
-        if (!is_array($mapping) || $mapping === []) {
-            return;
+        if (!is_array($target)) {
+            throw new MalformedDiscriminatorException(sprintf(
+                "Malformed 'discriminator.mapping[%s]': '%s' must reference a schema object, got %s.",
+                $value,
+                $pointer,
+                get_debug_type($target),
+            ));
         }
 
-        $dedupKey = 'discriminator.mapping';
-        if (isset(self::$warnedKeywords[$dedupKey])) {
-            return;
-        }
+        /** @var array<string, mixed> $target */
+        return $target;
+    }
 
-        self::$warnedKeywords[$dedupKey] = true;
-        trigger_error(
-            "[OpenAPI Schema] 'discriminator.mapping' is silently stripped — the underlying oneOf/anyOf is still validated as a plain union, but the mapping does not steer validation toward a single branch. A body with the wrong discriminator value passes as long as it satisfies any branch, masking serialiser bugs. See README \"Schema features\" for the full limitation note.",
-            E_USER_WARNING,
-        );
+    /**
+     * Stable identity for a discriminator: its property name plus the sorted
+     * set of `key => target` mapping pairs. The recursion guard uses it to
+     * detect the SAME discriminator re-appearing through eager `$ref` inlining
+     * (the base↔subtype cycle), independent of declaration order. Folding the
+     * resolved target into each pair means two genuinely distinct
+     * discriminators that merely share a property name and key set do NOT
+     * collide — only an identical mapping (the self-reference case) matches, so
+     * a nested *distinct* discriminator is still lowered rather than silently
+     * stripped (which would be a silent under-enforcement).
+     *
+     * A non-string mapping value is folded in by its type token; such a value
+     * is rejected with a loud throw later in the lowering, so the rendering
+     * here only needs to be stable, not meaningful.
+     *
+     * @param array<array-key, mixed> $mapping
+     */
+    private static function discriminatorSignature(string $propertyName, array $mapping): string
+    {
+        $pairs = [];
+        foreach ($mapping as $key => $value) {
+            $pairs[] = (string) $key . "\0" . (is_string($value) ? $value : get_debug_type($value));
+        }
+        sort($pairs);
+
+        return $propertyName . "\0" . implode("\0", $pairs);
     }
 
     /**
