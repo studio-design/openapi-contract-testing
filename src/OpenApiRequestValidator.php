@@ -14,6 +14,8 @@ use Studio\OpenApiContractTesting\Validation\Request\QueryParameterValidator;
 use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidationResult;
 use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidator;
 use Studio\OpenApiContractTesting\Validation\Request\SecurityValidator;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorEnforcement;
 use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
 use Studio\OpenApiContractTesting\Validation\Support\PathDiagnosticsFormatter;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
@@ -245,7 +247,10 @@ final class OpenApiRequestValidator
         // ValidatorErrorBoundary::safely() like the other sub-validators.
         // validateBody() runs it behind the same narrow RuntimeException
         // boundary inline — mirrors OpenApiResponseValidator::validateBody().
-        $bodyResult = $this->validateBody($specName, $method, $matchedPath, $operation, $body, $contentType, $version);
+        // Carry the resolved root + enforce gate so the body validator can
+        // lower `discriminator.mapping` into enforceable conditionals (#262).
+        $discriminatorContext = new DiscriminatorContext($spec, DiscriminatorEnforcement::isEnabled());
+        $bodyResult = $this->validateBody($specName, $method, $matchedPath, $operation, $body, $contentType, $version, $discriminatorContext);
 
         $errors = [
             ...$collected->specErrors,
@@ -338,9 +343,10 @@ final class OpenApiRequestValidator
         DecodedBody $body,
         ?string $contentType,
         OpenApiVersion $version,
+        DiscriminatorContext $discriminatorContext,
     ): RequestBodyValidationResult {
         try {
-            return $this->bodyValidator->validate($specName, $method, $matchedPath, $operation, $body, $contentType, $version);
+            return $this->bodyValidator->validate($specName, $method, $matchedPath, $operation, $body, $contentType, $version, $discriminatorContext);
         } catch (RuntimeException $e) {
             $previous = $e->getPrevious();
             $previousSuffix = $previous !== null

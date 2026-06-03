@@ -15,6 +15,8 @@ use Studio\OpenApiContractTesting\Validation\Response\ResponseHeaderValidator;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredBodyWalker;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallChecker;
 use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorEnforcement;
 use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
 use Studio\OpenApiContractTesting\Validation\Support\PathDiagnosticsFormatter;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
@@ -307,6 +309,12 @@ final class OpenApiResponseValidator
             ], $matchedPath, $statusCodeStr);
         }
 
+        // Carry the resolved root + enforce gate so the body validator can
+        // lower `discriminator.mapping` into enforceable conditionals (#262).
+        // The mapping pointers reference subtype schemas elsewhere in the
+        // document, which only the root can resolve.
+        $discriminatorContext = new DiscriminatorContext($spec, DiscriminatorEnforcement::isEnabled());
+
         /** @var array<string, mixed> $responseSpec */
         $bodyResult = $this->validateBody(
             $specName,
@@ -317,6 +325,7 @@ final class OpenApiResponseValidator
             $body,
             $responseContentType,
             $version,
+            $discriminatorContext,
         );
 
         $headerErrors = $this->validateHeaders(
@@ -524,6 +533,7 @@ final class OpenApiResponseValidator
         DecodedBody $responseBody,
         ?string $responseContentType,
         OpenApiVersion $version,
+        DiscriminatorContext $discriminatorContext,
     ): ResponseBodyValidationResult {
         // 204 No Content (and similar) declare no `content` block. Nothing
         // to validate — return empty so the result aggregates cleanly.
@@ -570,6 +580,7 @@ final class OpenApiResponseValidator
                 $responseBody,
                 $responseContentType,
                 $version,
+                $discriminatorContext,
             );
         } catch (RuntimeException $e) {
             $previous = $e->getPrevious();

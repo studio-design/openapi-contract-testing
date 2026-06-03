@@ -29,6 +29,7 @@ use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver;
 use Studio\OpenApiContractTesting\Validation\Request\SecuritySchemeIntrospector;
 use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorEnforcement;
 use Studio\OpenApiContractTesting\Validation\Support\HeaderNormalizer;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -716,6 +717,7 @@ trait ValidatesOpenApiSchema
 
     private function getOrCreateRequestValidator(): OpenApiRequestValidator
     {
+        $this->applyDiscriminatorEnforcementConfig();
         $resolvedMaxErrors = $this->resolveMaxErrors();
         $resolvedSkipCodes = $this->resolveSkipRequestValidationResponseCodes();
 
@@ -894,6 +896,7 @@ trait ValidatesOpenApiSchema
 
     private function getOrCreateValidator(): OpenApiResponseValidator
     {
+        $this->applyDiscriminatorEnforcementConfig();
         $resolvedMaxErrors = $this->resolveMaxErrors();
         $resolvedSkipCodes = $this->resolveSkipResponseCodes();
 
@@ -918,6 +921,8 @@ trait ValidatesOpenApiSchema
      */
     private function buildOneOffValidator(array $extraSkipResponseCodes): OpenApiResponseValidator
     {
+        $this->applyDiscriminatorEnforcementConfig();
+
         return new OpenApiResponseValidator(
             maxErrors: $this->resolveMaxErrors(),
             skipResponseCodes: array_merge(
@@ -925,6 +930,18 @@ trait ValidatesOpenApiSchema
                 $extraSkipResponseCodes,
             ),
         );
+    }
+
+    /**
+     * Push the `enforce_discriminator` config flag (Issue #262, default on)
+     * into the process-global {@see DiscriminatorEnforcement} gate the body
+     * validators read at conversion time. Called from every validator-build
+     * path so the current test's config is reflected even when the cached
+     * validator instance is reused.
+     */
+    private function applyDiscriminatorEnforcementConfig(): void
+    {
+        DiscriminatorEnforcement::configure($this->resolveBoolConfig('enforce_discriminator', true));
     }
 
     private function resolveMaxErrors(): int
@@ -1097,10 +1114,14 @@ trait ValidatesOpenApiSchema
      * `'auto_X' => env('X')` (strings like "true" / "1") works without an
      * explicit cast. Anything else raises a loud PHPUnit failure so a typo
      * is not silently read as "off".
+     *
+     * `$default` is returned when the key is entirely absent (most flags
+     * default off, but `enforce_discriminator` defaults on — Issue #262); an
+     * explicit `null` value still coerces to false.
      */
-    private function resolveBoolConfig(string $key): bool
+    private function resolveBoolConfig(string $key, bool $default = false): bool
     {
-        $raw = config('openapi-contract-testing.' . $key, false);
+        $raw = config('openapi-contract-testing.' . $key, $default);
 
         if ($raw === true) {
             return true;

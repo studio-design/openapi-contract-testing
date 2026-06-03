@@ -1,0 +1,71 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "JWKS discriminator fixture",
+        "version": "1.0.0",
+        "description": "Implicit-inheritance discriminator (#262): a base schema carries discriminator.mapping and subtypes reference the base via allOf, so the resolved subtype re-contains the base discriminator and exercises the recursion guard end-to-end."
+    },
+    "paths": {
+        "/v1/jwks": {
+            "get": {
+                "summary": "Return a single JSON Web Key",
+                "operationId": "getJsonWebKey",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/JsonWebKey"}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "JsonWebKey": {
+                "type": "object",
+                "required": ["kty"],
+                "properties": {
+                    "kty": {"type": "string", "enum": ["RSA", "EC"]}
+                },
+                "discriminator": {
+                    "propertyName": "kty",
+                    "mapping": {
+                        "RSA": "#/components/schemas/RsaJsonWebKey",
+                        "EC": "#/components/schemas/EcJsonWebKey"
+                    }
+                }
+            },
+            "RsaJsonWebKey": {
+                "allOf": [
+                    {"$ref": "#/components/schemas/JsonWebKey"},
+                    {
+                        "type": "object",
+                        "required": ["n", "e"],
+                        "properties": {
+                            "n": {"type": "string"},
+                            "e": {"type": "string"}
+                        }
+                    }
+                ]
+            },
+            "EcJsonWebKey": {
+                "allOf": [
+                    {"$ref": "#/components/schemas/JsonWebKey"},
+                    {
+                        "type": "object",
+                        "required": ["crv", "x", "y"],
+                        "properties": {
+                            "crv": {"type": "string"},
+                            "x": {"type": "string"},
+                            "y": {"type": "string"}
+                        }
+                    }
+                ]
+            }
+        }
+    }
+}

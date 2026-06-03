@@ -10,6 +10,7 @@ use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\SchemaContext;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
 use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
 use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
@@ -44,6 +45,10 @@ final class RequestBodyValidator
      * an empty `errors` list plus a non-null `skipReason` (issue #254).
      *
      * @param array<string, mixed> $operation
+     * @param null|DiscriminatorContext $discriminatorContext carries the resolved root + enforce gate
+     *                                                        for `discriminator.mapping` lowering (Issue
+     *                                                        #262). `null` (the default for direct
+     *                                                        callers) means no enforcement.
      */
     public function validate(
         string $specName,
@@ -53,6 +58,7 @@ final class RequestBodyValidator
         DecodedBody $requestBody,
         ?string $contentType,
         OpenApiVersion $version,
+        ?DiscriminatorContext $discriminatorContext = null,
     ): RequestBodyValidationResult {
         // OpenAPI: a missing requestBody means the operation accepts no body — treat as success.
         if (!isset($operation['requestBody'])) {
@@ -218,7 +224,7 @@ final class RequestBodyValidator
 
         /** @var array<string, mixed> $schema */
         $schema = $content[$jsonContentType]['schema'];
-        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
+        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request, $discriminatorContext);
 
         // PHP's `json_decode($json, true)` returns `[]` for both `[]` and `{}`.
         // The Laravel adapter's request decoder uses associative-array decoding,

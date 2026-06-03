@@ -8,9 +8,11 @@ use const E_USER_WARNING;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Exception\MalformedDiscriminatorException;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\SchemaContext;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
 use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 
@@ -1379,22 +1381,22 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     // ========================================
-    // discriminator.mapping silent-strip warning (#147)
+    // discriminator.mapping enforcement via if/then lowering (#262)
     // ========================================
 
     #[Test]
-    public function discriminator_with_mapping_emits_warning(): void
+    public function discriminator_with_mapping_lowers_to_if_then_when_enforced(): void
     {
-        // discriminator.mapping is dropped during conversion (it's OAS-only,
-        // not a JSON Schema keyword); the underlying oneOf still validates
-        // as a plain union. Without the warning, a body with the wrong
-        // discriminator value would silently pass as long as it satisfies
-        // any branch — masking serialiser bugs.
+        // With enforcement on, discriminator + mapping is rewritten into an
+        // allOf of an unknown-value guard plus one if/then per mapping value,
+        // so the discriminator value actually steers validation toward a single
+        // branch — the gap #147's warning only narrated, now closed.
+        $root = ['components' => ['schemas' => [
+            'Cat' => ['type' => 'object', 'required' => ['meow'], 'properties' => ['meow' => ['type' => 'boolean']]],
+            'Dog' => ['type' => 'object', 'required' => ['bark'], 'properties' => ['bark' => ['type' => 'boolean']]],
+        ]]];
         $schema = [
-            'oneOf' => [
-                ['type' => 'object', 'properties' => ['kind' => ['enum' => ['cat']]]],
-                ['type' => 'object', 'properties' => ['kind' => ['enum' => ['dog']]]],
-            ],
+            'type' => 'object',
             'discriminator' => [
                 'propertyName' => 'kind',
                 'mapping' => [
@@ -1404,11 +1406,182 @@ class OpenApiSchemaConverterTest extends TestCase
             ],
         ];
 
-        $warnings = $this->captureWarnings(static fn() => OpenApiSchemaConverter::convert($schema));
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response, $this->enforcing($root));
 
-        $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('discriminator.mapping', $warnings[0]);
-        $this->assertStringContainsString('silently stripped', $warnings[0]);
+        $this->assertArrayNotHasKey('discriminator', $result);
+        $this->assertArrayHasKey('allOf', $result);
+        $this->assertCount(3, $result['allOf']);
+        // [0] unknown-value guard: property present and one of the mapping keys.
+        $this->assertSame(['kind' => ['enum' => ['cat', 'dog']]], $result['allOf'][0]['properties']);
+        $this->assertSame(['kind'], $result['allOf'][0]['required']);
+        // [1]/[2] per-value if/then routing to the resolved subtype.
+        $this->assertSame(['kind' => ['enum' => ['cat']]], $result['allOf'][1]['if']['properties']);
+        $this->assertSame(['kind'], $result['allOf'][1]['if']['required']);
+        $this->assertSame(['meow'], $result['allOf'][1]['then']['required']);
+        $this->assertSame(['kind' => ['enum' => ['dog']]], $result['allOf'][2]['if']['properties']);
+        $this->assertSame(['bark'], $result['allOf'][2]['then']['required']);
+    }
+
+    #[Test]
+    public function discriminator_mapping_accepts_bare_schema_name_shorthand(): void
+    {
+        // OAS allows a mapping value to be a bare schema name, shorthand for
+        // `#/components/schemas/{name}`.
+        $root = ['components' => ['schemas' => [
+            'Cat' => ['type' => 'object', 'required' => ['meow']],
+        ]]];
+        $schema = [
+            'type' => 'object',
+            'discriminator' => ['propertyName' => 'kind', 'mapping' => ['cat' => 'Cat']],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response, $this->enforcing($root));
+
+        $this->assertSame(['meow'], $result['allOf'][1]['then']['required']);
+    }
+
+    #[Test]
+    public function discriminator_then_subschema_is_recursively_converted(): void
+    {
+        // The resolved subtype is raw OAS and must itself be lowered — a 3.0
+        // `nullable` inside it becomes a type array, not survive untouched.
+        $root = ['components' => ['schemas' => [
+            'Cat' => [
+                'type' => 'object',
+                'required' => ['meow'],
+                'properties' => ['meow' => ['type' => 'string', 'nullable' => true]],
+            ],
+        ]]];
+        $schema = [
+            'type' => 'object',
+            'discriminator' => ['propertyName' => 'kind', 'mapping' => ['cat' => '#/components/schemas/Cat']],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response, $this->enforcing($root));
+
+        $then = $result['allOf'][1]['then'];
+        $this->assertSame(['string', 'null'], $then['properties']['meow']['type']);
+        $this->assertArrayNotHasKey('nullable', $then['properties']['meow']);
+    }
+
+    #[Test]
+    public function discriminator_with_sibling_oneof_is_preserved(): void
+    {
+        // When discriminator accompanies a oneOf, the union survives and the
+        // lowered branches are appended alongside it (body must satisfy both).
+        $root = ['components' => ['schemas' => [
+            'Cat' => ['type' => 'object', 'required' => ['meow']],
+        ]]];
+        $schema = [
+            'oneOf' => [['type' => 'object']],
+            'discriminator' => ['propertyName' => 'kind', 'mapping' => ['cat' => '#/components/schemas/Cat']],
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response, $this->enforcing($root));
+
+        $this->assertArrayHasKey('oneOf', $result);
+        $this->assertArrayHasKey('allOf', $result);
+        $this->assertCount(2, $result['allOf']); // guard + cat branch
+    }
+
+    #[Test]
+    public function discriminator_self_referential_cycle_terminates_and_degrades(): void
+    {
+        // Eager $ref inlining means a subtype re-contains the base discriminator
+        // (RsaJsonWebKey = allOf:[{inlined base}, {required:[n,e]}]). The
+        // recursion guard strips the re-appearing discriminator instead of
+        // re-lowering it — terminating without blow-up.
+        $baseDiscriminator = [
+            'propertyName' => 'kty',
+            'mapping' => ['RSA' => '#/components/schemas/Rsa', 'EC' => '#/components/schemas/Ec'],
+        ];
+        $inlinedBase = [
+            'type' => 'object',
+            'required' => ['kty'],
+            'properties' => ['kty' => ['enum' => ['RSA', 'EC']]],
+            'discriminator' => $baseDiscriminator,
+        ];
+        $root = ['components' => ['schemas' => [
+            'Rsa' => ['allOf' => [$inlinedBase, ['type' => 'object', 'required' => ['n', 'e']]]],
+            'Ec' => ['allOf' => [$inlinedBase, ['type' => 'object', 'required' => ['crv', 'x', 'y']]]],
+        ]]];
+        $schema = [
+            'type' => 'object',
+            'required' => ['kty'],
+            'properties' => ['kty' => ['enum' => ['RSA', 'EC']]],
+            'discriminator' => $baseDiscriminator,
+        ];
+
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response, $this->enforcing($root));
+
+        // Top level lowered, both branches present.
+        $this->assertCount(3, $result['allOf']);
+        // The RSA branch's resolved subtype: its inlined base discriminator was
+        // stripped (no re-lowering), leaving the required[n,e] constraint.
+        $rsaThen = $result['allOf'][1]['then'];
+        $this->assertArrayNotHasKey('discriminator', $rsaThen['allOf'][0]);
+        $this->assertSame(['n', 'e'], $rsaThen['allOf'][1]['required']);
+    }
+
+    #[Test]
+    public function discriminator_enforced_lowering_rejects_lying_body_via_opis(): void
+    {
+        // End-to-end: the lowered schema, run through opis, fails a body that
+        // lies about its type (the issue #262 motivating case) and passes a
+        // truthful one.
+        $root = ['components' => ['schemas' => [
+            'Cat' => ['type' => 'object', 'required' => ['meow'], 'properties' => ['meow' => ['type' => 'boolean']]],
+            'Dog' => ['type' => 'object', 'required' => ['bark'], 'properties' => ['bark' => ['type' => 'boolean']]],
+        ]]];
+        $schema = [
+            'type' => 'object',
+            'discriminator' => [
+                'propertyName' => 'kind',
+                'mapping' => ['cat' => '#/components/schemas/Cat', 'dog' => '#/components/schemas/Dog'],
+            ],
+        ];
+        $lowered = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0, SchemaContext::Response, $this->enforcing($root));
+
+        $runner = new SchemaValidatorRunner(20);
+        $schemaObject = ObjectConverter::convert($lowered);
+
+        $this->assertSame(
+            [],
+            $runner->validate($schemaObject, ObjectConverter::convert((object) ['kind' => 'cat', 'meow' => true])),
+            'a truthful cat body must validate',
+        );
+        $this->assertNotSame(
+            [],
+            $runner->validate($schemaObject, ObjectConverter::convert((object) ['kind' => 'cat', 'bark' => true])),
+            'a body claiming kind=cat but carrying Dog-only fields must fail',
+        );
+        $this->assertNotSame(
+            [],
+            $runner->validate($schemaObject, ObjectConverter::convert((object) ['kind' => 'fish', 'meow' => true])),
+            'an unknown discriminator value must fail the guard',
+        );
+    }
+
+    #[Test]
+    public function discriminator_with_mapping_not_enforced_strips_without_warning(): void
+    {
+        // Default (no DiscriminatorContext) / disabled gate: discriminator is
+        // stripped silently — the historical behaviour, now without the warning
+        // (which was fatal under Laravel's error handler, #262).
+        $schema = [
+            'oneOf' => [['type' => 'object']],
+            'discriminator' => [
+                'propertyName' => 'kind',
+                'mapping' => ['cat' => '#/components/schemas/Cat'],
+            ],
+        ];
+
+        $warnings = $this->captureWarnings(static fn() => OpenApiSchemaConverter::convert($schema));
+        $result = OpenApiSchemaConverter::convert($schema);
+
+        $this->assertSame([], $warnings, 'no warning when not enforcing');
+        $this->assertArrayNotHasKey('discriminator', $result);
+        $this->assertArrayNotHasKey('allOf', $result, 'no lowering when not enforcing');
     }
 
     #[Test]
@@ -1452,39 +1625,86 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
-    public function discriminator_mapping_warns_only_once_per_process(): void
+    public function discriminator_missing_property_name_throws_when_enforced(): void
     {
-        // Avoid log spam: the mapping warning fires once per process even if
-        // dozens of polymorphic schemas in one spec carry it. (setUp()
-        // resets the warned-set.)
-        $schema = [
-            'oneOf' => [['type' => 'object']],
-            'discriminator' => [
-                'propertyName' => 'kind',
-                'mapping' => ['a' => '#/components/schemas/A'],
-            ],
-        ];
+        $this->expectException(MalformedDiscriminatorException::class);
+        $this->expectExceptionMessage("'discriminator.propertyName'");
 
-        $count = 0;
-        set_error_handler(static function (int $errno, string $errstr) use (&$count): bool {
-            if ($errno === E_USER_WARNING && str_contains($errstr, 'discriminator.mapping')) {
-                $count++;
+        OpenApiSchemaConverter::convert(
+            ['discriminator' => ['mapping' => ['a' => '#/components/schemas/A']]],
+            OpenApiVersion::V3_0,
+            SchemaContext::Response,
+            $this->enforcing(['components' => ['schemas' => ['A' => ['type' => 'object']]]]),
+        );
+    }
 
-                return true;
-            }
+    #[Test]
+    public function discriminator_non_string_property_name_throws_when_enforced(): void
+    {
+        $this->expectException(MalformedDiscriminatorException::class);
 
-            return false;
-        });
+        OpenApiSchemaConverter::convert(
+            ['discriminator' => ['propertyName' => 42, 'mapping' => ['a' => '#/components/schemas/A']]],
+            OpenApiVersion::V3_0,
+            SchemaContext::Response,
+            $this->enforcing(['components' => ['schemas' => ['A' => ['type' => 'object']]]]),
+        );
+    }
 
-        try {
-            OpenApiSchemaConverter::convert($schema);
-            OpenApiSchemaConverter::convert($schema);
-            OpenApiSchemaConverter::convert($schema);
-        } finally {
-            restore_error_handler();
-        }
+    #[Test]
+    public function discriminator_non_array_mapping_throws_when_enforced(): void
+    {
+        $this->expectException(MalformedDiscriminatorException::class);
+        $this->expectExceptionMessage("'discriminator.mapping'");
 
-        $this->assertSame(1, $count);
+        OpenApiSchemaConverter::convert(
+            ['discriminator' => ['propertyName' => 'kind', 'mapping' => 'not-an-array']],
+            OpenApiVersion::V3_0,
+            SchemaContext::Response,
+            $this->enforcing(['components' => ['schemas' => []]]),
+        );
+    }
+
+    #[Test]
+    public function discriminator_non_string_mapping_value_throws_when_enforced(): void
+    {
+        $this->expectException(MalformedDiscriminatorException::class);
+        $this->expectExceptionMessage('discriminator.mapping[cat]');
+
+        OpenApiSchemaConverter::convert(
+            ['discriminator' => ['propertyName' => 'kind', 'mapping' => ['cat' => 123]]],
+            OpenApiVersion::V3_0,
+            SchemaContext::Response,
+            $this->enforcing(['components' => ['schemas' => []]]),
+        );
+    }
+
+    #[Test]
+    public function discriminator_unresolvable_pointer_throws_when_enforced(): void
+    {
+        $this->expectException(MalformedDiscriminatorException::class);
+        $this->expectExceptionMessage('does not resolve');
+
+        OpenApiSchemaConverter::convert(
+            ['discriminator' => ['propertyName' => 'kind', 'mapping' => ['cat' => '#/components/schemas/Missing']]],
+            OpenApiVersion::V3_0,
+            SchemaContext::Response,
+            $this->enforcing(['components' => ['schemas' => []]]),
+        );
+    }
+
+    #[Test]
+    public function discriminator_non_object_target_throws_when_enforced(): void
+    {
+        $this->expectException(MalformedDiscriminatorException::class);
+        $this->expectExceptionMessage('must reference a schema object');
+
+        OpenApiSchemaConverter::convert(
+            ['discriminator' => ['propertyName' => 'kind', 'mapping' => ['cat' => '#/components/schemas/Cat']]],
+            OpenApiVersion::V3_0,
+            SchemaContext::Response,
+            $this->enforcing(['components' => ['schemas' => ['Cat' => 'not-a-schema']]]),
+        );
     }
 
     // ========================================
@@ -1651,13 +1871,12 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
-    public function discriminator_with_non_array_mapping_does_not_warn(): void
+    public function discriminator_with_non_array_mapping_is_stripped_when_not_enforced(): void
     {
-        // Negative case: `mapping: "not-an-array"` is a malformed spec, but
-        // the silent-pass concern (mapping wired but not enforced) does not
-        // apply — there's nothing to silently lose. Pin that the warning
-        // does NOT fire so the contract is explicit and a future
-        // tighten-the-check refactor surfaces here.
+        // Without enforcement the discriminator is stripped before its mapping
+        // is ever inspected, so even a malformed `mapping` is tolerated
+        // silently — the throw path is reserved for the enforced gate (see
+        // discriminator_non_array_mapping_throws_when_enforced).
         $schema = [
             'oneOf' => [['type' => 'object']],
             'discriminator' => [
@@ -1667,19 +1886,19 @@ class OpenApiSchemaConverterTest extends TestCase
         ];
 
         $warnings = $this->captureWarnings(static fn() => OpenApiSchemaConverter::convert($schema));
+        $result = OpenApiSchemaConverter::convert($schema);
 
         $this->assertSame([], $warnings);
+        $this->assertArrayNotHasKey('discriminator', $result);
     }
 
     #[Test]
-    public function unknown_keyword_and_discriminator_mapping_warn_independently(): void
+    public function unknown_keyword_warns_while_discriminator_is_stripped_when_not_enforced(): void
     {
-        // A schema declaring BOTH `unevaluatedProperties` (Draft 07 doesn't
-        // implement) AND `discriminator.mapping` (silently stripped) must
-        // fire BOTH warnings — they are independent silent-pass concerns
-        // with distinct dedup keys. Guards against an early-break refactor
-        // that consolidates the warning emission and accidentally drops
-        // one of them.
+        // `unevaluatedProperties` (Draft 07 doesn't implement) still warns, but
+        // `discriminator.mapping` no longer does — it is lowered when enforced
+        // and otherwise stripped silently (#262). So exactly one warning fires
+        // here, and it is the unevaluatedProperties one.
         $schema = [
             'type' => 'object',
             'unevaluatedProperties' => false,
@@ -1692,11 +1911,8 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $warnings = $this->captureWarnings(static fn() => OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1));
 
-        $this->assertCount(2, $warnings);
-
-        $joined = implode(' | ', $warnings);
-        $this->assertStringContainsString('unevaluatedProperties', $joined);
-        $this->assertStringContainsString('discriminator.mapping', $joined);
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString('unevaluatedProperties', $warnings[0]);
     }
 
     #[Test]
@@ -2389,29 +2605,34 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
-    public function discriminator_mapping_inside_then_warns(): void
+    public function discriminator_inside_then_is_lowered_when_enforced(): void
     {
-        $warnings = $this->captureWarnings(static function (): void {
-            OpenApiSchemaConverter::convert(
-                [
-                    'if' => ['properties' => ['kind' => ['type' => 'string']]],
-                    'then' => [
-                        'discriminator' => [
-                            'propertyName' => 'kind',
-                            'mapping' => ['a' => '#/components/schemas/A'],
-                        ],
-                        'oneOf' => [['type' => 'object']],
+        // The converter recurses into `then` (#214), so a discriminator nested
+        // there is lowered with the same enforce context — it does not survive
+        // into the validator unenforced.
+        $root = ['components' => ['schemas' => [
+            'A' => ['type' => 'object', 'required' => ['foo']],
+        ]]];
+        $result = OpenApiSchemaConverter::convert(
+            [
+                'if' => ['properties' => ['kind' => ['type' => 'string']]],
+                'then' => [
+                    'discriminator' => [
+                        'propertyName' => 'kind',
+                        'mapping' => ['a' => '#/components/schemas/A'],
                     ],
+                    'oneOf' => [['type' => 'object']],
                 ],
-                OpenApiVersion::V3_0,
-            );
-        });
-
-        $this->assertNotSame([], $warnings, 'discriminator.mapping inside `then` must warn');
-        $this->assertTrue(
-            str_contains($warnings[0], 'discriminator.mapping'),
-            'warning must mention discriminator.mapping',
+            ],
+            OpenApiVersion::V3_0,
+            SchemaContext::Response,
+            $this->enforcing($root),
         );
+
+        $then = $result['then'];
+        $this->assertArrayNotHasKey('discriminator', $then);
+        $this->assertArrayHasKey('allOf', $then);
+        $this->assertSame(['foo'], $then['allOf'][1]['then']['required']);
     }
 
     // ========================================
@@ -2451,6 +2672,17 @@ class OpenApiSchemaConverterTest extends TestCase
         $result = OpenApiSchemaConverter::convert(['const' => []], OpenApiVersion::V3_1);
 
         $this->assertSame([[]], $result['enum']);
+    }
+
+    /**
+     * Build an enforcing DiscriminatorContext over a stub root spec for the
+     * `discriminator.mapping` lowering tests (#262).
+     *
+     * @param array<string, mixed> $root
+     */
+    private function enforcing(array $root): DiscriminatorContext
+    {
+        return new DiscriminatorContext($root, true);
     }
 
     /**
