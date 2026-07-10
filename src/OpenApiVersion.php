@@ -4,8 +4,15 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting;
 
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
+
+use function array_key_exists;
+use function get_debug_type;
 use function is_string;
-use function str_starts_with;
+use function preg_match;
+use function sprintf;
+use function var_export;
 
 enum OpenApiVersion: string
 {
@@ -16,15 +23,35 @@ enum OpenApiVersion: string
      * Detect OAS version from a parsed spec array.
      *
      * @param array<string, mixed> $spec
+     *
+     * @throws InvalidOpenApiSpecException when the version is absent, malformed, or unsupported
      */
     public static function fromSpec(array $spec): self
     {
-        $version = $spec['openapi'] ?? '';
+        $version = $spec['openapi'] ?? null;
 
-        if (is_string($version) && str_starts_with($version, '3.1')) {
-            return self::V3_1;
+        if (is_string($version) &&
+            preg_match('/\A(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)\z/D', $version, $matches) === 1
+        ) {
+            $family = $matches['major'] . '.' . $matches['minor'];
+
+            if ($family === self::V3_0->value) {
+                return self::V3_0;
+            }
+
+            if ($family === self::V3_1->value) {
+                return self::V3_1;
+            }
         }
 
-        return self::V3_0;
+        $received = array_key_exists('openapi', $spec)
+            ? sprintf('%s (%s)', var_export($version, true), get_debug_type($version))
+            : '<missing>';
+
+        throw new InvalidOpenApiSpecException(
+            InvalidOpenApiSpecReason::UnsupportedVersion,
+            "Unsupported OpenAPI version: {$received}. The required `openapi` field must be a "
+            . 'major.minor.patch string in a supported version family: 3.0.x or 3.1.x.',
+        );
     }
 }

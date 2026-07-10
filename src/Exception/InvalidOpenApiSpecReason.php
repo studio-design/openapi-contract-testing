@@ -49,5 +49,6 @@ enum InvalidOpenApiSpecReason
     case NonMappingRoot;
     case YamlLibraryMissing;
     case UnsupportedExtension;
+    case UnsupportedVersion;
     case BasePathNotConfigured;
 }

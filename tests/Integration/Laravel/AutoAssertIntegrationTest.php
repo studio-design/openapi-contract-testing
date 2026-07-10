@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\Test;
 use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
 use Studio\OpenApiContractTesting\Attribute\SkipOpenApi;
 use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\Laravel\OpenApiContractTestingServiceProvider;
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
@@ -57,6 +58,18 @@ class AutoAssertIntegrationTest extends TestCase
         $covered = OpenApiCoverageTracker::getCovered();
         $this->assertArrayHasKey('petstore-3.0', $covered);
         $this->assertArrayHasKey('GET /v1/pets', $covered['petstore-3.0']);
+    }
+
+    #[Test]
+    public function auto_assert_rejects_unsupported_openapi_version(): void
+    {
+        config()->set('openapi-contract-testing.default_spec', 'unsupported-version');
+        config()->set('openapi-contract-testing.auto_assert', true);
+
+        $this->expectException(InvalidOpenApiSpecException::class);
+        $this->expectExceptionMessage("Unsupported OpenAPI version: '3.2.0' (string)");
+
+        $this->get('/v1/pets');
     }
 
     #[Test]

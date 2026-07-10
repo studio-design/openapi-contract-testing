@@ -14,7 +14,11 @@ This is a contract-testing tool: where we can't enforce a constraint precisely, 
 
 ## OpenAPI 3.0 vs 3.1
 
-The package auto-detects the OAS version from the `openapi` field and handles schema conversion accordingly:
+The package accepts OpenAPI `3.0.x` and `3.1.x`. The root `openapi` field must be a string in explicit `major.minor.patch` form (for example, `3.0.4` or `3.1.2`). Patch releases within a supported minor use the same feature set, following the [OpenAPI version policy](https://spec.openapis.org/oas/latest.html#versions-and-deprecation).
+
+Missing, empty, non-string, malformed, and unsupported values fail spec loading with `InvalidOpenApiSpecException`. This includes Swagger / OpenAPI 2.x, OpenAPI 3.2.x, and unknown future versions. They are never interpreted as 3.0. OpenAPI 3.2 requires dedicated support before it can be accepted because minor releases may change the OAS feature set.
+
+For supported versions, the package detects the OAS feature family from the `openapi` field and handles schema conversion accordingly:
 
 | Feature | 3.0 handling | 3.1 handling |
 |---|---|---|

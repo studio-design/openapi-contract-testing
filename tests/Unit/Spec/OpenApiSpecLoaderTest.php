@@ -155,6 +155,22 @@ class OpenApiSpecLoaderTest extends TestCase
     }
 
     #[Test]
+    public function load_rejects_unsupported_openapi_version_with_spec_context(): void
+    {
+        OpenApiSpecLoader::configure(__DIR__ . '/../../fixtures/specs');
+
+        try {
+            OpenApiSpecLoader::load('unsupported-version');
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::UnsupportedVersion, $e->reason);
+            $this->assertSame('unsupported-version', $e->specName);
+            $this->assertStringContainsString("'3.2.0' (string)", $e->getMessage());
+            $this->assertStringContainsString('3.0.x or 3.1.x', $e->getMessage());
+        }
+    }
+
+    #[Test]
     public function load_caches_result(): void
     {
         $fixturesPath = __DIR__ . '/../../fixtures/specs';

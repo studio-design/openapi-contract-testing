@@ -9,6 +9,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
 use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Symfony\OpenApiAssertions;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -41,6 +42,19 @@ final class OpenApiAssertionsTest extends TestCase
     {
         $request = Request::create('/v1/pets', 'GET');
         $response = new JsonResponse(['data' => [['id' => 1, 'name' => 'Fido', 'tag' => null]]]);
+
+        $this->assertResponseMatchesOpenApiSchema($request, $response);
+    }
+
+    #[Test]
+    #[OpenApiSpec('unsupported-version')]
+    public function unsupported_openapi_version_fails_before_response_assertion(): void
+    {
+        $request = Request::create('/v1/pets', 'GET');
+        $response = new Response('', 200);
+
+        $this->expectException(InvalidOpenApiSpecException::class);
+        $this->expectExceptionMessage("Unsupported OpenAPI version: '3.2.0' (string)");
 
         $this->assertResponseMatchesOpenApiSchema($request, $response);
     }

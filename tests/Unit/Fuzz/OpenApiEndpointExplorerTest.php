@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use Opis\JsonSchema\Validator;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
 use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
 use Studio\OpenApiContractTesting\Fuzz\OpenApiEndpointExplorer;
@@ -38,6 +39,15 @@ class OpenApiEndpointExplorerTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
 
         OpenApiEndpointExplorer::explore('petstore-3.0', 'POST', '/v1/pets', cases: 0);
+    }
+
+    #[Test]
+    public function rejects_unsupported_openapi_version(): void
+    {
+        $this->expectException(InvalidOpenApiSpecException::class);
+        $this->expectExceptionMessage("Unsupported OpenAPI version: '3.2.0' (string)");
+
+        OpenApiEndpointExplorer::explore('unsupported-version', 'GET', '/v1/pets', cases: 1);
     }
 
     #[Test]

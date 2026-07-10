@@ -11,6 +11,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Studio\OpenApiContractTesting\DecodedBody;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\OpenApiRequestValidator;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Request\SecurityValidator;
@@ -54,6 +55,15 @@ class OpenApiRequestValidatorTest extends TestCase
     // ========================================
     // Acceptance criteria: valid / invalid / spec 未定義
     // ========================================
+
+    #[Test]
+    public function rejects_unsupported_openapi_version(): void
+    {
+        $this->expectException(InvalidOpenApiSpecException::class);
+        $this->expectExceptionMessage("Unsupported OpenAPI version: '3.2.0' (string)");
+
+        $this->validator->validate('unsupported-version', 'GET', '/v1/pets', [], [], null);
+    }
 
     #[Test]
     public function validates_request_body_against_ref_backed_schema(): void
