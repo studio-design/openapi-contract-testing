@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Studio\OpenApiContractTesting\DecodedBody;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
@@ -66,6 +67,15 @@ class OpenApiResponseValidatorTest extends TestCase
     // ========================================
     // OAS 3.0 tests
     // ========================================
+
+    #[Test]
+    public function rejects_unsupported_openapi_version(): void
+    {
+        $this->expectException(InvalidOpenApiSpecException::class);
+        $this->expectExceptionMessage("Unsupported OpenAPI version: '3.2.0' (string)");
+
+        $this->validator->validate('unsupported-version', 'GET', '/v1/pets', 200, null);
+    }
 
     #[Test]
     public function v30_valid_response_passes(): void

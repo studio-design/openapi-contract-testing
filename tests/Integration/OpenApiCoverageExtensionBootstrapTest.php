@@ -59,6 +59,17 @@ class OpenApiCoverageExtensionBootstrapTest extends TestCase
     }
 
     #[Test]
+    public function phpunit_exits_non_zero_when_registered_spec_has_unsupported_version(): void
+    {
+        [$exit, $stderr] = $this->runPhpunit('unsupported-version', '--filter=DoesNotMatchAnyTest');
+
+        $this->assertNotSame(0, $exit, "Expected non-zero exit; stderr was:\n" . $stderr);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString("Unsupported OpenAPI version: '3.2.0' (string)", $stderr);
+        $this->assertStringContainsString('3.0.x or 3.1.x', $stderr);
+    }
+
+    #[Test]
     public function phpunit_exits_non_zero_when_registered_spec_file_is_missing(): void
     {
         // issue #134 contract pinned end-to-end: the unit test covers the

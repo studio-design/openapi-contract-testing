@@ -14,6 +14,7 @@ use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
 use Studio\OpenApiContractTesting\Internal\YamlAvailability;
+use Studio\OpenApiContractTesting\OpenApiVersion;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
@@ -191,6 +192,16 @@ final class OpenApiSpecLoader
                 specName: $specName,
             ),
         };
+
+        // Version selection changes schema semantics, so reject an absent,
+        // malformed, or unsupported `openapi` value before resolving refs or
+        // running any endpoint assertions. This also makes PHPUnit extension
+        // bootstrap fail while eagerly loading its configured specs.
+        try {
+            OpenApiVersion::fromSpec($decoded);
+        } catch (InvalidOpenApiSpecException $e) {
+            throw $e->withSpecName($specName);
+        }
 
         // Canonicalize the source path so the resolver's cycle detection
         // sees the same key for this file whether it's reached as the
