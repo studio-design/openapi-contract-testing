@@ -15,6 +15,26 @@ Two behavioural changes exist so far: v1.3.0 (gated on an already-opt-in
 flag) and v1.8.0 (`discriminator.mapping` enforcement, default-on with an
 opt-out flag — see directly below).
 
+### Next minor release — native JSON Schema dialects for OpenAPI 3.1/3.2
+
+- OpenAPI 3.0 continues to use the existing Draft 07 compatibility conversion.
+- OpenAPI 3.1/3.2 now preserve and enforce native JSON Schema keywords,
+  including `prefixItems`, `const`, `$dynamicRef`, `$dynamicAnchor`,
+  `unevaluatedProperties`, `unevaluatedItems`, `dependentSchemas`, and
+  `dependentRequired`.
+- The root `jsonSchemaDialect` is used as the document default and a Schema
+  Object's `$schema` overrides it. Unsupported custom dialects now fail with
+  `InvalidOpenApiSpecException` instead of being interpreted silently.
+- **Behaviour change:** tests may begin failing where one of the constraints
+  above was previously dropped or only warned. Fix the payload or the schema;
+  these failures expose contract drift that the older Draft 07 lowering could
+  not detect.
+- No public method signatures or dependencies change. This ships as a minor
+  release because the affected 3.1 features were documented as unsupported;
+  the new failures close documented silent-pass gaps.
+- See `docs/benchmarks/native-json-schema-2020-12.md` for the measured pipeline
+  impact and a reproducible benchmark command.
+
 ### From v1.7.0 → v1.8.0
 
 - **`discriminator.mapping` is now enforced** (#262). Previously the

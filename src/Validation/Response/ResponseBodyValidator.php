@@ -71,6 +71,7 @@ final class ResponseBodyValidator
         ?string $responseContentType,
         OpenApiVersion $version,
         ?DiscriminatorContext $discriminatorContext = null,
+        ?string $jsonSchemaDialect = null,
     ): ResponseBodyValidationResult {
         // Pre-scan the content map for malformed media-type entries before any
         // content negotiation runs. This mirrors RequestBodyValidator's
@@ -234,7 +235,7 @@ final class ResponseBodyValidator
 
         /** @var array<string, mixed> $schema */
         $schema = $content[$jsonContentType]['schema'];
-        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Response, $discriminatorContext);
+        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Response, $discriminatorContext, $jsonSchemaDialect);
 
         // PHP's `json_decode($json, true)` returns `[]` for both `[]` and `{}`.
         // The Laravel trait's response decoder uses associative-array decoding

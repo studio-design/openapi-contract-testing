@@ -49,12 +49,10 @@ final class SchemaValidatorRunner
             max_errors: $resolvedMaxErrors,
             stop_at_first_error: $resolvedMaxErrors === 1,
         );
-        // opis defaults to draft 2020-12 when a schema doesn't declare `$schema`.
-        // OpenApiSchemaConverter targets Draft 07 (e.g. it lowers `prefixItems`
-        // to the array-form `items`, which is valid Draft 07 tuple validation
-        // but rejected by 2020-12). Forcing Draft 07 here keeps the converter
-        // and the validator in agreement and unblocks tuple validation for
-        // OAS 3.1 `prefixItems`.
+        // Converted schemas always carry an explicit `$schema`: Draft 07 for
+        // OAS 3.0 and the selected native dialect for OAS 3.1/3.2. Keep the
+        // internal runner's bare-schema fallback at Draft 07 for compatibility
+        // with callers and tests that exercise it directly.
         $this->opisValidator->parser()->setDefaultDraftVersion('07');
         $this->errorFormatter = new ErrorFormatter();
     }
@@ -241,15 +239,13 @@ final class SchemaValidatorRunner
      * `properties` keyword at that location, or null when the path doesn't
      * resolve through plain property nesting / array-element nesting.
      *
-     * The walker recognises exactly two transitions and treats every other
-     * shape as unresolvable (returns null). The two recognised forms:
+     * The walker recognises property and array-item transitions and treats
+     * every other shape as unresolvable (returns null):
      * - `properties.<name>` for string segments (object property access)
      * - `items` for int segments (array element access). Both single-schema
-     *   form (`items: <stdClass>`) and Draft 07 tuple form
-     *   (`items: [<stdClass>, <stdClass>, ...]`) are supported. The tuple
-     *   form is also the lowered shape that `OpenApiSchemaConverter` produces
-     *   for OAS 3.1 `prefixItems`, so #161 dedup applies through that
-     *   conversion path as well.
+     *   form (`items: <stdClass>`), Draft 07 tuple form
+     *   (`items: [<stdClass>, <stdClass>, ...]`), and native 2020-12
+     *   `prefixItems` are supported.
      *
      * Anything that does not match those two transitions falls through to
      * `null` — the dedup never silently rewrites a path it cannot prove. In
@@ -277,6 +273,16 @@ final class SchemaValidatorRunner
         foreach ($segments as $segment) {
             // int segment → array element (descend through `items`)
             if (is_int($segment)) {
+                if (property_exists($current, 'prefixItems') &&
+                    is_array($current->prefixItems) &&
+                    array_key_exists($segment, $current->prefixItems) &&
+                    $current->prefixItems[$segment] instanceof stdClass
+                ) {
+                    $current = $current->prefixItems[$segment];
+
+                    continue;
+                }
+
                 if (!property_exists($current, 'items')) {
                     return null;
                 }

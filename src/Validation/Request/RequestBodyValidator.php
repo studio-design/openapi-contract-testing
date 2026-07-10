@@ -59,6 +59,7 @@ final class RequestBodyValidator
         ?string $contentType,
         OpenApiVersion $version,
         ?DiscriminatorContext $discriminatorContext = null,
+        ?string $jsonSchemaDialect = null,
     ): RequestBodyValidationResult {
         // OpenAPI: a missing requestBody means the operation accepts no body — treat as success.
         if (!isset($operation['requestBody'])) {
@@ -251,7 +252,7 @@ final class RequestBodyValidator
 
         /** @var array<string, mixed> $schema */
         $schema = $content[$jsonContentType]['schema'];
-        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request, $discriminatorContext);
+        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request, $discriminatorContext, $jsonSchemaDialect);
 
         // PHP's `json_decode($json, true)` returns `[]` for both `[]` and `{}`.
         // The Laravel adapter's request decoder uses associative-array decoding,

@@ -1,0 +1,6 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://example.com/custom-dialect",
+  "info": {"title": "Unsupported dialect", "version": "1.0.0"},
+  "paths": {}
+}

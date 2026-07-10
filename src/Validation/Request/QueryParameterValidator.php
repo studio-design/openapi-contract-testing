@@ -62,6 +62,7 @@ final class QueryParameterValidator
         array $parameters,
         array $queryParams,
         OpenApiVersion $version,
+        ?string $jsonSchemaDialect = null,
     ): array {
         $errors = [];
 
@@ -69,7 +70,7 @@ final class QueryParameterValidator
             if (($param['in'] ?? null) === 'querystring') {
                 $errors = [
                     ...$errors,
-                    ...$this->validateWholeQueryString($method, $matchedPath, $param, $queryParams, $version),
+                    ...$this->validateWholeQueryString($method, $matchedPath, $param, $queryParams, $version, $jsonSchemaDialect),
                 ];
 
                 continue;
@@ -107,7 +108,7 @@ final class QueryParameterValidator
             }
 
             $coerced = TypeCoercer::coerceQuery($queryParams[$name], $schema);
-            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
+            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request, null, $jsonSchemaDialect);
 
             $schemaObject = ObjectConverter::convert($jsonSchema);
             $dataObject = ObjectConverter::convert($coerced);
@@ -136,6 +137,7 @@ final class QueryParameterValidator
         array $parameter,
         array $queryParams,
         OpenApiVersion $version,
+        ?string $jsonSchemaDialect,
     ): array {
         $content = $parameter['content'] ?? null;
         if (MalformedSpecNode::isMalformed($content) || $content === []) {
@@ -205,7 +207,7 @@ final class QueryParameterValidator
             }
         }
 
-        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
+        $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request, null, $jsonSchemaDialect);
         $formatted = $this->runner->validate(
             ObjectConverter::convert($jsonSchema),
             ObjectConverter::convert($coerced),

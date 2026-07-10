@@ -202,6 +202,7 @@ final class OpenApiSpecLoader
         // bootstrap fail while eagerly loading its configured specs.
         try {
             $version = OpenApiVersion::fromSpec($decoded);
+            OpenApiSchemaDialect::fromSpec($decoded, $version);
         } catch (InvalidOpenApiSpecException $e) {
             throw $e->withSpecName($specName);
         }

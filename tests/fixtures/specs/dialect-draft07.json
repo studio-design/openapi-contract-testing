@@ -1,0 +1,28 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "http://json-schema.org/draft-07/schema#",
+  "info": {"title": "Draft 07 dialect", "version": "1.0.0"},
+  "paths": {
+    "/tuple": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "A Draft 07 tuple",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": [
+                    {"type": "string"},
+                    {"type": "integer"}
+                  ],
+                  "additionalItems": false
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

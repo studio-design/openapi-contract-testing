@@ -71,8 +71,12 @@ final class ResponseHeaderValidator
      *
      * @return string[]
      */
-    public function validate(array $headersSpec, array $actualHeaders, OpenApiVersion $version): array
-    {
+    public function validate(
+        array $headersSpec,
+        array $actualHeaders,
+        OpenApiVersion $version,
+        ?string $jsonSchemaDialect = null,
+    ): array {
         if ($headersSpec === []) {
             return [];
         }
@@ -175,7 +179,7 @@ final class ResponseHeaderValidator
             }
 
             $coerced = TypeCoercer::coercePrimitive($rawValue, $schema);
-            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Response);
+            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Response, null, $jsonSchemaDialect);
 
             $schemaObject = ObjectConverter::convert($jsonSchema);
             $dataObject = ObjectConverter::convert($coerced);
