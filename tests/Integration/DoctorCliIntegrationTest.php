@@ -70,6 +70,22 @@ class DoctorCliIntegrationTest extends TestCase
     }
 
     #[Test]
+    public function composer_bin_rejects_malformed_response_object(): void
+    {
+        [$exit, $stdout] = $this->runCli([
+            'doctor',
+            '--spec=tests/fixtures/specs/malformed-response.json',
+            '--format=json',
+        ]);
+        $report = json_decode($stdout, true, flags: JSON_THROW_ON_ERROR);
+
+        $this->assertSame(1, $exit);
+        $this->assertSame('error', $report['status']);
+        $this->assertSame(0, $report['summary']['responses']);
+        $this->assertStringContainsString('responses[200]', $report['issues'][0]['message']);
+    }
+
+    #[Test]
     public function composer_bin_help_documents_exit_codes(): void
     {
         [$exit, $stdout] = $this->runCli(['doctor', '--help']);

@@ -197,6 +197,41 @@ class DoctorCommandTest extends TestCase
         $this->assertSame(['skipped', 'warning'], array_column($report['issues'], 'severity'));
     }
 
+    #[Test]
+    public function rejects_malformed_response_objects_instead_of_counting_them(): void
+    {
+        $spec = $this->writeSpec('response-null.json', $this->specWithResponse(null));
+        $report = $this->runJsonDoctor($spec, $exit);
+
+        $this->assertSame(DoctorCommand::EXIT_DIAGNOSTIC_FAILURE, $exit);
+        $this->assertSame('error', $report['status']);
+        $this->assertSame(0, $report['summary']['responses']);
+        $this->assertSame('structure', $report['issues'][0]['category']);
+        $this->assertStringContainsString('responses[200]', $report['issues'][0]['message']);
+        $this->assertStringContainsString('got null', $report['issues'][0]['message']);
+    }
+
+    #[Test]
+    public function rejects_nested_response_nodes_using_runtime_malformed_node_rules(): void
+    {
+        $cases = [
+            ['content' => null],
+            ['content' => ['application/json' => null]],
+            ['content' => ['application/json' => ['schema' => null]]],
+            ['content' => ['application/json' => ['schema' => [['type' => 'string']]]]],
+            ['content' => ['application/json' => ['itemSchema' => 'string']]],
+        ];
+
+        foreach ($cases as $index => $response) {
+            $spec = $this->writeSpec("response-malformed-{$index}.json", $this->specWithResponse($response));
+            $report = $this->runJsonDoctor($spec, $exit);
+
+            $this->assertSame(DoctorCommand::EXIT_DIAGNOSTIC_FAILURE, $exit, "case {$index}");
+            $this->assertSame(0, $report['summary']['responses'], "case {$index}");
+            $this->assertSame('structure', $report['issues'][0]['category'], "case {$index}");
+        }
+    }
+
     private function writeSpec(string $name, string $contents): string
     {
         $path = $this->workDir . '/' . $name;
@@ -212,5 +247,30 @@ class DoctorCommandTest extends TestCase
             'info' => ['title' => 'Test', 'version' => '1'],
             'paths' => [$path => ['get' => ['responses' => ['200' => ['description' => 'ok']]]]],
         ], JSON_THROW_ON_ERROR);
+    }
+
+    private function specWithResponse(mixed $response): string
+    {
+        return (string) json_encode([
+            'openapi' => '3.1.0',
+            'info' => ['title' => 'Test', 'version' => '1'],
+            'paths' => ['/pets' => ['get' => ['responses' => ['200' => $response]]]],
+        ], JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * @param-out int $exit
+     *
+     * @return array<string, mixed>
+     */
+    private function runJsonDoctor(string $spec, ?int &$exit): array
+    {
+        $output = '';
+        $command = new DoctorCommand(stdoutWriter: static function (string $message) use (&$output): void {
+            $output .= $message;
+        });
+        $exit = $command->run(['specs' => [$spec], 'format' => 'json']);
+
+        return json_decode($output, true, flags: JSON_THROW_ON_ERROR);
     }
 }

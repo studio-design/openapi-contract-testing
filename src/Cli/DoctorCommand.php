@@ -27,10 +27,12 @@ use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaDialect;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
 use Symfony\Component\HttpClient\Psr18Client;
 use Throwable;
 
 use function array_filter;
+use function array_key_exists;
 use function array_map;
 use function array_values;
 use function class_exists;
@@ -39,7 +41,6 @@ use function count;
 use function dirname;
 use function explode;
 use function fwrite;
-use function get_debug_type;
 use function getcwd;
 use function htmlspecialchars;
 use function implode;
@@ -338,8 +339,8 @@ final class DoctorCommand
     private function inspectStructure(array $spec, string $label, array &$issues): array
     {
         $paths = $spec['paths'] ?? null;
-        if (!is_array($paths)) {
-            $issues[] = $this->issue('error', 'structure', $label, sprintf('`paths` must be an object, got %s.', get_debug_type($paths)), null);
+        if (MalformedSpecNode::isMalformed($paths)) {
+            $issues[] = $this->issue('error', 'structure', $label, sprintf('`paths` must be an object, got %s.', MalformedSpecNode::describe($paths)), null);
 
             return [0, 0];
         }
@@ -347,29 +348,118 @@ final class DoctorCommand
         $operationCount = 0;
         $responseCount = 0;
         foreach ($paths as $path => $pathItem) {
-            if (!is_array($pathItem)) {
-                $issues[] = $this->issue('error', 'structure', $label, sprintf('Path `%s` must be an object, got %s.', (string) $path, get_debug_type($pathItem)), null);
+            if (MalformedSpecNode::isMalformed($pathItem)) {
+                $issues[] = $this->issue('error', 'structure', $label, sprintf('Path `%s` must be an object, got %s.', (string) $path, MalformedSpecNode::describe($pathItem)), null);
 
                 continue;
             }
             foreach (OpenApiOperationResolver::declaredOperations($pathItem) as $declared) {
                 $operation = $declared['operation'];
-                if (!is_array($operation)) {
-                    $issues[] = $this->issue('error', 'structure', $label, sprintf('Operation `%s %s` must be an object, got %s.', $declared['method'], (string) $path, get_debug_type($operation)), null);
+                if (MalformedSpecNode::isMalformed($operation)) {
+                    $issues[] = $this->issue('error', 'structure', $label, sprintf('Operation `%s %s` must be an object, got %s.', $declared['method'], (string) $path, MalformedSpecNode::describe($operation)), null);
 
                     continue;
                 }
                 $operationCount++;
-                if (!is_array($operation['responses'] ?? null)) {
-                    $issues[] = $this->issue('error', 'structure', $label, sprintf('Operation `%s %s` has no valid `responses` object.', $declared['method'], (string) $path), null);
+                $responses = $operation['responses'] ?? null;
+                if (MalformedSpecNode::isMalformed($responses)) {
+                    $issues[] = $this->issue(
+                        'error',
+                        'structure',
+                        $label,
+                        sprintf('Operation `%s %s` has an invalid `responses` object: got %s.', $declared['method'], (string) $path, MalformedSpecNode::describe($responses)),
+                        null,
+                    );
 
                     continue;
                 }
-                $responseCount += count($operation['responses']);
+
+                foreach ($responses as $status => $response) {
+                    if ($this->inspectResponseDefinition($response, $declared['method'], (string) $path, (string) $status, $label, $issues)) {
+                        $responseCount++;
+                    }
+                }
             }
         }
 
         return [$operationCount, $responseCount];
+    }
+
+    /**
+     * Mirror the response-side runtime guards so doctor never reports a
+     * response as enforceable when validation would reject its structure.
+     *
+     * @param list<DoctorIssue> $issues
+     */
+    private function inspectResponseDefinition(
+        mixed $response,
+        string $method,
+        string $path,
+        string $status,
+        string $label,
+        array &$issues,
+    ): bool {
+        $location = sprintf('responses[%s]', $status);
+        if (MalformedSpecNode::isMalformed($response)) {
+            $issues[] = $this->malformedStructureIssue($label, $method, $path, $location, $response);
+
+            return false;
+        }
+
+        if (!array_key_exists('content', $response)) {
+            return true;
+        }
+
+        $content = $response['content'];
+        if (MalformedSpecNode::isMalformed($content)) {
+            $issues[] = $this->malformedStructureIssue($label, $method, $path, $location . '.content', $content);
+
+            return false;
+        }
+
+        $valid = true;
+        foreach ($content as $mediaType => $mediaTypeSpec) {
+            $mediaLocation = sprintf('%s.content["%s"]', $location, (string) $mediaType);
+            if (MalformedSpecNode::isMalformed($mediaTypeSpec)) {
+                $issues[] = $this->malformedStructureIssue($label, $method, $path, $mediaLocation, $mediaTypeSpec);
+                $valid = false;
+
+                continue;
+            }
+
+            foreach (['schema', 'itemSchema'] as $schemaKey) {
+                if (!array_key_exists($schemaKey, $mediaTypeSpec) || !MalformedSpecNode::isMalformed($mediaTypeSpec[$schemaKey])) {
+                    continue;
+                }
+                $issues[] = $this->malformedStructureIssue(
+                    $label,
+                    $method,
+                    $path,
+                    $mediaLocation . '.' . $schemaKey,
+                    $mediaTypeSpec[$schemaKey],
+                );
+                $valid = false;
+            }
+        }
+
+        return $valid;
+    }
+
+    /** @return DoctorIssue */
+    private function malformedStructureIssue(
+        string $label,
+        string $method,
+        string $path,
+        string $location,
+        mixed $node,
+    ): array {
+        return $this->issue(
+            'error',
+            'structure',
+            $label,
+            sprintf('Malformed `%s` for %s %s: expected object, got %s.', $location, $method, $path, MalformedSpecNode::describe($node)),
+            null,
+        );
     }
 
     /** @param array<string, mixed> $spec */
