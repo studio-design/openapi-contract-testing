@@ -78,6 +78,12 @@ This creates `config/openapi-contract-testing.php`:
 return [
     'default_spec' => '', // e.g., 'front'
 
+    // Used by Laravel Artisan commands such as openapi:routes.
+    'spec_base_path' => base_path('openapi'),
+
+    // Keep aligned with the PHPUnit extension's strip_prefixes parameter.
+    'strip_prefixes' => [],
+
     // Maximum number of validation errors to report per response.
     // 0 = unlimited (reports all errors).
     'max_errors' => 20,
@@ -101,6 +107,11 @@ return [
 ```
 
 Set `default_spec` to your spec name, then use the trait — no per-class override needed:
+
+The Laravel config and PHPUnit extension are separate entry points. Configure
+the same spec directory and prefixes in both so `openapi:routes` and runtime
+validation compare the same paths. See [Laravel route parity](laravel-route-parity.md)
+for filters, JSON output, and CI exit codes.
 
 ```php
 use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;

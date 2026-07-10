@@ -8,6 +8,15 @@ use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 return [
     'default_spec' => '',
 
+    // Directory containing named OpenAPI spec files used by Laravel Artisan
+    // commands. `--spec=front` resolves front.json/front.yaml/front.yml here.
+    'spec_base_path' => 'openapi',
+
+    // Prefixes removed from registered Laravel route URIs before comparing
+    // them with OpenAPI paths. Keep this aligned with the PHPUnit extension's
+    // `strip_prefixes` parameter so static parity and runtime validation agree.
+    'strip_prefixes' => [],
+
     // Maximum number of validation errors to report per response.
     // 0 = unlimited (reports all errors).
     'max_errors' => 20,
