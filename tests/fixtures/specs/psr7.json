@@ -119,6 +119,32 @@
           }
         }
       }
+    },
+    "/search": {
+      "get": {
+        "parameters": [
+          {
+            "name": "tags",
+            "in": "query",
+            "required": true,
+            "style": "form",
+            "explode": true,
+            "schema": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "string",
+                "enum": ["a", "b"]
+              }
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          }
+        }
+      }
     }
   }
 }

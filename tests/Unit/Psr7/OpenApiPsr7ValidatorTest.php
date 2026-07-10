@@ -117,6 +117,27 @@ final class OpenApiPsr7ValidatorTest extends TestCase
     }
 
     #[Test]
+    public function preserves_repeated_form_explode_query_values_as_an_array(): void
+    {
+        $request = new Request('GET', 'https://example.test/search?tags=a&tags=b');
+
+        $result = $this->validator->validateRequest($request);
+
+        $this->assertTrue($result->isValid(), $result->errorMessage());
+    }
+
+    #[Test]
+    public function retains_an_invalid_value_before_a_repeated_query_key(): void
+    {
+        $request = new Request('GET', 'https://example.test/search?tags=invalid&tags=b');
+
+        $result = $this->validator->validateRequest($request);
+
+        $this->assertFalse($result->isValid());
+        $this->assertStringContainsString('query.tags/0', $result->errorMessage());
+    }
+
+    #[Test]
     public function reports_a_missing_cookie_from_a_client_request(): void
     {
         $request = new Request(

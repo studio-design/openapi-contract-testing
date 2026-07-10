@@ -19,15 +19,18 @@ use Studio\OpenApiContractTesting\OpenApiResponseValidator;
 use Studio\OpenApiContractTesting\OpenApiValidationResult;
 use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
 
+use function array_key_exists;
 use function array_merge;
+use function array_pad;
 use function explode;
+use function is_array;
 use function json_decode;
 use function ltrim;
-use function parse_str;
 use function rawurldecode;
 use function sprintf;
 use function str_contains;
 use function trim;
+use function urldecode;
 
 /**
  * Framework-independent adapter for validating PSR-7 HTTP messages.
@@ -216,8 +219,36 @@ final class OpenApiPsr7Validator
     /** @return array<string, mixed> */
     private static function parseQuery(RequestInterface $request): array
     {
+        /** @var array<string, mixed> $query */
         $query = [];
-        parse_str($request->getUri()->getQuery(), $query);
+        $queryString = $request->getUri()->getQuery();
+        if ($queryString === '') {
+            return $query;
+        }
+
+        // OpenAPI `style: form, explode: true` serializes arrays by repeating
+        // the parameter name (`tags=a&tags=b`). PHP's parse_str() overwrites
+        // earlier unbracketed values, so parse the wire pairs directly and
+        // promote a repeated key to an ordered list instead.
+        foreach (explode('&', $queryString) as $pair) {
+            [$encodedName, $encodedValue] = array_pad(explode('=', $pair, 2), 2, '');
+            $name = urldecode($encodedName);
+            if ($name === '') {
+                continue;
+            }
+
+            $value = urldecode($encodedValue);
+            if (!array_key_exists($name, $query)) {
+                $query[$name] = $value;
+
+                continue;
+            }
+
+            if (!is_array($query[$name])) {
+                $query[$name] = [$query[$name]];
+            }
+            $query[$name][] = $value;
+        }
 
         return $query;
     }
