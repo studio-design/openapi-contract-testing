@@ -120,10 +120,11 @@ final class OpenApiPathSuggester
 
     /**
      * Enumerate the operation methods declared under a given path item.
-     * Uppercase, alphabetically sorted, with non-method keys
-     * (`parameters`, `summary`, `$ref`, …) filtered out. Returns `[]` for an
-     * unknown path or a path-item that only declares shared parameters — the
-     * caller distinguishes the two via prior matching.
+     * Fixed fields are uppercased while additional operation methods retain
+     * the exact capitalization declared by the spec. Results are sorted, with
+     * non-method keys (`parameters`, `summary`, `$ref`, …) filtered out.
+     * Returns `[]` for an unknown path or a path-item that only declares shared
+     * parameters — the caller distinguishes the two via prior matching.
      *
      * @param array<string, mixed> $spec
      *

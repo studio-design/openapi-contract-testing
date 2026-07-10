@@ -14,6 +14,7 @@ use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
 
 use function array_is_list;
 use function array_key_exists;
+use function array_keys;
 use function get_debug_type;
 use function implode;
 use function in_array;
@@ -48,6 +49,7 @@ final class OpenApiSchemaConverter
         'examples',
         'deprecated',
         '$schema',
+        OpenApiRefResolver::IMPLICIT_SCHEMA_NAME_EXTENSION,
     ];
 
     /** OAS 3.0 specific keys (not in JSON Schema Draft 07) */
@@ -185,6 +187,8 @@ final class OpenApiSchemaConverter
         SchemaContext $context,
         DiscriminatorContext $discriminator,
     ): void {
+        $implicitDiscriminatorValues = self::implicitDiscriminatorValues($schema);
+
         if ($version === OpenApiVersion::V3_0) {
             self::handleNullable($schema);
         } else {
@@ -319,7 +323,35 @@ final class OpenApiSchemaConverter
         // recursion above means the lowered `allOf` entries we append are
         // already converted by lowerDiscriminator itself and are not
         // re-visited here. See Issue #262.
-        self::lowerDiscriminator($schema, $version, $context, $discriminator);
+        self::lowerDiscriminator($schema, $version, $context, $discriminator, $implicitDiscriminatorValues);
+    }
+
+    /**
+     * @param array<string, mixed> $schema
+     *
+     * @return list<string>
+     */
+    private static function implicitDiscriminatorValues(array $schema): array
+    {
+        $values = [];
+        foreach (['oneOf', 'anyOf'] as $combiner) {
+            if (!is_array($schema[$combiner] ?? null)) {
+                continue;
+            }
+
+            foreach ($schema[$combiner] as $alternative) {
+                if (!is_array($alternative)) {
+                    continue;
+                }
+
+                $name = $alternative[OpenApiRefResolver::IMPLICIT_SCHEMA_NAME_EXTENSION] ?? null;
+                if (is_string($name) && $name !== '') {
+                    $values[$name] = true;
+                }
+            }
+        }
+
+        return array_keys($values);
     }
 
     /**
@@ -519,12 +551,14 @@ final class OpenApiSchemaConverter
      * behaviour, minus the removed warning).
      *
      * @param array<string, mixed> $schema
+     * @param list<string> $implicitValues component names referenced directly by adjacent oneOf/anyOf entries
      */
     private static function lowerDiscriminator(
         array &$schema,
         OpenApiVersion $version,
         SchemaContext $context,
         DiscriminatorContext $discriminator,
+        array $implicitValues,
     ): void {
         if (!array_key_exists('discriminator', $schema)) {
             return;
@@ -597,10 +631,13 @@ final class OpenApiSchemaConverter
 
         $childContext = $discriminator->withSignature($signature);
         $knownValues = [];
-        $branches = [];
+        $explicitValues = [];
+        /** @var list<array{value: string, pointer: string}> $routes */
+        $routes = [];
         foreach ($mapping as $value => $pointer) {
             $value = (string) $value;
             $knownValues[] = $value;
+            $explicitValues[$value] = true;
 
             if (!is_string($pointer)) {
                 throw new MalformedDiscriminatorException(sprintf(
@@ -609,6 +646,23 @@ final class OpenApiSchemaConverter
                     get_debug_type($pointer),
                 ));
             }
+
+            $routes[] = ['value' => $value, 'pointer' => $pointer];
+        }
+
+        foreach ($implicitValues as $value) {
+            if (isset($explicitValues[$value])) {
+                continue;
+            }
+
+            $knownValues[] = $value;
+            $routes[] = ['value' => $value, 'pointer' => $value];
+        }
+
+        $branches = [];
+        foreach ($routes as $route) {
+            $value = $route['value'];
+            $pointer = $route['pointer'];
 
             $subschema = self::resolveMappingTarget($value, $pointer, $discriminator->root);
             self::convertInPlace($subschema, $version, $context, $childContext);
@@ -646,10 +700,9 @@ final class OpenApiSchemaConverter
                 'then' => $defaultSubschema,
             ];
         } else {
-            // Without explicit mapping entries we cannot reconstruct the
-            // implicit oneOf/anyOf schema-name mapping after eager $ref
-            // resolution. We can still enforce the normative missing-value
-            // fallback and make the residual unknown-value gap observable.
+            // Without explicit or recoverable implicit mapping entries we can
+            // still enforce the missing-value fallback and make the residual
+            // unknown-value gap observable.
             $allOf[] = [
                 'if' => ['not' => ['required' => [$propertyName]]],
                 'then' => $defaultSubschema,
@@ -658,9 +711,9 @@ final class OpenApiSchemaConverter
             if (!isset(self::$warnedKeywords[$warningKey])) {
                 self::$warnedKeywords[$warningKey] = true;
                 trigger_error(
-                    '[OpenAPI 3.2 discriminator] defaultMapping without an explicit mapping can be enforced '
-                    . 'for a missing discriminator value, but implicit mapped names cannot be reconstructed '
-                    . 'after reference resolution; unknown present values rely on the underlying oneOf/anyOf.',
+                    '[OpenAPI 3.2 discriminator] defaultMapping without an explicit or recoverable implicit mapping '
+                    . 'can be enforced for a missing discriminator value, but unknown present values rely on the '
+                    . 'underlying oneOf/anyOf.',
                     E_USER_WARNING,
                 );
             }

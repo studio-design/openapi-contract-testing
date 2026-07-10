@@ -31,12 +31,29 @@ final class OpenApiOperationResolverTest extends TestCase
 
         $result = OpenApiOperationResolver::resolve(
             ['additionalOperations' => ['COPY' => $operation]],
-            'copy',
+            'COPY',
         );
 
         $this->assertTrue($result['found']);
         $this->assertSame($operation, $result['operation']);
         $this->assertSame('additionalOperations["COPY"]', $result['location']);
+    }
+
+    #[Test]
+    public function additional_operation_method_matching_is_case_sensitive(): void
+    {
+        $pathItem = ['additionalOperations' => [
+            'COPY' => ['operationId' => 'upperCopy'],
+            'copy' => ['operationId' => 'lowerCopy'],
+        ]];
+
+        $upper = OpenApiOperationResolver::resolve($pathItem, 'COPY');
+        $lower = OpenApiOperationResolver::resolve($pathItem, 'copy');
+        $mixed = OpenApiOperationResolver::resolve($pathItem, 'Copy');
+
+        $this->assertSame('upperCopy', $upper['operation']['operationId']);
+        $this->assertSame('lowerCopy', $lower['operation']['operationId']);
+        $this->assertFalse($mixed['found']);
     }
 
     #[Test]
@@ -63,9 +80,12 @@ final class OpenApiOperationResolverTest extends TestCase
         $result = OpenApiOperationResolver::declaredOperations([
             'get' => ['responses' => []],
             'query' => ['responses' => []],
-            'additionalOperations' => ['COPY' => ['responses' => []]],
+            'additionalOperations' => [
+                'COPY' => ['responses' => []],
+                'copy' => ['responses' => []],
+            ],
         ]);
 
-        $this->assertSame(['GET', 'QUERY', 'COPY'], array_column($result, 'method'));
+        $this->assertSame(['GET', 'QUERY', 'COPY', 'copy'], array_column($result, 'method'));
     }
 }

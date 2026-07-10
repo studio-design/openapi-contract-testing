@@ -63,9 +63,8 @@ final class OpenApiOperationResolver
             ];
         }
 
-        $upperMethod = strtoupper($method);
         foreach ($additional as $declaredMethod => $operation) {
-            if (!is_string($declaredMethod) || strtoupper($declaredMethod) !== $upperMethod) {
+            if (!is_string($declaredMethod) || $declaredMethod !== $method) {
                 continue;
             }
 
@@ -115,12 +114,26 @@ final class OpenApiOperationResolver
             }
 
             $operations[] = [
-                'method' => strtoupper($method),
+                'method' => $method,
                 'operation' => $operation,
                 'location' => 'additionalOperations["' . $method . '"]',
             ];
         }
 
         return $operations;
+    }
+
+    /**
+     * Fixed Path Item fields are case-insensitive at request lookup and use
+     * their canonical uppercase coverage key. Non-standard methods retain
+     * their exact spelling because `additionalOperations` is case-sensitive.
+     */
+    public static function normalizeMethodForKey(string $method): string
+    {
+        $lowerMethod = strtolower($method);
+
+        return in_array($lowerMethod, self::FIXED_OPERATION_FIELDS, true)
+            ? strtoupper($lowerMethod)
+            : $method;
     }
 }

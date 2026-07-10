@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Exception\MalformedDiscriminatorException;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\SchemaContext;
+use Studio\OpenApiContractTesting\Spec\OpenApiRefResolver;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
 use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
@@ -1466,6 +1467,60 @@ class OpenApiSchemaConverterTest extends TestCase
         $this->assertSame(['kind' => ['enum' => ['cat']]], $result['allOf'][0]['if']['not']['properties']);
         $this->assertSame(['name'], $result['allOf'][0]['then']['required']);
         $this->assertSame(['meow'], $result['allOf'][1]['then']['required']);
+    }
+
+    #[Test]
+    public function openapi_32_default_mapping_runs_after_implicit_schema_name_mapping(): void
+    {
+        $root = OpenApiRefResolver::resolve([
+            'components' => ['schemas' => [
+                'Cat' => ['type' => 'object', 'required' => ['meow']],
+                'Dog' => ['type' => 'object', 'required' => ['bark']],
+                'Other' => ['type' => 'object', 'required' => ['other']],
+            ]],
+            'schema' => [
+                'oneOf' => [
+                    ['$ref' => '#/components/schemas/Cat'],
+                    ['$ref' => '#/components/schemas/Dog'],
+                    ['$ref' => '#/components/schemas/Other'],
+                ],
+                'discriminator' => [
+                    'propertyName' => 'kind',
+                    'mapping' => ['doggo' => 'Dog'],
+                    'defaultMapping' => 'Other',
+                ],
+            ],
+        ]);
+
+        $lowered = OpenApiSchemaConverter::convert(
+            $root['schema'],
+            OpenApiVersion::V3_2,
+            SchemaContext::Response,
+            $this->enforcing($root),
+        );
+        $runner = new SchemaValidatorRunner(20);
+        $schemaObject = ObjectConverter::convert($lowered);
+
+        $this->assertSame(
+            [],
+            $runner->validate($schemaObject, ObjectConverter::convert((object) ['kind' => 'Cat', 'meow' => true])),
+            'an implicit Cat mapping must be selected before defaultMapping',
+        );
+        $this->assertSame(
+            [],
+            $runner->validate($schemaObject, ObjectConverter::convert((object) ['kind' => 'doggo', 'bark' => true])),
+            'an explicit mapping must continue to override the implicit schema name',
+        );
+        $this->assertSame(
+            [],
+            $runner->validate($schemaObject, ObjectConverter::convert((object) ['kind' => 'unknown', 'other' => true])),
+            'an unmapped value must use defaultMapping',
+        );
+        $this->assertNotSame(
+            [],
+            $runner->validate($schemaObject, ObjectConverter::convert((object) ['kind' => 'Cat', 'other' => true])),
+            'a known implicit value must not be routed to defaultMapping',
+        );
     }
 
     #[Test]

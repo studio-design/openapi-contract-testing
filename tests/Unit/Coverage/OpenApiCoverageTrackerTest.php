@@ -766,6 +766,21 @@ class OpenApiCoverageTrackerTest extends TestCase
     }
 
     #[Test]
+    public function coverage_keeps_custom_method_capitalization_distinct(): void
+    {
+        $this->tracker->recordRequestOn('custom-methods', 'COPY', '/resources');
+        $this->tracker->recordRequestOn('custom-methods', 'copy', '/resources');
+        $this->tracker->recordRequestOn('custom-methods', 'get', '/resources');
+
+        $covered = $this->tracker->getCoveredOn();
+
+        $this->assertArrayHasKey('COPY /resources', $covered['custom-methods']);
+        $this->assertArrayHasKey('copy /resources', $covered['custom-methods']);
+        $this->assertArrayHasKey('GET /resources', $covered['custom-methods']);
+        $this->assertCount(3, $covered['custom-methods']);
+    }
+
+    #[Test]
     public function openapi_32_operation_forms_render_in_every_report_format(): void
     {
         $result = $this->tracker->computeCoverageOn('openapi-3.2');

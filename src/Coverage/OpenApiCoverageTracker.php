@@ -27,7 +27,6 @@ use function str_starts_with;
 use function strcasecmp;
 use function strcmp;
 use function strpos;
-use function strtoupper;
 use function substr;
 use function trigger_error;
 use function usort;
@@ -788,7 +787,7 @@ final class OpenApiCoverageTracker
 
     private static function endpointKey(string $method, string $path): string
     {
-        return strtoupper($method) . ' ' . $path;
+        return OpenApiOperationResolver::normalizeMethodForKey($method) . ' ' . $path;
     }
 
     /**
