@@ -6,6 +6,8 @@ namespace Studio\OpenApiContractTesting\Spec;
 
 use const E_USER_WARNING;
 
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
 use Studio\OpenApiContractTesting\Exception\MalformedDiscriminatorException;
 use Studio\OpenApiContractTesting\OpenApiVersion;
 use Studio\OpenApiContractTesting\SchemaContext;
@@ -19,7 +21,6 @@ use function get_debug_type;
 use function implode;
 use function in_array;
 use function is_array;
-use function is_bool;
 use function is_string;
 use function sort;
 use function sprintf;
@@ -32,15 +33,7 @@ use function trigger_error;
 final class OpenApiSchemaConverter
 {
     /**
-     * OAS keys to remove for both 3.0 and 3.1.
-     *
-     * `$schema` is stripped because the converter's output targets Draft 07
-     * (the SchemaValidatorRunner pins opis's default to 07). A spec author
-     * who inlines `$schema: ".../2020-12/schema"` (legitimate per OAS 3.1
-     * `jsonSchemaDialect`) would otherwise force opis to interpret the
-     * already-lowered schema under 2020-12, where the array-form `items`
-     * we emit for `prefixItems` is invalid. Stripping keeps the validator
-     * draft consistent with what the converter actually produces.
+     * OpenAPI annotation keys that do not affect JSON response validation.
      */
     private const OPENAPI_COMMON_KEYS = [
         'xml',
@@ -48,7 +41,6 @@ final class OpenApiSchemaConverter
         'example',
         'examples',
         'deprecated',
-        '$schema',
         OpenApiRefResolver::IMPLICIT_SCHEMA_NAME_EXTENSION,
     ];
 
@@ -136,7 +128,10 @@ final class OpenApiSchemaConverter
     private static array $warnedKeywords = [];
 
     /**
-     * Convert an OpenAPI schema to a JSON Schema Draft 07 compatible schema.
+     * Convert an OpenAPI Schema Object into the dialect used for validation.
+     * OAS 3.0 is lowered to Draft 07; OAS 3.1/3.2 retain native JSON Schema
+     * keywords and are evaluated using their declared dialect (2020-12 by
+     * default).
      *
      * `$context` drives asymmetric handling of `readOnly` / `writeOnly`:
      * in `Request` context, `readOnly` properties are turned into forbidden
@@ -160,8 +155,24 @@ final class OpenApiSchemaConverter
         OpenApiVersion $version = OpenApiVersion::V3_0,
         SchemaContext $context = SchemaContext::Response,
         ?DiscriminatorContext $discriminator = null,
+        ?string $jsonSchemaDialect = null,
     ): array {
+        $hasDeclaredDialect = array_key_exists('$schema', $schema);
+        $declaredDialect = $hasDeclaredDialect ? $schema['$schema'] : null;
+        if ($hasDeclaredDialect && !is_string($declaredDialect)) {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::UnsupportedJsonSchemaDialect,
+                sprintf('Unsupported `$schema`: expected a URI string, got %s.', get_debug_type($declaredDialect)),
+            );
+        }
+
+        $dialect = $version === OpenApiVersion::V3_0
+            ? OpenApiSchemaDialect::DRAFT_07
+            : ($hasDeclaredDialect ? $declaredDialect : ($jsonSchemaDialect ?? OpenApiSchemaDialect::OAS_3_1));
+        OpenApiSchemaDialect::assertSupported($dialect, 'jsonSchemaDialect');
+
         self::convertInPlace($schema, $version, $context, $discriminator ?? DiscriminatorContext::disabled());
+        $schema['$schema'] = OpenApiSchemaDialect::validatorDialect($dialect);
 
         return $schema;
     }
@@ -187,22 +198,26 @@ final class OpenApiSchemaConverter
         SchemaContext $context,
         DiscriminatorContext $discriminator,
     ): void {
+        if ($version !== OpenApiVersion::V3_0 && array_key_exists('$schema', $schema)) {
+            if (!is_string($schema['$schema'])) {
+                throw new InvalidOpenApiSpecException(
+                    InvalidOpenApiSpecReason::UnsupportedJsonSchemaDialect,
+                    sprintf('Unsupported `$schema`: expected a URI string, got %s.', get_debug_type($schema['$schema'])),
+                );
+            }
+            OpenApiSchemaDialect::assertSupported($schema['$schema']);
+        }
+
         $implicitDiscriminatorValues = self::implicitDiscriminatorValues($schema);
 
         if ($version === OpenApiVersion::V3_0) {
             self::handleNullable($schema);
-        } else {
-            self::handlePrefixItems($schema);
-            self::lowerConstToEnum($schema);
+            unset($schema['$schema']);
             self::removeKeys($schema, self::DRAFT_2020_12_KEYS);
+            self::warnIfUsesUnsupportedKeywords($schema);
+            self::warnIfDependentKeywordsPresent($schema);
         }
 
-        // Warn for both 3.0 and 3.1: `patternProperties` and friends are valid
-        // Draft 04/07 keywords used in 3.0 specs as well, so silent ignoring is
-        // just as risky there.
-        self::warnIfUsesUnsupportedKeywords($schema);
-
-        self::warnIfDependentKeywordsPresent($schema);
         self::warnIfUnknownFormat($schema);
 
         // `discriminator` is OAS-only (not a JSON Schema keyword) and is
@@ -250,12 +265,18 @@ final class OpenApiSchemaConverter
             }
         }
 
-        // Primary trigger: handlePrefixItems hoists a 3.1 sibling `items`
-        // into `additionalItems` (a 2020-12 subschema that may itself need
-        // lowering — nested prefixItems, $dynamicRef, etc.). Also handles
-        // hand-authored Draft-07-style input that declares `additionalItems`
-        // directly. None of the other recursion sites in convertInPlace
-        // descend into it, so route it through here.
+        if ($version !== OpenApiVersion::V3_0 && isset($schema['prefixItems']) && is_array($schema['prefixItems'])) {
+            foreach ($schema['prefixItems'] as &$item) {
+                if (is_array($item)) {
+                    self::convertInPlace($item, $version, $context, $discriminator);
+                }
+            }
+            unset($item);
+        }
+
+        // OAS 3.0 inherits Draft 04's `additionalItems`; recurse into a
+        // hand-authored schema so nullable and OpenAPI annotations are still
+        // handled inside it.
         if (isset($schema['additionalItems']) && is_array($schema['additionalItems'])) {
             self::convertInPlace($schema['additionalItems'], $version, $context, $discriminator);
         }
@@ -315,6 +336,23 @@ final class OpenApiSchemaConverter
                 }
             }
             unset($sub);
+        }
+
+        if ($version !== OpenApiVersion::V3_0) {
+            foreach (['contentSchema', 'unevaluatedProperties', 'unevaluatedItems'] as $key) {
+                if (isset($schema[$key]) && is_array($schema[$key])) {
+                    self::convertInPlace($schema[$key], $version, $context, $discriminator);
+                }
+            }
+
+            if (isset($schema['$defs']) && is_array($schema['$defs'])) {
+                foreach ($schema['$defs'] as &$sub) {
+                    if (is_array($sub)) {
+                        self::convertInPlace($sub, $version, $context, $discriminator);
+                    }
+                }
+                unset($sub);
+            }
         }
 
         // Consume `discriminator` last: when enforcing, lower its `mapping`
@@ -457,35 +495,6 @@ final class OpenApiSchemaConverter
                 ['type' => 'null'],
             ];
         }
-    }
-
-    /**
-     * OAS 3.1 / Draft 2019-09 introduced `const`. Draft 07 (the schema dialect
-     * we delegate to via opis) does not understand it, so a `const: "fixed"`
-     * schema would silently accept any value of the correct type. Lower to
-     * `enum: [value]` so the constraint is actually enforced.
-     *
-     * Conflict policy: when both `const` and `enum` are present (rare and
-     * arguably malformed), we keep `enum` and drop `const`. JSON Schema
-     * semantics are that the two intersect — the result should equal `[const]`
-     * if `const ∈ enum`, else unsatisfiable — but reproducing that precisely
-     * is more delicate than v1.0 needs. The chosen behaviour LOOSENS the
-     * constraint relative to the spec; treat this conflict as a known
-     * limitation and prefer `const`-only or `enum`-only schemas.
-     *
-     * @param array<string, mixed> $schema
-     */
-    private static function lowerConstToEnum(array &$schema): void
-    {
-        if (!array_key_exists('const', $schema)) {
-            return;
-        }
-
-        if (!array_key_exists('enum', $schema)) {
-            $schema['enum'] = [$schema['const']];
-        }
-
-        unset($schema['const']);
     }
 
     /**
@@ -920,67 +929,6 @@ final class OpenApiSchemaConverter
                 $format,
                 implode(', ', self::KNOWN_OPIS_FORMATS),
                 implode(', ', self::ADVISORY_FORMATS),
-            ),
-            E_USER_WARNING,
-        );
-    }
-
-    /**
-     * Convert Draft 2020-12 prefixItems to Draft 07 items array (tuple validation).
-     *
-     * If `items` appears alongside `prefixItems` (2020-12 semantics:
-     * "schema for every element at index >= count(prefixItems)"), preserve
-     * that constraint as Draft 07 `additionalItems`. Overwriting `items`
-     * without preserving its sibling would silently drop the overflow
-     * constraint — a contract bypass (issue #212). `items: true` is the
-     * implicit Draft 07 default and is omitted instead of emitted; this
-     * relies on the validator running under Draft 07, pinned by
-     * SchemaValidatorRunner's `setDefaultDraftVersion('07')` call. Should
-     * that default change, the
-     * `prefix_items_with_items_true_matches_prefix_items_without_sibling_under_opis_draft07`
-     * regression test will fail.
-     *
-     * A non-bool / non-array `items` sibling is a spec defect (JSON Schema
-     * 2020-12 §10.3 requires `Schema | bool`). Hoisting it into
-     * `additionalItems` would surface much later as an opis parse error
-     * with no clue to the source — emit a one-shot E_USER_WARNING and drop
-     * it, matching the pattern used by {@see warnIfUnknownFormat()}.
-     *
-     * @param array<string, mixed> $schema
-     */
-    private static function handlePrefixItems(array &$schema): void
-    {
-        if (!isset($schema['prefixItems']) || !is_array($schema['prefixItems'])) {
-            return;
-        }
-
-        if (array_key_exists('items', $schema)) {
-            $overflow = $schema['items'];
-            if (is_array($overflow) || is_bool($overflow)) {
-                if ($overflow !== true) {
-                    $schema['additionalItems'] = $overflow;
-                }
-            } else {
-                self::warnMalformedPrefixItemsSibling($overflow);
-            }
-        }
-
-        $schema['items'] = $schema['prefixItems'];
-        unset($schema['prefixItems']);
-    }
-
-    private static function warnMalformedPrefixItemsSibling(mixed $overflow): void
-    {
-        $dedupKey = 'prefix-items-sibling-malformed:' . get_debug_type($overflow);
-        if (isset(self::$warnedKeywords[$dedupKey])) {
-            return;
-        }
-
-        self::$warnedKeywords[$dedupKey] = true;
-        trigger_error(
-            sprintf(
-                "[OpenAPI Schema] sibling 'items' of 'prefixItems' must be a schema object or boolean per JSON Schema 2020-12 §10.3, got %s. The overflow constraint is silently dropped — any element past the tuple is NOT enforced. Fix the spec.",
-                get_debug_type($overflow),
             ),
             E_USER_WARNING,
         );

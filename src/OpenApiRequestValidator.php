@@ -7,6 +7,7 @@ namespace Studio\OpenApiContractTesting;
 use RuntimeException;
 use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
 use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
+use Studio\OpenApiContractTesting\Spec\OpenApiSchemaDialect;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Request\HeaderParameterValidator;
 use Studio\OpenApiContractTesting\Validation\Request\ParameterCollector;
@@ -132,6 +133,7 @@ final class OpenApiRequestValidator
         $spec = OpenApiSpecLoader::load($specName);
 
         $version = OpenApiVersion::fromSpec($spec);
+        $jsonSchemaDialect = OpenApiSchemaDialect::fromSpec($spec, $version);
 
         // The root `paths` must decode to a JSON object; a scalar, `null`, or
         // a JSON list is a malformed spec ({@see MalformedSpecNode}).
@@ -248,13 +250,13 @@ final class OpenApiRequestValidator
         // Carry the resolved root + enforce gate so the body validator can
         // lower `discriminator.mapping` into enforceable conditionals (#262).
         $discriminatorContext = new DiscriminatorContext($spec, DiscriminatorEnforcement::isEnabled());
-        $bodyResult = $this->validateBody($specName, $method, $matchedPath, $operation, $body, $contentType, $version, $discriminatorContext);
+        $bodyResult = $this->validateBody($specName, $method, $matchedPath, $operation, $body, $contentType, $version, $discriminatorContext, $jsonSchemaDialect);
 
         $errors = [
             ...$collected->specErrors,
-            ...ValidatorErrorBoundary::safely('path', $specName, $method, $matchedPath, fn(): array => $this->pathValidator->validate($method, $matchedPath, $collected->parameters, $pathVariables, $version)),
-            ...ValidatorErrorBoundary::safely('query', $specName, $method, $matchedPath, fn(): array => $this->queryValidator->validate($method, $matchedPath, $collected->parameters, $queryParams, $version)),
-            ...ValidatorErrorBoundary::safely('header', $specName, $method, $matchedPath, fn(): array => $this->headerValidator->validate($method, $matchedPath, $collected->parameters, $headers, $version)),
+            ...ValidatorErrorBoundary::safely('path', $specName, $method, $matchedPath, fn(): array => $this->pathValidator->validate($method, $matchedPath, $collected->parameters, $pathVariables, $version, $jsonSchemaDialect)),
+            ...ValidatorErrorBoundary::safely('query', $specName, $method, $matchedPath, fn(): array => $this->queryValidator->validate($method, $matchedPath, $collected->parameters, $queryParams, $version, $jsonSchemaDialect)),
+            ...ValidatorErrorBoundary::safely('header', $specName, $method, $matchedPath, fn(): array => $this->headerValidator->validate($method, $matchedPath, $collected->parameters, $headers, $version, $jsonSchemaDialect)),
             ...ValidatorErrorBoundary::safely('security', $specName, $method, $matchedPath, fn(): array => $this->securityValidator->validate($method, $matchedPath, $spec, $operation, $headers, $queryParams, $cookies)),
             ...$bodyResult->errors,
         ];
@@ -342,9 +344,10 @@ final class OpenApiRequestValidator
         ?string $contentType,
         OpenApiVersion $version,
         DiscriminatorContext $discriminatorContext,
+        string $jsonSchemaDialect,
     ): RequestBodyValidationResult {
         try {
-            return $this->bodyValidator->validate($specName, $method, $matchedPath, $operation, $body, $contentType, $version, $discriminatorContext);
+            return $this->bodyValidator->validate($specName, $method, $matchedPath, $operation, $body, $contentType, $version, $discriminatorContext, $jsonSchemaDialect);
         } catch (RuntimeException $e) {
             $previous = $e->getPrevious();
             $previousSuffix = $previous !== null

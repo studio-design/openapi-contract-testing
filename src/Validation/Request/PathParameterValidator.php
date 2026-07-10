@@ -51,6 +51,7 @@ final class PathParameterValidator
         array $parameters,
         array $pathVariables,
         OpenApiVersion $version,
+        ?string $jsonSchemaDialect = null,
     ): array {
         $errors = [];
         $declared = [];
@@ -87,7 +88,7 @@ final class PathParameterValidator
 
             $decoded = rawurldecode($pathVariables[$name]);
             $coerced = TypeCoercer::coercePrimitive($decoded, $schema);
-            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
+            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request, null, $jsonSchemaDialect);
 
             $schemaObject = ObjectConverter::convert($jsonSchema);
             $dataObject = ObjectConverter::convert($coerced);

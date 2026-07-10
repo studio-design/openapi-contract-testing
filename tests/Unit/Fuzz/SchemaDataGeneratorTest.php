@@ -421,4 +421,29 @@ class SchemaDataGeneratorTest extends TestCase
 
         $this->assertIsString($value);
     }
+
+    #[Test]
+    public function native_const_value_is_generated_exactly(): void
+    {
+        $this->assertSame(
+            ['fixed' => true],
+            SchemaDataGenerator::generateOne(['const' => ['fixed' => true]], faker: null, iteration: 0),
+        );
+    }
+
+    #[Test]
+    public function native_prefix_items_generate_a_valid_tuple(): void
+    {
+        $value = SchemaDataGenerator::generateOne([
+            'type' => 'array',
+            'prefixItems' => [
+                ['const' => 'fixed'],
+                ['type' => 'integer'],
+            ],
+            'items' => false,
+        ], faker: null, iteration: 0);
+
+        $this->assertSame('fixed', $value[0]);
+        $this->assertIsInt($value[1]);
+    }
 }

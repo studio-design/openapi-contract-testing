@@ -50,5 +50,6 @@ enum InvalidOpenApiSpecReason
     case YamlLibraryMissing;
     case UnsupportedExtension;
     case UnsupportedVersion;
+    case UnsupportedJsonSchemaDialect;
     case BasePathNotConfigured;
 }

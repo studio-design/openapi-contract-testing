@@ -9,6 +9,7 @@ use RuntimeException;
 use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
 use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
 use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
+use Studio\OpenApiContractTesting\Spec\OpenApiSchemaDialect;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidationResult;
 use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
@@ -111,6 +112,7 @@ final class OpenApiResponseValidator
         $spec = OpenApiSpecLoader::load($specName);
 
         $version = OpenApiVersion::fromSpec($spec);
+        $jsonSchemaDialect = OpenApiSchemaDialect::fromSpec($spec, $version);
 
         // The root `paths` must decode to a JSON object; a scalar, `null`, or
         // a JSON list is a malformed spec ({@see MalformedSpecNode}).
@@ -324,6 +326,7 @@ final class OpenApiResponseValidator
             $responseContentType,
             $version,
             $discriminatorContext,
+            $jsonSchemaDialect,
         );
 
         $headerErrors = $this->validateHeaders(
@@ -333,6 +336,7 @@ final class OpenApiResponseValidator
             $responseSpec,
             $responseHeaders,
             $version,
+            $jsonSchemaDialect,
         );
 
         // The body validator matched a non-JSON media-type key that declares
@@ -532,6 +536,7 @@ final class OpenApiResponseValidator
         ?string $responseContentType,
         OpenApiVersion $version,
         DiscriminatorContext $discriminatorContext,
+        string $jsonSchemaDialect,
     ): ResponseBodyValidationResult {
         // 204 No Content (and similar) declare no `content` block. Nothing
         // to validate — return empty so the result aggregates cleanly.
@@ -579,6 +584,7 @@ final class OpenApiResponseValidator
                 $responseContentType,
                 $version,
                 $discriminatorContext,
+                $jsonSchemaDialect,
             );
         } catch (RuntimeException $e) {
             $previous = $e->getPrevious();
@@ -615,6 +621,7 @@ final class OpenApiResponseValidator
         array $responseSpec,
         ?array $responseHeaders,
         OpenApiVersion $version,
+        string $jsonSchemaDialect,
     ): array {
         // Header validation is opt-in: callers that pre-date the parameter
         // (or framework-agnostic adapters that never see headers) pass null
@@ -654,7 +661,7 @@ final class OpenApiResponseValidator
             $specName,
             $method,
             $matchedPath,
-            fn(): array => $this->headerValidator->validate($headersSpec, $responseHeaders, $version),
+            fn(): array => $this->headerValidator->validate($headersSpec, $responseHeaders, $version, $jsonSchemaDialect),
         );
     }
 

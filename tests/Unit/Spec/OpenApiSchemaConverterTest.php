@@ -17,7 +17,6 @@ use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
 use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
 use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
 
-use function implode;
 use function restore_error_handler;
 use function set_error_handler;
 use function str_contains;
@@ -214,192 +213,36 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
-    public function v31_prefix_items_converted_to_items(): void
+    public function v31_prefix_items_and_items_are_preserved_for_native_2020_12_validation(): void
     {
         $schema = [
             'type' => 'array',
-            'prefixItems' => [
-                ['type' => 'string'],
-                ['type' => 'integer'],
-            ],
-        ];
-
-        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
-
-        $this->assertArrayNotHasKey('prefixItems', $result);
-        $this->assertArrayHasKey('items', $result);
-        $this->assertCount(2, $result['items']);
-        $this->assertSame(['type' => 'string'], $result['items'][0]);
-        $this->assertSame(['type' => 'integer'], $result['items'][1]);
-        // No sibling `items` declared on input → no `additionalItems` emitted.
-        // Draft 07 defaults to "anything allowed" past the tuple, matching
-        // 2020-12 semantics when `items` is absent alongside `prefixItems`.
-        $this->assertArrayNotHasKey('additionalItems', $result);
-    }
-
-    #[Test]
-    public function v31_prefix_items_with_sibling_items_schema_is_lowered_to_additional_items(): void
-    {
-        // Anchor case for the issue #212 fix: sibling `items` must survive
-        // as `additionalItems`. The handlePrefixItems docblock carries the
-        // full 2020-12 § 10.3 rationale; this test pins the canonical mapping.
-        $schema = [
-            'type' => 'array',
-            'prefixItems' => [
-                ['type' => 'string'],
-                ['type' => 'integer'],
-            ],
+            'prefixItems' => [['type' => 'string'], ['type' => 'integer']],
             'items' => ['type' => 'boolean'],
         ];
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-        $this->assertArrayNotHasKey('prefixItems', $result);
-        $this->assertCount(2, $result['items']);
-        $this->assertSame(['type' => 'string'], $result['items'][0]);
-        $this->assertSame(['type' => 'integer'], $result['items'][1]);
-        $this->assertArrayHasKey('additionalItems', $result);
-        $this->assertSame(['type' => 'boolean'], $result['additionalItems']);
-    }
-
-    #[Test]
-    public function v31_prefix_items_with_items_false_lowers_to_additional_items_false(): void
-    {
-        // Closed-tuple idiom: `prefixItems + items: false` means "exactly N
-        // elements, in this order, nothing more". Draft 07 encodes the same
-        // closure as `additionalItems: false`.
-        $schema = [
-            'type' => 'array',
-            'prefixItems' => [['type' => 'string']],
-            'items' => false,
-        ];
-
-        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
-
-        $this->assertArrayNotHasKey('prefixItems', $result);
-        $this->assertCount(1, $result['items']);
-        $this->assertArrayHasKey('additionalItems', $result);
-        $this->assertFalse($result['additionalItems']);
-    }
-
-    #[Test]
-    public function v31_prefix_items_with_items_true_omits_additional_items(): void
-    {
-        // `items: true` is the 2020-12 explicit form of the implicit default
-        // ("any overflow allowed"). Draft 07's implicit default is the same
-        // under opis's pinned Draft 07 runtime, so the key is omitted rather
-        // than emitted. The opis-equivalence regression test in
-        // SchemaValidatorRunnerTest pins the "absent === true" assumption.
-        $schema = [
-            'type' => 'array',
-            'prefixItems' => [['type' => 'string']],
-            'items' => true,
-        ];
-
-        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
-
-        $this->assertArrayNotHasKey('prefixItems', $result);
-        $this->assertCount(1, $result['items']);
+        $this->assertSame($schema['prefixItems'], $result['prefixItems']);
+        $this->assertSame($schema['items'], $result['items']);
         $this->assertArrayNotHasKey('additionalItems', $result);
     }
 
     #[Test]
-    public function v31_nested_prefix_items_inside_additional_items_converted_recursively(): void
+    public function v31_nested_prefix_items_are_preserved(): void
     {
-        // The schema routed to `additionalItems` may itself be a 2020-12
-        // subschema (here: a nested array with its own `prefixItems`).
-        // Without recursion into `additionalItems`, the inner `prefixItems`
-        // would survive into the lowered output.
         $schema = [
-            'type' => 'array',
-            'prefixItems' => [['type' => 'string']],
-            'items' => [
-                'type' => 'array',
-                'prefixItems' => [['type' => 'integer']],
-            ],
-        ];
-
-        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
-
-        $this->assertArrayHasKey('additionalItems', $result);
-        $this->assertArrayNotHasKey('prefixItems', $result['additionalItems']);
-        $this->assertArrayHasKey('items', $result['additionalItems']);
-        $this->assertSame([['type' => 'integer']], $result['additionalItems']['items']);
-    }
-
-    #[Test]
-    public function v31_prefix_items_with_sibling_items_inside_one_of_lowers_recursively(): void
-    {
-        // Pins the recursion order: handlePrefixItems must run at the top of
-        // convertInPlace for each frame, so a `prefixItems + items` carried
-        // inside a combiner is lowered on the combiner's own pass. A future
-        // refactor that moved handlePrefixItems below the combiner loop would
-        // silently regress this — the test fails for the right reason.
-        $schema = [
-            'oneOf' => [
-                [
-                    'type' => 'array',
-                    'prefixItems' => [['type' => 'string']],
-                    'items' => ['type' => 'boolean'],
-                ],
-                ['type' => 'string'],
-            ],
-        ];
-
-        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
-
-        $tupleBranch = $result['oneOf'][0];
-        $this->assertArrayNotHasKey('prefixItems', $tupleBranch);
-        $this->assertSame([['type' => 'string']], $tupleBranch['items']);
-        $this->assertSame(['type' => 'boolean'], $tupleBranch['additionalItems']);
-    }
-
-    #[Test]
-    public function v31_prefix_items_with_sibling_items_inside_additional_properties_lowers_recursively(): void
-    {
-        // additionalProperties is one of the other recursion sites; a
-        // `prefixItems + items` value placed there must lower the same way.
-        $schema = [
-            'type' => 'object',
-            'additionalProperties' => [
+            'oneOf' => [[
                 'type' => 'array',
                 'prefixItems' => [['type' => 'string']],
-                'items' => ['type' => 'boolean'],
-            ],
+                'items' => false,
+            ]],
         ];
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-        $value = $result['additionalProperties'];
-        $this->assertArrayNotHasKey('prefixItems', $value);
-        $this->assertSame([['type' => 'string']], $value['items']);
-        $this->assertSame(['type' => 'boolean'], $value['additionalItems']);
-    }
-
-    #[Test]
-    public function v31_prefix_items_with_malformed_items_sibling_warns_and_drops(): void
-    {
-        // JSON Schema 2020-12 §10.3 requires `items` to be `Schema | bool`.
-        // A scalar like `items: "string"` is a spec defect; hoisting it
-        // into `additionalItems` would surface as an opis parse error far
-        // from the source. handlePrefixItems must warn and drop it.
-        $schema = [
-            'type' => 'array',
-            'prefixItems' => [['type' => 'string']],
-            'items' => 'boolean',
-        ];
-
-        $captured = $this->captureWarnings(
-            static fn() => OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1),
-        );
-
-        $this->assertCount(1, $captured);
-        $this->assertStringContainsString("sibling 'items' of 'prefixItems'", $captured[0]);
-        $this->assertStringContainsString('string', $captured[0]);
-
-        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
-        $this->assertArrayNotHasKey('additionalItems', $result);
-        $this->assertSame([['type' => 'string']], $result['items']);
+        $this->assertSame($schema['oneOf'][0]['prefixItems'], $result['oneOf'][0]['prefixItems']);
+        $this->assertFalse($result['oneOf'][0]['items']);
     }
 
     #[Test]
@@ -427,7 +270,7 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
-    public function v31_draft_2020_12_keys_removed(): void
+    public function v31_draft_2020_12_keys_preserved(): void
     {
         $schema = [
             'type' => 'object',
@@ -442,9 +285,9 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-        $this->assertArrayNotHasKey('$dynamicRef', $result);
-        $this->assertArrayNotHasKey('$dynamicAnchor', $result);
-        $this->assertArrayNotHasKey('contentSchema', $result);
+        $this->assertSame('#meta', $result['$dynamicRef']);
+        $this->assertSame('meta', $result['$dynamicAnchor']);
+        $this->assertSame(['type' => 'string'], $result['contentSchema']);
         $this->assertArrayNotHasKey('examples', $result);
         $this->assertSame('object', $result['type']);
         $this->assertArrayHasKey('properties', $result);
@@ -492,7 +335,7 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
-    public function v31_nested_prefix_items_converted_recursively(): void
+    public function v31_nested_prefix_items_preserved_recursively(): void
     {
         $schema = [
             'type' => 'object',
@@ -509,9 +352,10 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-        $this->assertArrayNotHasKey('prefixItems', $result['properties']['coordinates']);
-        $this->assertArrayHasKey('items', $result['properties']['coordinates']);
-        $this->assertCount(2, $result['properties']['coordinates']['items']);
+        $this->assertSame(
+            [['type' => 'number'], ['type' => 'number']],
+            $result['properties']['coordinates']['prefixItems'],
+        );
     }
 
     #[Test]
@@ -944,14 +788,12 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     // ========================================
-    // OAS 3.1 const lowered to enum (Draft 07)
+    // OAS 3.1 const preserved for native 2020-12
     // ========================================
 
     #[Test]
-    public function v31_const_lowered_to_single_value_enum(): void
+    public function v31_const_is_preserved(): void
     {
-        // Draft 07 doesn't support `const`. Lower to `enum: [value]` so opis
-        // actually enforces the value rather than silently passing.
         $schema = [
             'type' => 'string',
             'const' => 'fixed',
@@ -959,12 +801,12 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-        $this->assertArrayNotHasKey('const', $result);
-        $this->assertSame(['fixed'], $result['enum']);
+        $this->assertSame('fixed', $result['const']);
+        $this->assertArrayNotHasKey('enum', $result);
     }
 
     #[Test]
-    public function v31_const_null_value_lowered_to_enum(): void
+    public function v31_const_null_value_is_preserved(): void
     {
         $schema = [
             'const' => null,
@@ -972,15 +814,13 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-        $this->assertArrayNotHasKey('const', $result);
-        $this->assertSame([null], $result['enum']);
+        $this->assertArrayHasKey('const', $result);
+        $this->assertNull($result['const']);
     }
 
     #[Test]
-    public function v31_const_does_not_overwrite_existing_enum(): void
+    public function v31_const_and_enum_are_both_preserved(): void
     {
-        // If both keys are present the spec is malformed; preserve `enum` and
-        // drop `const` (the conservative choice — `enum` is the wider constraint).
         $schema = [
             'enum' => ['a', 'b'],
             'const' => 'a',
@@ -989,7 +829,7 @@ class OpenApiSchemaConverterTest extends TestCase
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
         $this->assertSame(['a', 'b'], $result['enum']);
-        $this->assertArrayNotHasKey('const', $result);
+        $this->assertSame('a', $result['const']);
     }
 
     // ========================================
@@ -1002,61 +842,33 @@ class OpenApiSchemaConverterTest extends TestCase
     // ========================================
 
     #[Test]
-    public function v31_unevaluated_properties_emits_warning(): void
+    public function v31_unevaluated_properties_is_preserved_without_warning(): void
     {
         $schema = [
             'type' => 'object',
             'unevaluatedProperties' => false,
         ];
 
-        $captured = null;
-        set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
-            if ($errno === E_USER_WARNING) {
-                $captured = $errstr;
+        $warnings = $this->captureWarnings(static fn() => OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1));
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-                return true;
-            }
-
-            return false;
-        });
-
-        try {
-            OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
-        } finally {
-            restore_error_handler();
-        }
-
-        $this->assertNotNull($captured);
-        $this->assertStringContainsString('unevaluatedProperties', (string) $captured);
+        $this->assertSame([], $warnings);
+        $this->assertFalse($result['unevaluatedProperties']);
     }
 
     #[Test]
-    public function v31_unevaluated_items_emits_warning(): void
+    public function v31_unevaluated_items_is_preserved_without_warning(): void
     {
         $schema = [
             'type' => 'array',
             'unevaluatedItems' => false,
         ];
 
-        $captured = null;
-        set_error_handler(static function (int $errno, string $errstr) use (&$captured): bool {
-            if ($errno === E_USER_WARNING) {
-                $captured = $errstr;
+        $warnings = $this->captureWarnings(static fn() => OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1));
+        $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-                return true;
-            }
-
-            return false;
-        });
-
-        try {
-            OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
-        } finally {
-            restore_error_handler();
-        }
-
-        $this->assertNotNull($captured);
-        $this->assertStringContainsString('unevaluatedItems', (string) $captured);
+        $this->assertSame([], $warnings);
+        $this->assertFalse($result['unevaluatedItems']);
     }
 
     #[Test]
@@ -1123,7 +935,7 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
-    public function repeated_calls_with_same_keyword_warn_only_once(): void
+    public function repeated_v31_native_keyword_calls_do_not_warn(): void
     {
         // Avoid log spam: warn once per process for a given keyword, not per
         // call. The schema converter keeps an internal seen-set.
@@ -1152,11 +964,11 @@ class OpenApiSchemaConverterTest extends TestCase
             restore_error_handler();
         }
 
-        $this->assertSame(1, $count);
+        $this->assertSame(0, $count);
     }
 
     #[Test]
-    public function multiple_unsupported_keywords_on_same_schema_warn_independently(): void
+    public function multiple_v31_native_keywords_do_not_warn(): void
     {
         // The dedup is per-keyword, not per-call. A schema declaring two
         // unsupported keywords at once must surface two distinct warnings.
@@ -1183,7 +995,7 @@ class OpenApiSchemaConverterTest extends TestCase
             restore_error_handler();
         }
 
-        $this->assertCount(2, $captured);
+        $this->assertSame([], $captured);
     }
 
     #[Test]
@@ -1226,7 +1038,7 @@ class OpenApiSchemaConverterTest extends TestCase
     // ========================================
 
     #[Test]
-    public function dependent_schemas_emits_warning(): void
+    public function v31_dependent_schemas_is_preserved_without_warning(): void
     {
         $schema = [
             'type' => 'object',
@@ -1243,12 +1055,11 @@ class OpenApiSchemaConverterTest extends TestCase
             OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
         });
 
-        $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('dependentSchemas', $warnings[0]);
+        $this->assertSame([], $warnings);
     }
 
     #[Test]
-    public function dependent_required_emits_warning(): void
+    public function v31_dependent_required_is_preserved_without_warning(): void
     {
         $schema = [
             'type' => 'object',
@@ -1263,8 +1074,7 @@ class OpenApiSchemaConverterTest extends TestCase
             OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
         });
 
-        $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('dependentRequired', $warnings[0]);
+        $this->assertSame([], $warnings);
     }
 
     #[Test]
@@ -1287,7 +1097,7 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
-    public function dependent_keywords_warn_independently_and_point_to_if_then_else(): void
+    public function v31_dependent_keywords_do_not_warn(): void
     {
         // Per-keyword dedup: a schema declaring both keywords at once must
         // surface two distinct warnings, each pointing the user at the
@@ -1304,15 +1114,11 @@ class OpenApiSchemaConverterTest extends TestCase
             OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
         });
 
-        $this->assertCount(2, $warnings);
-        $joined = implode("\n", $warnings);
-        $this->assertStringContainsString('dependentSchemas', $joined);
-        $this->assertStringContainsString('dependentRequired', $joined);
-        $this->assertStringContainsString('if/then/else', $joined);
+        $this->assertSame([], $warnings);
     }
 
     #[Test]
-    public function dependent_keyword_warns_only_once_across_repeated_calls(): void
+    public function repeated_v31_dependent_keyword_calls_do_not_warn(): void
     {
         // Core "one-shot per keyword per process" contract: three convert()
         // calls must still surface only one warning. A single-call test
@@ -1329,12 +1135,11 @@ class OpenApiSchemaConverterTest extends TestCase
             OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
         });
 
-        $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('dependentRequired', $warnings[0]);
+        $this->assertSame([], $warnings);
     }
 
     #[Test]
-    public function dependent_keyword_nested_below_root_emits_warning(): void
+    public function nested_v31_dependent_keyword_does_not_warn(): void
     {
         // The warning fires from convertInPlace(), which recurses into every
         // subschema position. Real specs almost always carry these keywords
@@ -1356,8 +1161,7 @@ class OpenApiSchemaConverterTest extends TestCase
             OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
         });
 
-        $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('dependentSchemas', $warnings[0]);
+        $this->assertSame([], $warnings);
     }
 
     #[Test]
@@ -2103,7 +1907,7 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
-    public function unknown_keyword_warns_while_discriminator_is_stripped_when_not_enforced(): void
+    public function native_keyword_does_not_warn_while_discriminator_is_stripped_when_not_enforced(): void
     {
         // `unevaluatedProperties` (Draft 07 doesn't implement) still warns, but
         // `discriminator.mapping` no longer does — it is lowered when enforced
@@ -2121,8 +1925,7 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $warnings = $this->captureWarnings(static fn() => OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1));
 
-        $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('unevaluatedProperties', $warnings[0]);
+        $this->assertSame([], $warnings);
     }
 
     #[Test]
@@ -2142,11 +1945,11 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     // ========================================
-    // $schema stripped from converter output (Draft 07 alignment)
+    // $schema selection
     // ========================================
 
     #[Test]
-    public function v31_schema_keyword_stripped(): void
+    public function v31_schema_keyword_is_preserved(): void
     {
         // OAS 3.1 lets a spec author override the JSON Schema dialect via
         // `$schema` on an inline schema. If we keep that declaration, opis
@@ -2162,11 +1965,11 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-        $this->assertArrayNotHasKey('$schema', $result);
+        $this->assertSame('https://json-schema.org/draft/2020-12/schema', $result['$schema']);
     }
 
     #[Test]
-    public function v30_schema_keyword_stripped(): void
+    public function v30_schema_keyword_is_normalized_to_draft_07(): void
     {
         // 3.0 specs rarely declare `$schema`, but if they do, the same
         // alignment concern applies — strip it.
@@ -2177,11 +1980,11 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_0);
 
-        $this->assertArrayNotHasKey('$schema', $result);
+        $this->assertSame('http://json-schema.org/draft-07/schema#', $result['$schema']);
     }
 
     #[Test]
-    public function nested_schema_keyword_also_stripped(): void
+    public function nested_schema_keyword_is_preserved(): void
     {
         // Recursion guard: $schema declared on an inner subschema must
         // also be stripped, not just the root.
@@ -2198,7 +2001,10 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-        $this->assertArrayNotHasKey('$schema', $result['properties']['nested']);
+        $this->assertSame(
+            'https://json-schema.org/draft/2020-12/schema',
+            $result['properties']['nested']['$schema'],
+        );
     }
 
     // ========================================
@@ -2268,7 +2074,7 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
-    public function v31_const_lowered_recursively_in_nested_property(): void
+    public function v31_const_preserved_recursively_in_nested_property(): void
     {
         $schema = [
             'type' => 'object',
@@ -2281,12 +2087,11 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-        $this->assertArrayNotHasKey('const', $result['properties']['kind']);
-        $this->assertSame(['pet'], $result['properties']['kind']['enum']);
+        $this->assertSame('pet', $result['properties']['kind']['const']);
     }
 
     #[Test]
-    public function v31_const_lowered_recursively_in_array_items(): void
+    public function v31_const_preserved_recursively_in_array_items(): void
     {
         $schema = [
             'type' => 'array',
@@ -2297,8 +2102,7 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-        $this->assertArrayNotHasKey('const', $result['items']);
-        $this->assertSame(['fixed'], $result['items']['enum']);
+        $this->assertSame('fixed', $result['items']['const']);
     }
 
     // ========================================
@@ -2364,7 +2168,7 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
-    public function v31_prefix_items_inside_then_is_lowered_to_tuple_items(): void
+    public function v31_prefix_items_inside_then_is_preserved(): void
     {
         // Bug 1 from issue #214: prefixItems nested inside `then` was not
         // recognised by opis Draft 07 (which only registers prefixItems on
@@ -2383,18 +2187,14 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-        $this->assertArrayNotHasKey(
-            'prefixItems',
-            $result['then']['properties']['data'],
-        );
         $this->assertSame(
             [['type' => 'string'], ['type' => 'integer']],
-            $result['then']['properties']['data']['items'],
+            $result['then']['properties']['data']['prefixItems'],
         );
     }
 
     #[Test]
-    public function v31_prefix_items_inside_contains_is_lowered(): void
+    public function v31_prefix_items_inside_contains_is_preserved(): void
     {
         $schema = [
             'type' => 'array',
@@ -2406,12 +2206,11 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-        $this->assertArrayNotHasKey('prefixItems', $result['contains']);
-        $this->assertSame([['type' => 'string']], $result['contains']['items']);
+        $this->assertSame([['type' => 'string']], $result['contains']['prefixItems']);
     }
 
     #[Test]
-    public function v31_const_inside_else_is_lowered_to_enum(): void
+    public function v31_const_inside_else_is_preserved(): void
     {
         $schema = [
             'if' => ['properties' => ['kind' => ['const' => 'a']]],
@@ -2425,12 +2224,11 @@ class OpenApiSchemaConverterTest extends TestCase
 
         $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
 
-        $this->assertArrayNotHasKey('const', $result['else']['properties']['fallback']);
-        $this->assertSame(['use-default'], $result['else']['properties']['fallback']['enum']);
+        $this->assertSame('use-default', $result['else']['properties']['fallback']['const']);
     }
 
     #[Test]
-    public function v31_const_lowered_inside_dependent_schemas(): void
+    public function v31_const_preserved_inside_dependent_schemas(): void
     {
         // dependentSchemas is a 2019-09 keyword; opis Draft 07 ignores the
         // outer keyword entirely, but the inner schemas should still be
@@ -2455,15 +2253,8 @@ class OpenApiSchemaConverterTest extends TestCase
             $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
         });
 
-        $this->assertCount(1, $warnings, 'only the #216 dependentSchemas warning is expected');
-        $this->assertArrayNotHasKey(
-            'const',
-            $result['dependentSchemas']['creditCard']['properties']['currency'],
-        );
-        $this->assertSame(
-            ['USD'],
-            $result['dependentSchemas']['creditCard']['properties']['currency']['enum'],
-        );
+        $this->assertSame([], $warnings);
+        $this->assertSame('USD', $result['dependentSchemas']['creditCard']['properties']['currency']['const']);
     }
 
     #[Test]
@@ -2728,7 +2519,7 @@ class OpenApiSchemaConverterTest extends TestCase
             OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
         });
 
-        $this->assertCount(1, $warnings, 'only the #216 dependentSchemas warning is expected');
+        $this->assertSame([], $warnings);
         $this->assertSame($original, $schema);
     }
 
@@ -2758,7 +2549,8 @@ class OpenApiSchemaConverterTest extends TestCase
             $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
         });
 
-        $this->assertCount(1, $warnings, 'only the #216 dependentSchemas warning is expected');
+        $this->assertSame([], $warnings);
+        unset($result['$schema']);
         $this->assertSame($schema, $result);
     }
 
@@ -2786,7 +2578,8 @@ class OpenApiSchemaConverterTest extends TestCase
             $result = OpenApiSchemaConverter::convert($schema, OpenApiVersion::V3_1);
         });
 
-        $this->assertCount(1, $warnings, 'only the #216 dependentSchemas warning is expected');
+        $this->assertSame([], $warnings);
+        unset($result['$schema']);
         $this->assertSame($schema, $result);
     }
 
@@ -2850,38 +2643,37 @@ class OpenApiSchemaConverterTest extends TestCase
     // ========================================
 
     #[Test]
-    public function v31_const_false_lowered_to_enum(): void
+    public function v31_const_false_is_preserved(): void
     {
         // `array_key_exists` correctly detects const: false; isset() would not.
         // Pin the implementation choice with an explicit test.
         $result = OpenApiSchemaConverter::convert(['const' => false], OpenApiVersion::V3_1);
 
-        $this->assertArrayNotHasKey('const', $result);
-        $this->assertSame([false], $result['enum']);
+        $this->assertFalse($result['const']);
     }
 
     #[Test]
-    public function v31_const_zero_lowered_to_enum(): void
+    public function v31_const_zero_is_preserved(): void
     {
         $result = OpenApiSchemaConverter::convert(['const' => 0], OpenApiVersion::V3_1);
 
-        $this->assertSame([0], $result['enum']);
+        $this->assertSame(0, $result['const']);
     }
 
     #[Test]
-    public function v31_const_empty_string_lowered_to_enum(): void
+    public function v31_const_empty_string_is_preserved(): void
     {
         $result = OpenApiSchemaConverter::convert(['const' => ''], OpenApiVersion::V3_1);
 
-        $this->assertSame([''], $result['enum']);
+        $this->assertSame('', $result['const']);
     }
 
     #[Test]
-    public function v31_const_empty_array_lowered_to_enum(): void
+    public function v31_const_empty_array_is_preserved(): void
     {
         $result = OpenApiSchemaConverter::convert(['const' => []], OpenApiVersion::V3_1);
 
-        $this->assertSame([[]], $result['enum']);
+        $this->assertSame([], $result['const']);
     }
 
     /**

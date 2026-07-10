@@ -87,6 +87,8 @@ final class OpenApiRefResolver
     private const USER_NAMED_MAP_KEYS = [
         'properties',
         'patternProperties',
+        '$defs',
+        'dependentSchemas',
         'schemas',
         'responses',
         'parameters',
@@ -310,7 +312,9 @@ final class OpenApiRefResolver
             // additionalProperties is intentionally excluded: its value is a single
             // schema (not a dict of schemas), so a direct $ref under it is a
             // legitimate Reference Object that must resolve.
-            $childInsideUserNamedMap = in_array($key, self::USER_NAMED_MAP_KEYS, true);
+            $childInsideUserNamedMap = $insideUserNamedMap
+                ? false
+                : in_array($key, self::USER_NAMED_MAP_KEYS, true);
             self::walk($child, $root, $chain, $childInsideUserNamedMap, $context, $documentCache);
         }
         unset($child);

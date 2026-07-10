@@ -11,6 +11,7 @@ use Faker\Generator;
 use InvalidArgumentException;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 
+use function array_key_exists;
 use function array_values;
 use function class_exists;
 use function count;
@@ -29,15 +30,16 @@ use function substr;
 use function trigger_error;
 
 /**
- * Generate happy-path values that conform to a JSON Schema (Draft 07).
+ * Generate happy-path values that conform to a converted JSON Schema.
  *
  * Inputs are expected to be already-converted via {@see OpenApiSchemaConverter}
  * — i.e. OAS-only keys (`nullable`, `discriminator`, etc.) have been stripped
  * and OAS 3.1 type-arrays normalised. The generator is deliberately minimal:
  *
  * Supported keywords: `type` (string|integer|number|boolean|object|array|null),
- * `enum`, `format` (email|uuid|date|date-time|uri|url), `minLength`/`maxLength`,
- * `minimum`/`maximum`, `required`, `properties`, `items`.
+ * `const`, `enum`, `format` (email|uuid|date|date-time|uri|url),
+ * `minLength`/`maxLength`, `minimum`/`maximum`, `required`, `properties`,
+ * `items`, and `prefixItems`.
  *
  * Out of scope (MVP): `oneOf`/`anyOf`/`allOf` composition, regex `pattern`,
  * `additionalProperties: <schema>`, `minItems`/`maxItems`, `multipleOf`.
@@ -92,6 +94,10 @@ final class SchemaDataGenerator
      */
     public static function generateOne(array $schema, ?Generator $faker, int $iteration): mixed
     {
+        if (array_key_exists('const', $schema)) {
+            return $schema['const'];
+        }
+
         if (isset($schema['enum']) && is_array($schema['enum']) && $schema['enum'] !== []) {
             $values = array_values($schema['enum']);
 
@@ -176,6 +182,10 @@ final class SchemaDataGenerator
             return 'array';
         }
 
+        if (isset($schema['prefixItems']) && is_array($schema['prefixItems'])) {
+            return 'array';
+        }
+
         return 'string';
     }
 
@@ -228,6 +238,18 @@ final class SchemaDataGenerator
      */
     private static function generateArray(array $schema, ?Generator $faker, int $iteration): array
     {
+        $prefixItems = $schema['prefixItems'] ?? null;
+        if (is_array($prefixItems)) {
+            $result = [];
+            foreach ($prefixItems as $index => $item) {
+                if (is_array($item)) {
+                    $result[] = self::generateOne($item, $faker, $iteration + $index);
+                }
+            }
+
+            return $result;
+        }
+
         $items = $schema['items'] ?? null;
         if (!is_array($items)) {
             return [];

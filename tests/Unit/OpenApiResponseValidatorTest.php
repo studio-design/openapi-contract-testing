@@ -78,6 +78,39 @@ class OpenApiResponseValidatorTest extends TestCase
     }
 
     #[Test]
+    public function root_json_schema_dialect_selects_draft_07_validation(): void
+    {
+        $valid = $this->validator->validate(
+            'dialect-draft07',
+            'GET',
+            '/tuple',
+            200,
+            ['name', 42],
+            'application/json',
+        );
+        $invalid = $this->validator->validate(
+            'dialect-draft07',
+            'GET',
+            '/tuple',
+            200,
+            ['name', 'not-an-integer'],
+            'application/json',
+        );
+
+        $this->assertTrue($valid->isValid(), $valid->errorMessage());
+        $this->assertFalse($invalid->isValid());
+    }
+
+    #[Test]
+    public function unsupported_root_json_schema_dialect_fails_explicitly(): void
+    {
+        $this->expectException(InvalidOpenApiSpecException::class);
+        $this->expectExceptionMessage('Unsupported JSON Schema dialect');
+
+        $this->validator->validate('unsupported-dialect', 'GET', '/anything', 200, null);
+    }
+
+    #[Test]
     public function openapi_32_plain_and_new_operation_forms_are_validated(): void
     {
         $plain = $this->validator->validate(

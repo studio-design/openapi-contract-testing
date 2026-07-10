@@ -12,6 +12,7 @@ use Studio\OpenApiContractTesting\SchemaContext;
 use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
 use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
+use Studio\OpenApiContractTesting\Spec\OpenApiSchemaDialect;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Request\ParameterCollector;
 use ValueError;
@@ -103,7 +104,8 @@ final class OpenApiEndpointExplorer
         }
 
         $version = OpenApiVersion::fromSpec($spec);
-        $bodySchema = self::extractRequestBodySchema($operation, $version, $methodUpper, $matchedPath, $specName);
+        $jsonSchemaDialect = OpenApiSchemaDialect::fromSpec($spec, $version);
+        $bodySchema = self::extractRequestBodySchema($operation, $version, $methodUpper, $matchedPath, $specName, $jsonSchemaDialect);
         /** @var list<array<string, mixed>> $parameters */
         $parameters = ParameterCollector::collect($methodUpper, $matchedPath, $pathSpec, $operation)->parameters;
         self::assertParametersGeneratable($parameters, $methodUpper, $matchedPath, $specName);
@@ -113,9 +115,9 @@ final class OpenApiEndpointExplorer
         for ($i = 0; $i < $cases; $i++) {
             $built[] = new ExploredCase(
                 body: $bodySchema !== null ? SchemaDataGenerator::generateOne($bodySchema, $faker, $i) : null,
-                query: self::generateParameterValues($parameters, 'query', $version, $faker, $i),
-                headers: self::generateParameterValues($parameters, 'header', $version, $faker, $i),
-                pathParams: self::generateParameterValues($parameters, 'path', $version, $faker, $i),
+                query: self::generateParameterValues($parameters, 'query', $version, $jsonSchemaDialect, $faker, $i),
+                headers: self::generateParameterValues($parameters, 'header', $version, $jsonSchemaDialect, $faker, $i),
+                pathParams: self::generateParameterValues($parameters, 'path', $version, $jsonSchemaDialect, $faker, $i),
                 method: $methodEnum,
                 matchedPath: $matchedPath,
             );
@@ -151,7 +153,8 @@ final class OpenApiEndpointExplorer
     }
 
     /**
-     * Find the JSON-shaped requestBody schema and convert it to Draft 07.
+     * Find the JSON-shaped requestBody schema and convert it to the dialect
+     * selected by the OpenAPI document.
      * Returns null only when the operation declares no `requestBody` at all
      * (or one that isn't required and lacks a JSON variant) — that's the
      * "GET-style endpoint" case and the explorer correctly emits cases with
@@ -175,6 +178,7 @@ final class OpenApiEndpointExplorer
         string $method,
         string $matchedPath,
         string $specName,
+        string $jsonSchemaDialect,
     ): ?array {
         $requestBody = $operation['requestBody'] ?? null;
         if (!is_array($requestBody)) {
@@ -215,7 +219,7 @@ final class OpenApiEndpointExplorer
             return null;
         }
 
-        return OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
+        return OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request, null, $jsonSchemaDialect);
     }
 
     /**
@@ -271,6 +275,7 @@ final class OpenApiEndpointExplorer
         array $parameters,
         string $location,
         OpenApiVersion $version,
+        string $jsonSchemaDialect,
         ?Generator $faker,
         int $iteration,
     ): array {
@@ -287,7 +292,7 @@ final class OpenApiEndpointExplorer
             if ($schema === null) {
                 continue;
             }
-            $converted = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
+            $converted = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request, null, $jsonSchemaDialect);
             $values[$name] = SchemaDataGenerator::generateOne($converted, $faker, $iteration);
         }
 

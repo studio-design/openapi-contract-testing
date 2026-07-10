@@ -63,6 +63,7 @@ final class HeaderParameterValidator
         array $parameters,
         array $headers,
         OpenApiVersion $version,
+        ?string $jsonSchemaDialect = null,
     ): array {
         $errors = [];
         $normalizedHeaders = HeaderNormalizer::normalize($headers);
@@ -153,7 +154,7 @@ final class HeaderParameterValidator
             }
 
             $coerced = TypeCoercer::coercePrimitive($rawValue, $schema);
-            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request);
+            $jsonSchema = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request, null, $jsonSchemaDialect);
 
             $schemaObject = ObjectConverter::convert($jsonSchema);
             $dataObject = ObjectConverter::convert($coerced);
