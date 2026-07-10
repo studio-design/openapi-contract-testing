@@ -34,6 +34,26 @@ final class LaravelRouteParityAnalyzerTest extends TestCase
     }
 
     #[Test]
+    public function implicit_head_matches_an_explicit_openapi_head_operation(): void
+    {
+        $route = new Route(['GET'], 'pets', static fn() => null);
+
+        $result = (new LaravelRouteParityAnalyzer())->analyze(
+            ['front' => $this->spec([
+                '/pets' => [
+                    'get' => ['operationId' => 'listPets'],
+                    'head' => ['operationId' => 'inspectPets'],
+                ],
+            ])],
+            [$route],
+        );
+
+        $this->assertSame(['GET', 'HEAD'], array_column($result->matched, 'method'));
+        $this->assertSame([], $result->documentedButNotRegistered);
+        $this->assertSame([], $result->registeredButUndocumented);
+    }
+
+    #[Test]
     public function expands_optional_parameters_and_multi_method_routes(): void
     {
         $optional = new Route(['GET'], 'users/{user?}', static fn() => null);

@@ -10,7 +10,6 @@ use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
 use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
 use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
 
-use function array_filter;
 use function array_keys;
 use function array_map;
 use function array_slice;
@@ -81,12 +80,7 @@ final class LaravelRouteParityAnalyzer
                 static fn(string $method): string => strtoupper($method),
                 $route->methods(),
             )));
-            if (in_array('GET', $methods, true)) {
-                $methods = array_values(array_filter(
-                    $methods,
-                    static fn(string $method): bool => $method !== 'HEAD',
-                ));
-            }
+            $hasGet = in_array('GET', $methods, true);
 
             foreach ($methods as $method) {
                 if (!in_array(strtolower($method), OpenApiOperationResolver::FIXED_OPERATION_FIELDS, true) &&
@@ -103,10 +97,15 @@ final class LaravelRouteParityAnalyzer
                 }
 
                 foreach ($this->expandOptionalUri($route->uri()) as $uri) {
+                    $normalizedPath = $this->normalizeRoutePath($uri, $stripPrefixes);
+                    if ($method === 'HEAD' && $hasGet && !$this->hasOperation($operations, 'HEAD', $normalizedPath)) {
+                        continue;
+                    }
+
                     $registered[] = [
                         'method' => $method,
                         'route_uri' => $this->displayUri($uri),
-                        'normalized_path' => $this->normalizeRoutePath($uri, $stripPrefixes),
+                        'normalized_path' => $normalizedPath,
                         'route_name' => $route->getName(),
                         'domain' => $route->getDomain(),
                     ];
@@ -315,6 +314,18 @@ final class LaravelRouteParityAnalyzer
         $normalized = preg_replace('/\{[^{}]+\??\}/', '{}', $path);
 
         return $normalized === null ? $path : (rtrim($normalized, '/') ?: '/');
+    }
+
+    /** @param list<Operation> $operations */
+    private function hasOperation(array $operations, string $method, string $normalizedPath): bool
+    {
+        foreach ($operations as $operation) {
+            if ($operation['method'] === $method && $operation['normalized_path'] === $normalizedPath) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function displayUri(string $uri): string

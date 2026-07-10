@@ -64,8 +64,9 @@ Filters are combined with AND semantics:
 Laravel parameter names do not need to equal OpenAPI parameter names:
 `/pets/{pet}` matches `/pets/{petId}`. A trailing optional Laravel parameter
 is compared in both forms, so `/users/{user?}` can implement both `/users` and
-`/users/{userId}`. Laravel's implicit `HEAD` on a `GET` route is not reported as
-an undocumented route.
+`/users/{userId}`. Laravel's implicit `HEAD` on a `GET` route is ignored when
+the spec omits `head`, but it implements and matches an explicitly documented
+OpenAPI `head` operation on the same path.
 
 Fallback routes are reported as ambiguous because they cannot prove that one
 specific OpenAPI path is implemented. A custom HTTP method is supported when
