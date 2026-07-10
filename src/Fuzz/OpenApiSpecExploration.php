@@ -9,10 +9,12 @@ use RuntimeException;
 use Studio\OpenApiContractTesting\HttpMethod;
 use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
 use Throwable;
 
 use function array_filter;
 use function array_intersect;
+use function array_key_exists;
 use function array_map;
 use function array_values;
 use function crc32;
@@ -206,7 +208,7 @@ final class OpenApiSpecExploration
         }
 
         $spec = OpenApiSpecLoader::load($this->specName);
-        $paths = is_array($spec['paths'] ?? null) ? $spec['paths'] : [];
+        $paths = $this->validatedPaths($spec);
         $selected = 0;
         $executedOperations = 0;
         $executedCases = 0;
@@ -214,22 +216,12 @@ final class OpenApiSpecExploration
         $skips = [];
 
         foreach ($paths as $path => $pathItem) {
-            if (!is_string($path) || !is_array($pathItem)) {
-                continue;
-            }
-
             foreach (OpenApiOperationResolver::declaredOperations($pathItem) as $declared) {
                 $operation = $this->operationFromDeclaration($path, $declared['method'], $declared['operation']);
                 if (!$this->matchesFilters($operation)) {
                     continue;
                 }
                 $selected++;
-
-                if (!is_array($declared['operation'])) {
-                    $skips[] = new ExplorationSkip($operation, 'Operation Object is malformed.');
-
-                    continue;
-                }
 
                 if (HttpMethod::tryFrom($operation->method) === null) {
                     $skips[] = new ExplorationSkip(
@@ -273,6 +265,74 @@ final class OpenApiSpecExploration
     private static function normalizeFilterMethod(string $method): string
     {
         return OpenApiOperationResolver::normalizeMethodForKey($method);
+    }
+
+    /**
+     * Validate every structural node required to enumerate the spec before
+     * dispatching any request. A mixed valid/malformed document must fail
+     * atomically instead of executing the valid prefix and silently omitting
+     * the malformed remainder.
+     *
+     * @param array<string, mixed> $spec
+     *
+     * @return array<string, array<string, mixed>>
+     */
+    private function validatedPaths(array $spec): array
+    {
+        $paths = array_key_exists('paths', $spec) ? $spec['paths'] : [];
+        if (MalformedSpecNode::isMalformed($paths)) {
+            throw new InvalidArgumentException(sprintf(
+                "Malformed 'paths' in '%s' spec: expected object, got %s.",
+                $this->specName,
+                MalformedSpecNode::describe($paths),
+            ));
+        }
+
+        foreach ($paths as $path => $pathItem) {
+            if (!is_string($path)) {
+                throw new InvalidArgumentException(sprintf(
+                    "Malformed 'paths' in '%s' spec: expected string path key.",
+                    $this->specName,
+                ));
+            }
+
+            if (MalformedSpecNode::isMalformed($pathItem)) {
+                throw new InvalidArgumentException(sprintf(
+                    "Malformed 'paths[\"%s\"]' in '%s' spec: expected object, got %s.",
+                    $path,
+                    $this->specName,
+                    MalformedSpecNode::describe($pathItem),
+                ));
+            }
+
+            if (array_key_exists('additionalOperations', $pathItem) &&
+                MalformedSpecNode::isMalformed($pathItem['additionalOperations'])) {
+                throw new InvalidArgumentException(sprintf(
+                    "Malformed 'paths[\"%s\"].additionalOperations' in '%s' spec: expected object, got %s.",
+                    $path,
+                    $this->specName,
+                    MalformedSpecNode::describe($pathItem['additionalOperations']),
+                ));
+            }
+
+            foreach (OpenApiOperationResolver::declaredOperations($pathItem) as $declared) {
+                if (!MalformedSpecNode::isMalformed($declared['operation'])) {
+                    continue;
+                }
+
+                throw new InvalidArgumentException(sprintf(
+                    "Malformed 'paths[\"%s\"].%s' for %s %s in '%s' spec: expected object, got %s.",
+                    $path,
+                    $declared['location'],
+                    $declared['method'],
+                    $path,
+                    $this->specName,
+                    MalformedSpecNode::describe($declared['operation']),
+                ));
+            }
+        }
+
+        return $paths;
     }
 
     private function operationFromDeclaration(string $path, string $method, mixed $rawOperation): ExploredOperation

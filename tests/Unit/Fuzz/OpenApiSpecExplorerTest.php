@@ -114,6 +114,59 @@ class OpenApiSpecExplorerTest extends TestCase
     }
 
     #[Test]
+    public function rejects_malformed_paths_root_before_dispatch(): void
+    {
+        $dispatched = false;
+
+        try {
+            OpenApiSpecExplorer::explore('malformed-paths')
+                ->dispatchUsing(static function () use (&$dispatched): null {
+                    $dispatched = true;
+
+                    return null;
+                })
+                ->assertResponses();
+            $this->fail('Expected malformed paths to fail.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString("Malformed 'paths'", $e->getMessage());
+            $this->assertStringContainsString('expected object, got string', $e->getMessage());
+            $this->assertFalse($dispatched);
+        }
+    }
+
+    #[Test]
+    public function rejects_malformed_path_item_before_dispatching_valid_siblings(): void
+    {
+        $dispatched = false;
+
+        try {
+            OpenApiSpecExplorer::explore('whole-spec-malformed-path-item')
+                ->dispatchUsing(static function () use (&$dispatched): null {
+                    $dispatched = true;
+
+                    return null;
+                })
+                ->assertResponses();
+            $this->fail('Expected malformed Path Item to fail.');
+        } catch (InvalidArgumentException $e) {
+            $this->assertStringContainsString("Malformed 'paths[\"/broken\"]'", $e->getMessage());
+            $this->assertStringContainsString('expected object, got string', $e->getMessage());
+            $this->assertFalse($dispatched, 'Structural preflight must run before the valid /ok operation.');
+        }
+    }
+
+    #[Test]
+    public function rejects_malformed_operation_as_spec_failure_instead_of_skip(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage("Malformed 'paths[\"/scalar-operation\"].get'");
+
+        OpenApiSpecExplorer::explore('whole-spec-malformed-operation')
+            ->dispatchUsing(static fn(): null => null)
+            ->assertResponses();
+    }
+
+    #[Test]
     public function same_global_seed_replays_identical_cases(): void
     {
         $runs = [];

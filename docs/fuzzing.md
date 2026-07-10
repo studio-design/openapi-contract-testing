@@ -96,11 +96,13 @@ runnable [`examples/psr7`](../examples/psr7) suite demonstrates this with
   request-specific changes without mutating shared state.
 
 Operations that are declared but cannot be generated are returned in
-`SpecExplorationSummary::$skips` with their reason. This includes malformed or
-schema-less required inputs and methods outside `GET`, `POST`, `PUT`, `PATCH`,
-`DELETE`, and `QUERY`. Filters intentionally remove operations and therefore do
-not create skip entries. A filter set matching nothing fails loudly instead of
-producing a test that asserted nothing.
+`SpecExplorationSummary::$skips` with their reason. This includes schema-less
+required inputs and methods outside `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, and
+`QUERY`. Malformed `paths`, Path Item, `additionalOperations`, and Operation
+Object nodes are spec errors, not unsupported operations: a structural preflight
+fails before any request is dispatched. Filters intentionally remove operations
+and therefore do not create skip entries. A filter set matching nothing fails
+loudly instead of producing a test that asserted nothing.
 
 ### Replay and parallel runs
 
