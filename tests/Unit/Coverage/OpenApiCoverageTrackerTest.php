@@ -6,11 +6,17 @@ namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use Studio\OpenApiContractTesting\Coverage\ConsoleCoverageRenderer;
 use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
+use Studio\OpenApiContractTesting\Coverage\HtmlCoverageRenderer;
+use Studio\OpenApiContractTesting\Coverage\JsonCoverageRenderer;
+use Studio\OpenApiContractTesting\Coverage\JUnitCoverageRenderer;
+use Studio\OpenApiContractTesting\Coverage\MarkdownCoverageRenderer;
 use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
 use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
+use function array_column;
 use function implode;
 use function restore_error_handler;
 use function set_error_handler;
@@ -728,6 +734,55 @@ class OpenApiCoverageTrackerTest extends TestCase
         $joined = implode(' | ', $captured);
         $this->assertStringContainsString("spec 'malformed-response'", $joined);
         $this->assertStringContainsString('not an object', $joined);
+    }
+
+    #[Test]
+    public function openapi_32_query_and_additional_operations_appear_in_coverage(): void
+    {
+        $this->tracker->recordResponseOn(
+            'openapi-3.2',
+            'QUERY',
+            '/v1/search',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        $this->tracker->recordResponseOn(
+            'openapi-3.2',
+            'COPY',
+            '/v1/pets/{petId}',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+
+        $result = $this->tracker->computeCoverageOn('openapi-3.2');
+        $endpointKeys = array_column($result['endpoints'], 'endpoint');
+
+        $this->assertContains('QUERY /v1/search', $endpointKeys);
+        $this->assertContains('COPY /v1/pets/{petId}', $endpointKeys);
+        $this->assertSame(6, $result['endpointTotal']);
+        $this->assertSame(2, $result['endpointFullyCovered']);
+    }
+
+    #[Test]
+    public function openapi_32_operation_forms_render_in_every_report_format(): void
+    {
+        $result = $this->tracker->computeCoverageOn('openapi-3.2');
+        $results = ['openapi-3.2' => $result];
+
+        $outputs = [
+            ConsoleCoverageRenderer::render($results),
+            MarkdownCoverageRenderer::render($results),
+            JUnitCoverageRenderer::render($results),
+            JsonCoverageRenderer::render($results),
+            HtmlCoverageRenderer::render($results),
+        ];
+
+        foreach ($outputs as $output) {
+            $this->assertStringContainsString('QUERY /v1/search', $output);
+            $this->assertStringContainsString('COPY /v1/pets/{petId}', $output);
+        }
     }
 
     #[Test]

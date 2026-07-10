@@ -143,7 +143,8 @@ final class OpenApiSchemaConverter
      * motivating OpenAPI semantics.
      *
      * `$discriminator` carries the resolved root + enforce gate for
-     * `discriminator.mapping` lowering (Issue #262). `null` (the default for
+     * `discriminator.mapping` / 3.2 `defaultMapping` lowering (Issues #262
+     * and #273). `null` (the default for
      * callers that cannot enforce — parameter / header validators, the fuzz
      * explorer) is normalised to {@see DiscriminatorContext::disabled()}, under
      * which `discriminator` is stripped rather than enforced.
@@ -486,7 +487,8 @@ final class OpenApiSchemaConverter
 
     /**
      * Lower a schema's `discriminator` into enforceable Draft-07 conditionals,
-     * or strip it when enforcement is off (Issue #262).
+     * including OpenAPI 3.2 `defaultMapping`, or strip it when enforcement is
+     * off (Issues #262 and #273).
      *
      * `discriminator` is OAS-only — opis (Draft 07) cannot interpret it, so
      * historically the converter stripped it and the underlying `oneOf` /
@@ -552,21 +554,31 @@ final class OpenApiSchemaConverter
             ));
         }
 
-        // A bare discriminator (no mapping) is documentation-only — strip it.
-        if (!array_key_exists('mapping', $block)) {
+        $hasDefaultMapping = $version === OpenApiVersion::V3_2 && array_key_exists('defaultMapping', $block);
+        $defaultMapping = $hasDefaultMapping ? $block['defaultMapping'] : null;
+        if ($hasDefaultMapping && (!is_string($defaultMapping) || $defaultMapping === '')) {
+            throw new MalformedDiscriminatorException(sprintf(
+                "Malformed 'discriminator.defaultMapping': expected a non-empty string reference, got %s.",
+                get_debug_type($defaultMapping),
+            ));
+        }
+
+        // A bare discriminator (no mapping or 3.2 defaultMapping) is
+        // documentation-only — strip it.
+        if (!array_key_exists('mapping', $block) && !$hasDefaultMapping) {
             unset($schema['discriminator']);
 
             return;
         }
 
-        $mapping = $block['mapping'];
+        $mapping = $block['mapping'] ?? [];
         if (!is_array($mapping)) {
             throw new MalformedDiscriminatorException(sprintf(
                 "Malformed 'discriminator.mapping': expected object, got %s.",
                 get_debug_type($mapping),
             ));
         }
-        if ($mapping === []) {
+        if ($mapping === [] && !$hasDefaultMapping) {
             unset($schema['discriminator']);
 
             return;
@@ -576,7 +588,7 @@ final class OpenApiSchemaConverter
         // lowering already enforces this exact discriminator on the matched
         // branch, so strip without re-lowering. This both terminates the
         // recursion and avoids combinatorial blow-up for large mappings.
-        $signature = self::discriminatorSignature($propertyName, $mapping);
+        $signature = self::discriminatorSignature($propertyName, $mapping, $defaultMapping);
         if ($discriminator->hasSignature($signature)) {
             unset($schema['discriminator']);
 
@@ -610,14 +622,49 @@ final class OpenApiSchemaConverter
             ];
         }
 
+        $defaultSubschema = null;
+        if (is_string($defaultMapping)) {
+            $defaultSubschema = self::resolveMappingTarget('default', $defaultMapping, $discriminator->root, 'defaultMapping');
+            self::convertInPlace($defaultSubschema, $version, $context, $childContext);
+        }
+
         $allOf = (isset($schema['allOf']) && is_array($schema['allOf'])) ? $schema['allOf'] : [];
-        // Unknown-value guard first so its failure surfaces before the
-        // per-branch conditionals: the discriminator property must be present
-        // and one of the declared mapping keys.
-        $allOf[] = [
+        $knownValueCondition = [
             'properties' => [$propertyName => ['enum' => $knownValues]],
             'required' => [$propertyName],
         ];
+
+        if ($defaultSubschema === null) {
+            // OpenAPI 3.0/3.1 behavior: unknown or missing discriminator
+            // values fail loudly when explicit mappings are enforced.
+            $allOf[] = $knownValueCondition;
+        } elseif ($knownValues !== []) {
+            // OpenAPI 3.2: missing and unknown values route to
+            // defaultMapping, while explicit values keep their mapped branch.
+            $allOf[] = [
+                'if' => ['not' => $knownValueCondition],
+                'then' => $defaultSubschema,
+            ];
+        } else {
+            // Without explicit mapping entries we cannot reconstruct the
+            // implicit oneOf/anyOf schema-name mapping after eager $ref
+            // resolution. We can still enforce the normative missing-value
+            // fallback and make the residual unknown-value gap observable.
+            $allOf[] = [
+                'if' => ['not' => ['required' => [$propertyName]]],
+                'then' => $defaultSubschema,
+            ];
+            $warningKey = 'discriminator.defaultMapping-without-explicit-mapping';
+            if (!isset(self::$warnedKeywords[$warningKey])) {
+                self::$warnedKeywords[$warningKey] = true;
+                trigger_error(
+                    '[OpenAPI 3.2 discriminator] defaultMapping without an explicit mapping can be enforced '
+                    . 'for a missing discriminator value, but implicit mapped names cannot be reconstructed '
+                    . 'after reference resolution; unknown present values rely on the underlying oneOf/anyOf.',
+                    E_USER_WARNING,
+                );
+            }
+        }
         foreach ($branches as $branch) {
             $allOf[] = $branch;
         }
@@ -637,8 +684,12 @@ final class OpenApiSchemaConverter
      *
      * @return array<string, mixed>
      */
-    private static function resolveMappingTarget(string $value, string $pointer, array $root): array
-    {
+    private static function resolveMappingTarget(
+        string $value,
+        string $pointer,
+        array $root,
+        string $field = 'mapping',
+    ): array {
         $jsonPointer = str_starts_with($pointer, '#/')
             ? $pointer
             : '#/components/schemas/' . OpenApiRefResolver::escapePointerSegment($pointer);
@@ -646,14 +697,16 @@ final class OpenApiSchemaConverter
         [$found, $target] = OpenApiRefResolver::resolvePointer($jsonPointer, $root);
         if (!$found) {
             throw new MalformedDiscriminatorException(sprintf(
-                "Malformed 'discriminator.mapping[%s]': '%s' does not resolve to a schema in the spec.",
+                "Malformed 'discriminator.%s[%s]': '%s' does not resolve to a schema in the spec.",
+                $field,
                 $value,
                 $pointer,
             ));
         }
         if (!is_array($target)) {
             throw new MalformedDiscriminatorException(sprintf(
-                "Malformed 'discriminator.mapping[%s]': '%s' must reference a schema object, got %s.",
+                "Malformed 'discriminator.%s[%s]': '%s' must reference a schema object, got %s.",
+                $field,
                 $value,
                 $pointer,
                 get_debug_type($target),
@@ -681,7 +734,7 @@ final class OpenApiSchemaConverter
      *
      * @param array<array-key, mixed> $mapping
      */
-    private static function discriminatorSignature(string $propertyName, array $mapping): string
+    private static function discriminatorSignature(string $propertyName, array $mapping, mixed $defaultMapping = null): string
     {
         $pairs = [];
         foreach ($mapping as $key => $value) {
@@ -689,7 +742,8 @@ final class OpenApiSchemaConverter
         }
         sort($pairs);
 
-        return $propertyName . "\0" . implode("\0", $pairs);
+        return $propertyName . "\0" . implode("\0", $pairs) . "\0default\0"
+            . (is_string($defaultMapping) ? $defaultMapping : get_debug_type($defaultMapping));
     }
 
     /**

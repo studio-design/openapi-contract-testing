@@ -1441,6 +1441,72 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
+    public function openapi_32_discriminator_default_mapping_lowers_missing_and_unknown_branch(): void
+    {
+        $root = ['components' => ['schemas' => [
+            'Cat' => ['type' => 'object', 'required' => ['meow']],
+            'Other' => ['type' => 'object', 'required' => ['name']],
+        ]]];
+        $schema = [
+            'type' => 'object',
+            'discriminator' => [
+                'propertyName' => 'kind',
+                'mapping' => ['cat' => 'Cat'],
+                'defaultMapping' => 'Other',
+            ],
+        ];
+
+        $result = OpenApiSchemaConverter::convert(
+            $schema,
+            OpenApiVersion::V3_2,
+            SchemaContext::Response,
+            $this->enforcing($root),
+        );
+
+        $this->assertSame(['kind' => ['enum' => ['cat']]], $result['allOf'][0]['if']['not']['properties']);
+        $this->assertSame(['name'], $result['allOf'][0]['then']['required']);
+        $this->assertSame(['meow'], $result['allOf'][1]['then']['required']);
+    }
+
+    #[Test]
+    public function openapi_32_default_mapping_without_explicit_mapping_warns(): void
+    {
+        $root = ['components' => ['schemas' => [
+            'Other' => ['type' => 'object', 'required' => ['name']],
+        ]]];
+
+        $warnings = $this->captureWarnings(fn() => OpenApiSchemaConverter::convert(
+            [
+                'type' => 'object',
+                'discriminator' => [
+                    'propertyName' => 'kind',
+                    'defaultMapping' => 'Other',
+                ],
+            ],
+            OpenApiVersion::V3_2,
+            SchemaContext::Response,
+            $this->enforcing($root),
+        ));
+
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString('[OpenAPI 3.2 discriminator]', $warnings[0]);
+    }
+
+    #[Test]
+    public function openapi_32_malformed_default_mapping_throws_when_enforced(): void
+    {
+        $this->expectException(MalformedDiscriminatorException::class);
+        $this->expectExceptionMessage('discriminator.defaultMapping');
+
+        OpenApiSchemaConverter::convert(
+            ['discriminator' => ['propertyName' => 'kind', 'defaultMapping' => 42]],
+            OpenApiVersion::V3_2,
+            SchemaContext::Response,
+            $this->enforcing(['components' => ['schemas' => []]]),
+        );
+    }
+
+    #[Test]
     public function discriminator_then_subschema_is_recursively_converted(): void
     {
         // The resolved subtype is raw OAS and must itself be lowered — a 3.0
