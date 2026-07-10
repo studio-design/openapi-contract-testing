@@ -22,6 +22,7 @@ Validate your API responses against your OpenAPI specification during testing, a
 - **OpenAPI 3.0, 3.1 & 3.2 support** — Explicit version detection, including 3.2 `QUERY`, custom `additionalOperations`, form `querystring`, `discriminator.defaultMapping`, and observable streaming limitations
 - **Response & request validation** — dialect-aware JSON Schema via opis/json-schema: Draft 07 compatibility for OpenAPI 3.0 and native 2020-12 semantics for OpenAPI 3.1/3.2; `application/json` and any `+json` content type
 - **Endpoint coverage tracking** — Unique PHPUnit extension that reports which spec endpoints are covered by tests, at `(method, path, status, content-type)` granularity
+- **Laravel route/spec parity** — `openapi:routes` finds documented operations without routes and registered routes without OpenAPI operations, with filters, stable JSON, and independent CI gates
 - **Schema-driven request fuzzing** — `ExploresOpenApiEndpoint` trait generates N happy-path inputs straight from the spec (Schemathesis-style)
 - **Enum drift detection** — Static comparison between PHP backed enums and their `enum:` spec arrays, with PHPUnit-extension auto-discovery
 - **Schema under-description detection** — Optional strict mode that flags response fields the implementation always returns but the spec marks as optional, catching the spec gaps that conformance checks alone can't. See [`docs/strict-required.md`](docs/strict-required.md) for current scope and limitations.
@@ -36,7 +37,7 @@ Validate your API responses against your OpenAPI specification during testing, a
 Choose based on the workflow you need rather than on a single yes/no feature count:
 
 - Choose **this library** when you need response-level coverage at `(method, path, status, content-type)` granularity, several CI report formats, OpenAPI 3.1/3.2 JSON Schema semantics, schema-driven exploration, or drift detection across a framework-agnostic core and Laravel, Symfony, and Pest adapters.
-- Choose **[Spectator][spectator]** for a Laravel 12 application when route/spec parity, Artisan diagnostics, generated test stubs, JSON assertion failures, or remote/private-GitHub spec sources matter more than response-level coverage granularity.
+- Choose **[Spectator][spectator]** for a Laravel 12 application when generated test stubs, JSON assertion failures, or remote/private-GitHub spec sources matter more than response-level coverage granularity and broader framework support.
 - Choose **[league/openapi-psr7-validator][league]** when you want a low-level PSR-7 validator or PSR-15 middleware and will build the test/reporting integration yourself.
 - Choose **[osteel/openapi-httpfoundation-testing][osteel]** when you want a small HttpFoundation-to-PSR-7 validation bridge, or **[laravel-openapi-validator][kirschbaum]** when automatic validation around Laravel HTTP tests is the main requirement.
 
@@ -49,8 +50,8 @@ Choose based on the workflow you need rather than on a single yes/no feature cou
 | Coverage granularity | [`method, path, status, content-type`](docs/coverage.md) | [`method, path` operation][spectator-coverage-source] | — | — | — |
 | Coverage outputs | [Markdown, JUnit XML, JSON, HTML, GitHub Step Summary](docs/coverage.md) | [Text, JSON][spectator-coverage] | — | — | — |
 | Parallel coverage merge | [Sidecar + merge CLI](docs/parallel.md) | Not documented | — | — | — |
-| Route/spec parity | Not yet ([#277](https://github.com/studio-design/openapi-contract-testing/issues/277)) | [`spectator:routes`][spectator-cli] | — | — | — |
-| CLI diagnostics / scaffolding | Coverage merge only | [`validate`, `coverage`, `routes`, `stubs`][spectator-cli] | — | — | — |
+| Route/spec parity | [`openapi:routes`](docs/laravel-route-parity.md) with text/JSON and CI gates | [`spectator:routes`][spectator-cli] | — | — | — |
+| CLI diagnostics / scaffolding | [`doctor`](docs/doctor.md), [`openapi:routes`](docs/laravel-route-parity.md), coverage merge; no scaffolding | [`validate`, `coverage`, `routes`, `stubs`][spectator-cli] | — | — | — |
 | Structured validation failures | Text messages; JSON planned ([#282](https://github.com/studio-design/openapi-contract-testing/issues/282)) | [JSON `{errors: [...]}`][spectator-errors] | [PHP exception hierarchy][league-errors] | [Wrapper exception][osteel-readme] | [PHPUnit failure text][kirschbaum-failure-source] |
 | Schema-driven exploration | [Deterministic happy-path generation](docs/fuzzing.md) | — | — | — | — |
 | Drift / under-description checks | [Enum drift](docs/enum-drift.md), [strict required](docs/strict-required.md) | — | — | — | — |
@@ -167,6 +168,12 @@ class GetPetsTest extends TestCase
 }
 ```
 
+Before running tests, compare Laravel's registered routes with the spec:
+
+```bash
+php artisan openapi:routes --fail-on-undocumented --fail-on-unimplemented
+```
+
 To validate every response automatically, set `'auto_assert' => true` and drop the explicit assert call. To also catch request-side drift, set `'auto_validate_request' => true`. See [`docs/setup.md`](docs/setup.md) for the full configuration and opt-out reference.
 
 ## Documentation
@@ -175,6 +182,7 @@ To validate every response automatically, set `'auto_assert' => true` and drop t
 |---|---|
 | Full setup, Laravel / Symfony / framework-agnostic adapters, auto-assert, opt-out attributes, request validation, HTTP `$ref` | [`docs/setup.md`](docs/setup.md) |
 | Pre-test compatibility diagnostics (`openapi-contract doctor`) | [`docs/doctor.md`](docs/doctor.md) |
+| Laravel route/spec parity (`openapi:routes`) | [`docs/laravel-route-parity.md`](docs/laravel-route-parity.md) |
 | Pest plugin: `expect()->toMatchOpenApiResponseSchema()` and friends | [`docs/pest-plugin.md`](docs/pest-plugin.md) |
 | Schema-driven request fuzzing | [`docs/fuzzing.md`](docs/fuzzing.md) |
 | Enum drift detection | [`docs/enum-drift.md`](docs/enum-drift.md) |

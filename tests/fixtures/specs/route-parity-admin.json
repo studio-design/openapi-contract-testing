@@ -1,0 +1,19 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Route parity admin fixture",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/v1/pets": {
+      "get": {
+        "operationId": "adminListPets",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  }
+}

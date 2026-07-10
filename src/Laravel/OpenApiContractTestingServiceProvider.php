@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Laravel;
 
 use Illuminate\Support\ServiceProvider;
+use Studio\OpenApiContractTesting\Laravel\Commands\OpenApiRoutesCommand;
 
 class OpenApiContractTestingServiceProvider extends ServiceProvider
 {
@@ -18,5 +19,9 @@ class OpenApiContractTestingServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__ . '/config.php' => config_path('openapi-contract-testing.php'),
         ], 'openapi-contract-testing');
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([OpenApiRoutesCommand::class]);
+        }
     }
 }

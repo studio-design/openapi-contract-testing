@@ -15,6 +15,7 @@ This library follows [Semantic Versioning 2.0](https://semver.org/). v1.0.0 is t
 - Enum cases (additions are minor; removals or renames are major)
 - The `OpenApiValidationResult` shape (`outcome()`, `errors()`, `matchedPath()`, `skipReason()`, `isValid()`, `isSkipped()`)
 - The CLI surface of `bin/openapi-coverage-merge` (flags, exit codes, sidecar JSON wire format via `STATE_FORMAT_VERSION`)
+- The Laravel `openapi:routes` command surface (flags, exit codes, and versioned JSON output)
 - The `OpenApiCoverageExtension` PHPUnit configuration parameters (`spec_base_path`, `strip_prefixes`, `specs`, `output_file`, `console_output`, …)
 - The Laravel `ValidatesOpenApiSchema` trait's public methods
 - The category prefixes used in `E_USER_WARNING` messages (`[security]`, `[OpenAPI Schema]`, and the `[OpenAPI 3.2 ...]` categories)
