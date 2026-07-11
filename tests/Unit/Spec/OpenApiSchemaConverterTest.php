@@ -184,6 +184,49 @@ class OpenApiSchemaConverterTest extends TestCase
     }
 
     #[Test]
+    public function v30_boolean_exclusive_bounds_are_lowered_to_draft07_numeric_bounds(): void
+    {
+        $result = OpenApiSchemaConverter::convert([
+            'type' => 'number',
+            'minimum' => 0,
+            'exclusiveMinimum' => true,
+            'maximum' => 10,
+            'exclusiveMaximum' => true,
+        ], OpenApiVersion::V3_0);
+
+        $this->assertArrayNotHasKey('minimum', $result);
+        $this->assertArrayNotHasKey('maximum', $result);
+        $this->assertSame(0, $result['exclusiveMinimum']);
+        $this->assertSame(10, $result['exclusiveMaximum']);
+    }
+
+    #[Test]
+    public function v30_false_exclusive_bounds_keep_inclusive_bounds(): void
+    {
+        $result = OpenApiSchemaConverter::convert([
+            'type' => 'number',
+            'minimum' => 0,
+            'exclusiveMinimum' => false,
+        ], OpenApiVersion::V3_0);
+
+        $this->assertSame(0, $result['minimum']);
+        $this->assertArrayNotHasKey('exclusiveMinimum', $result);
+    }
+
+    #[Test]
+    public function v31_numeric_exclusive_bounds_remain_native(): void
+    {
+        $result = OpenApiSchemaConverter::convert([
+            'type' => 'number',
+            'exclusiveMinimum' => 0.5,
+            'exclusiveMaximum' => 9.5,
+        ], OpenApiVersion::V3_1);
+
+        $this->assertSame(0.5, $result['exclusiveMinimum']);
+        $this->assertSame(9.5, $result['exclusiveMaximum']);
+    }
+
+    #[Test]
     public function v30_default_version_when_omitted(): void
     {
         $schema = [

@@ -21,6 +21,9 @@ use function get_debug_type;
 use function implode;
 use function in_array;
 use function is_array;
+use function is_bool;
+use function is_float;
+use function is_int;
 use function is_string;
 use function sort;
 use function sprintf;
@@ -142,8 +145,8 @@ final class OpenApiSchemaConverter
      * `$discriminator` carries the resolved root + enforce gate for
      * `discriminator.mapping` / 3.2 `defaultMapping` lowering (Issues #262
      * and #273). `null` (the default for
-     * callers that cannot enforce — parameter / header validators, the fuzz
-     * explorer) is normalised to {@see DiscriminatorContext::disabled()}, under
+     * callers that cannot enforce — parameter / header validators) is
+     * normalised to {@see DiscriminatorContext::disabled()}, under
      * which `discriminator` is stripped rather than enforced.
      *
      * @param array<string, mixed> $schema
@@ -212,6 +215,7 @@ final class OpenApiSchemaConverter
 
         if ($version === OpenApiVersion::V3_0) {
             self::handleNullable($schema);
+            self::normalizeOpenApi30ExclusiveBounds($schema);
             unset($schema['$schema']);
             self::removeKeys($schema, self::DRAFT_2020_12_KEYS);
             self::warnIfUsesUnsupportedKeywords($schema);
@@ -362,6 +366,29 @@ final class OpenApiSchemaConverter
         // already converted by lowerDiscriminator itself and are not
         // re-visited here. See Issue #262.
         self::lowerDiscriminator($schema, $version, $context, $discriminator, $implicitDiscriminatorValues);
+    }
+
+    /**
+     * OAS 3.0 inherits the boolean Draft Wright-00 form while opis consumes
+     * Draft 07's numeric form. Preserve the bound before attaching the
+     * Draft-07 dialect marker, otherwise `true` is interpreted as the number
+     * one and changes the contract.
+     *
+     * @param array<string, mixed> $schema
+     */
+    private static function normalizeOpenApi30ExclusiveBounds(array &$schema): void
+    {
+        foreach ([['minimum', 'exclusiveMinimum'], ['maximum', 'exclusiveMaximum']] as [$inclusive, $exclusive]) {
+            if (!is_bool($schema[$exclusive] ?? null)) {
+                continue;
+            }
+            if ($schema[$exclusive] === true && (is_int($schema[$inclusive] ?? null) || is_float($schema[$inclusive] ?? null))) {
+                $schema[$exclusive] = $schema[$inclusive];
+                unset($schema[$inclusive]);
+            } else {
+                unset($schema[$exclusive]);
+            }
+        }
     }
 
     /**

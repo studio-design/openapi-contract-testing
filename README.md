@@ -23,7 +23,7 @@ Validate your API responses against your OpenAPI specification during testing, a
 - **Response & request validation** — dialect-aware JSON Schema via opis/json-schema: Draft 07 compatibility for OpenAPI 3.0 and native 2020-12 semantics for OpenAPI 3.1/3.2; `application/json` and any `+json` content type
 - **Endpoint coverage tracking** — Unique PHPUnit extension that reports which spec endpoints are covered by tests, at `(method, path, status, content-type)` granularity
 - **Laravel route/spec parity** — `openapi:routes` finds documented operations without routes and registered routes without OpenAPI operations, with filters, stable JSON, and independent CI gates
-- **Schema-driven request fuzzing** — Explore one endpoint or every supported operation with deterministic replay, filters, lifecycle/auth hooks, and explicit skip reasons
+- **Schema-driven request fuzzing** — Valid boundaries, composition branches, targeted negative cases with explicit expected status classes, deterministic replay/reduction, whole-spec filters, lifecycle/auth hooks, and explicit skip reasons
 - **Enum drift detection** — Static comparison between PHP backed enums and their `enum:` spec arrays, with PHPUnit-extension auto-discovery
 - **Schema under-description detection** — Optional strict mode that flags response fields the implementation always returns but the spec marks as optional, catching the spec gaps that conformance checks alone can't. See [`docs/strict-required.md`](docs/strict-required.md) for current scope and limitations.
 - **Skip-by-status-code** — Configurable regex list of status codes whose bodies are not validated (default: every `5xx`); per-request via `skipResponseCode()`

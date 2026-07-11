@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Studio\OpenApiContractTesting\Fuzz\ExplorationCaseKind;
 use Studio\OpenApiContractTesting\Fuzz\ExplorationSkip;
 use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
 use Studio\OpenApiContractTesting\Fuzz\ExploredOperation;
@@ -16,6 +17,7 @@ use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
 use function array_filter;
 use function array_map;
+use function intdiv;
 use function sort;
 use function str_contains;
 
@@ -185,6 +187,32 @@ class OpenApiSpecExplorerTest extends TestCase
         }
 
         $this->assertSame($runs[0], $runs[1]);
+    }
+
+    #[Test]
+    public function whole_spec_plan_can_generate_explicitly_classified_negative_cases(): void
+    {
+        $seen = [];
+
+        OpenApiSpecExplorer::explore('whole-spec-exploration', casesPerOperation: 2, seed: 9)
+            ->includeOperations(['createPet'])
+            ->negativeCases([4])
+            ->dispatchUsing(static function (ExploredCase $case) use (&$seen): int {
+                $seen[] = [$case->kind, $case->targetKeyword, $case->expectedStatusClasses];
+
+                return 422;
+            })
+            ->assertResponseUsing(static function (int $status, ExploredCase $case): void {
+                self::assertContains(intdiv($status, 100), $case->expectedStatusClasses);
+            })
+            ->assertResponses();
+
+        $this->assertCount(2, $seen);
+        foreach ($seen as [$kind, $keyword, $classes]) {
+            $this->assertSame(ExplorationCaseKind::Invalid, $kind);
+            $this->assertNotNull($keyword);
+            $this->assertSame([4], $classes);
+        }
     }
 
     #[Test]

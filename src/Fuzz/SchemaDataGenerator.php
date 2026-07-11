@@ -5,44 +5,55 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Fuzz;
 
 use const E_USER_WARNING;
+use const PHP_FLOAT_EPSILON;
 
 use Faker\Factory;
 use Faker\Generator;
 use InvalidArgumentException;
+use stdClass;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 
+use function array_filter;
 use function array_key_exists;
+use function array_keys;
+use function array_merge;
+use function array_slice;
+use function array_unique;
 use function array_values;
+use function ceil;
 use function class_exists;
 use function count;
+use function floor;
+use function implode;
 use function in_array;
+use function intdiv;
 use function is_array;
 use function is_float;
 use function is_int;
 use function is_string;
 use function max;
 use function min;
+use function preg_match;
+use function preg_match_all;
+use function round;
 use function sprintf;
-use function str_pad;
 use function str_repeat;
-use function strlen;
-use function substr;
+use function str_replace;
 use function trigger_error;
 
 /**
  * Generate happy-path values that conform to a converted JSON Schema.
  *
  * Inputs are expected to be already-converted via {@see OpenApiSchemaConverter}
- * — i.e. OAS-only keys (`nullable`, `discriminator`, etc.) have been stripped
- * and OAS 3.1 type-arrays normalised. The generator is deliberately minimal:
+ * — i.e. OAS-only keys have been stripped or lowered (including
+ * `discriminator`), and OAS 3.1 type-arrays normalised.
  *
  * Supported keywords: `type` (string|integer|number|boolean|object|array|null),
  * `const`, `enum`, `format` (email|uuid|date|date-time|uri|url),
- * `minLength`/`maxLength`, `minimum`/`maximum`, `required`, `properties`,
- * `items`, and `prefixItems`.
- *
- * Out of scope (MVP): `oneOf`/`anyOf`/`allOf` composition, regex `pattern`,
- * `additionalProperties: <schema>`, `minItems`/`maxItems`, `multipleOf`.
+ * length/numeric/collection boundaries, object properties, `items` /
+ * `prefixItems`, common patterns, and composition (`oneOf`, `anyOf`, `allOf`,
+ * `not`, and conditionals). The public strategy matrix in docs/fuzzing.md is
+ * authoritative for exact support and limitations.
  *
  * Determinism: when a `$seed` is supplied AND `fakerphp/faker` is installed,
  * faker is seeded so the same `(schema, count, seed)` triple produces the same
@@ -79,7 +90,9 @@ final class SchemaDataGenerator
         $faker = self::createFaker($seed);
         $results = [];
         for ($i = 0; $i < $count; $i++) {
-            $results[] = self::generateOne($schema, $faker, $i);
+            $value = self::generateOne($schema, $faker, $i);
+            SchemaValueValidator::assertValid($value, $schema, $i);
+            $results[] = $value;
         }
 
         return $results;
@@ -94,6 +107,8 @@ final class SchemaDataGenerator
      */
     public static function generateOne(array $schema, ?Generator $faker, int $iteration): mixed
     {
+        $schema = self::resolveComposition($schema, $faker, $iteration);
+
         if (array_key_exists('const', $schema)) {
             return $schema['const'];
         }
@@ -102,6 +117,25 @@ final class SchemaDataGenerator
             $values = array_values($schema['enum']);
 
             return $values[$iteration % count($values)];
+        }
+
+        if (is_array($schema['type'] ?? null) && in_array('null', $schema['type'], true) && ($iteration % 3) === 2) {
+            return null;
+        }
+
+        if (isset($schema['not']) && is_array($schema['not'])) {
+            $withoutNot = $schema;
+            unset($withoutNot['not']);
+            $candidate = self::generateOne($withoutNot, $faker, $iteration);
+            if (!SchemaValueValidator::isValid($candidate, $schema)) {
+                foreach ([null, false, 0, 1, '', 'value', [], ['value' => true]] as $alternative) {
+                    if (SchemaValueValidator::isValid($alternative, $schema)) {
+                        return $alternative;
+                    }
+                }
+            }
+
+            return $candidate;
         }
 
         $type = self::resolveType($schema);
@@ -192,9 +226,9 @@ final class SchemaDataGenerator
     /**
      * @param array<string, mixed> $schema
      *
-     * @return array<string, mixed>
+     * @return array<string, mixed>|stdClass
      */
-    private static function generateObject(array $schema, ?Generator $faker, int $iteration): array
+    private static function generateObject(array $schema, ?Generator $faker, int $iteration): array|stdClass
     {
         $properties = $schema['properties'] ?? [];
         if (!is_array($properties)) {
@@ -228,6 +262,47 @@ final class SchemaDataGenerator
             $result[$name] = self::generateOne($propSchema, $faker, $iteration);
         }
 
+        $minProperties = isset($schema['minProperties']) && is_int($schema['minProperties'])
+            ? $schema['minProperties']
+            : 0;
+        if (count($result) < $minProperties && ($schema['additionalProperties'] ?? true) !== false) {
+            while (count($result) < $minProperties) {
+                $name = 'property' . count($result);
+                $additionalSchema = is_array($schema['additionalProperties'] ?? null)
+                    ? $schema['additionalProperties']
+                    : ['type' => 'string'];
+                $result[$name] = self::generateOne($additionalSchema, $faker, $iteration + count($result));
+            }
+        }
+        $maxProperties = isset($schema['maxProperties']) && is_int($schema['maxProperties'])
+            ? $schema['maxProperties']
+            : null;
+        if ($maxProperties !== null && ($iteration % 3) === 1 && ($schema['additionalProperties'] ?? true) !== false) {
+            while (count($result) < $maxProperties) {
+                $name = 'property' . count($result);
+                $additionalSchema = is_array($schema['additionalProperties'] ?? null)
+                    ? $schema['additionalProperties']
+                    : ['type' => 'string'];
+                $result[$name] = self::generateOne($additionalSchema, $faker, $iteration + count($result));
+            }
+        }
+        if ($maxProperties !== null && count($result) > $maxProperties) {
+            foreach (array_keys($result) as $name) {
+                if (count($result) <= $maxProperties) {
+                    break;
+                }
+                if (!in_array($name, $required, true)) {
+                    unset($result[$name]);
+                }
+            }
+        }
+        if ($result === []) {
+            if ($maxProperties === 0 || ($schema['additionalProperties'] ?? true) === false) {
+                return new stdClass();
+            }
+            $result['property0'] = 'value';
+        }
+
         return $result;
     }
 
@@ -240,10 +315,27 @@ final class SchemaDataGenerator
     {
         $prefixItems = $schema['prefixItems'] ?? null;
         if (is_array($prefixItems)) {
+            $prefixCount = count($prefixItems);
+            $minimum = isset($schema['minItems']) && is_int($schema['minItems']) ? max(0, $schema['minItems']) : 0;
+            $maximum = isset($schema['maxItems']) && is_int($schema['maxItems']) ? max(0, $schema['maxItems']) : null;
+            $size = match ($iteration % 3) {
+                0 => $minimum,
+                1 => $maximum ?? $prefixCount,
+                default => $prefixCount,
+            };
+            if ($maximum !== null) {
+                $size = min($size, $maximum);
+            }
+            if (($schema['items'] ?? true) === false) {
+                $size = min($size, $prefixCount);
+            }
             $result = [];
-            foreach ($prefixItems as $index => $item) {
+            for ($index = 0; $index < $size; $index++) {
+                $item = $prefixItems[$index] ?? ($schema['items'] ?? []);
                 if (is_array($item)) {
                     $result[] = self::generateOne($item, $faker, $iteration + $index);
+                } else {
+                    $result[] = 'item-' . $index;
                 }
             }
 
@@ -255,10 +347,27 @@ final class SchemaDataGenerator
             return [];
         }
 
-        $size = ($iteration % 2) + 1;
+        $minimum = isset($schema['minItems']) && is_int($schema['minItems']) ? max(0, $schema['minItems']) : 1;
+        $maximum = isset($schema['maxItems']) && is_int($schema['maxItems']) ? max(0, $schema['maxItems']) : null;
+        $size = match ($iteration % 3) {
+            0 => $minimum,
+            1 => $maximum ?? max(1, $minimum),
+            default => max(1, $minimum),
+        };
+        if ($maximum !== null) {
+            $size = min($size, $maximum);
+        }
         $result = [];
         for ($i = 0; $i < $size; $i++) {
-            $result[] = self::generateOne($items, $faker, $iteration + $i);
+            $item = self::generateOne($items, $faker, $iteration + $i);
+            if (($schema['uniqueItems'] ?? false) === true) {
+                $attempt = 0;
+                while (in_array($item, $result, true) && $attempt < 100) {
+                    $attempt++;
+                    $item = self::generateOne($items, $faker, $iteration + $i + $attempt);
+                }
+            }
+            $result[] = $item;
         }
 
         return $result;
@@ -289,10 +398,17 @@ final class SchemaDataGenerator
 
         $minLength = isset($schema['minLength']) && is_int($schema['minLength']) && $schema['minLength'] >= 0
             ? $schema['minLength']
-            : 0;
-        $maxLength = isset($schema['maxLength']) && is_int($schema['maxLength']) && $schema['maxLength'] > 0
+            : 1;
+        $maxLength = isset($schema['maxLength']) && is_int($schema['maxLength']) && $schema['maxLength'] >= 0
             ? $schema['maxLength']
             : 16;
+
+        if (isset($schema['pattern']) && is_string($schema['pattern'])) {
+            $patternValue = self::generateCommonPattern($schema['pattern'], $schema, $iteration);
+            if ($patternValue !== null) {
+                return $patternValue;
+            }
+        }
 
         if ($faker !== null) {
             // bothify('?') yields random alpha sized to the chosen target.
@@ -300,13 +416,21 @@ final class SchemaDataGenerator
             // above and min($maxLength, 8) >= 1. clampLength still runs to
             // honor `minLength > 8` (where the target was capped at 8) and
             // to defensively pad when bothify ever returns a short result.
-            $target = max($minLength, min($maxLength, 8));
+            $target = match ($iteration % 3) {
+                0 => $minLength,
+                1 => $maxLength,
+                default => max($minLength, min($maxLength, 8)),
+            };
             $generated = $faker->bothify(str_repeat('?', $target));
 
             return self::clampLength($generated, $schema);
         }
 
-        $base = 'string-' . $iteration;
+        $base = match ($iteration % 3) {
+            0 => str_repeat('x', $minLength),
+            1 => str_repeat('x', $maxLength),
+            default => 'string-' . $iteration,
+        };
 
         return self::clampLength($base, $schema);
     }
@@ -376,15 +500,16 @@ final class SchemaDataGenerator
         $minLength = isset($schema['minLength']) && is_int($schema['minLength']) && $schema['minLength'] >= 0
             ? $schema['minLength']
             : 0;
-        $maxLength = isset($schema['maxLength']) && is_int($schema['maxLength']) && $schema['maxLength'] > 0
+        $maxLength = isset($schema['maxLength']) && is_int($schema['maxLength']) && $schema['maxLength'] >= 0
             ? $schema['maxLength']
             : null;
 
-        if ($maxLength !== null && strlen($value) > $maxLength) {
-            $value = substr($value, 0, $maxLength);
+        if ($maxLength !== null && self::unicodeLength($value) > $maxLength) {
+            $characters = self::unicodeCharacters($value);
+            $value = implode('', array_slice($characters, 0, $maxLength));
         }
-        if (strlen($value) < $minLength) {
-            $value = str_pad($value, $minLength, 'x');
+        if (self::unicodeLength($value) < $minLength) {
+            $value .= str_repeat('x', $minLength - self::unicodeLength($value));
         }
 
         return $value;
@@ -403,18 +528,36 @@ final class SchemaDataGenerator
         $minSet = isset($schema['minimum']) && (is_int($schema['minimum']) || is_float($schema['minimum']));
         $maxSet = isset($schema['maximum']) && (is_int($schema['maximum']) || is_float($schema['maximum']));
 
+        $exclusiveMin = isset($schema['exclusiveMinimum']) && (is_int($schema['exclusiveMinimum']) || is_float($schema['exclusiveMinimum']))
+            ? (int) floor($schema['exclusiveMinimum']) + 1
+            : null;
+        $exclusiveMax = isset($schema['exclusiveMaximum']) && (is_int($schema['exclusiveMaximum']) || is_float($schema['exclusiveMaximum']))
+            ? (int) ceil($schema['exclusiveMaximum']) - 1
+            : null;
+
         if ($minSet && $maxSet) {
-            $min = (int) $schema['minimum'];
-            $max = (int) $schema['maximum'];
+            $min = (int) ceil($schema['minimum']);
+            $max = (int) floor($schema['maximum']);
         } elseif ($minSet) {
-            $min = (int) $schema['minimum'];
+            $min = (int) ceil($schema['minimum']);
             $max = $min + 1000;
         } elseif ($maxSet) {
-            $max = (int) $schema['maximum'];
+            $max = (int) floor($schema['maximum']);
             $min = $max - 1000;
         } else {
             $min = 1;
             $max = 1000;
+        }
+
+        $min = $exclusiveMin !== null ? max($min, $exclusiveMin) : $min;
+        $max = $exclusiveMax !== null ? min($max, $exclusiveMax) : $max;
+
+        $multipleOf = isset($schema['multipleOf']) && (is_int($schema['multipleOf']) || is_float($schema['multipleOf']))
+            ? DecimalMultiple::integerStep($schema['multipleOf'])
+            : 0;
+        if ($multipleOf !== null && $multipleOf > 0) {
+            $min = (int) (ceil($min / $multipleOf) * $multipleOf);
+            $max = (int) (floor($max / $multipleOf) * $multipleOf);
         }
 
         if ($max < $min) {
@@ -425,8 +568,24 @@ final class SchemaDataGenerator
             $max = $min;
         }
 
+        if (($iteration % 3) === 0) {
+            return $min;
+        }
+        if (($iteration % 3) === 1) {
+            return $max;
+        }
         if ($faker !== null) {
+            if ($multipleOf !== null && $multipleOf > 0) {
+                return $faker->numberBetween(intdiv($min, $multipleOf), intdiv($max, $multipleOf)) * $multipleOf;
+            }
+
             return $faker->numberBetween($min, $max);
+        }
+
+        if ($multipleOf !== null && $multipleOf > 0) {
+            $span = intdiv($max - $min, $multipleOf) + 1;
+
+            return $min + ($iteration % max(1, $span)) * $multipleOf;
         }
 
         $span = $max - $min + 1;
@@ -442,6 +601,13 @@ final class SchemaDataGenerator
         $minSet = isset($schema['minimum']) && (is_int($schema['minimum']) || is_float($schema['minimum']));
         $maxSet = isset($schema['maximum']) && (is_int($schema['maximum']) || is_float($schema['maximum']));
 
+        $exclusiveMin = isset($schema['exclusiveMinimum']) && (is_int($schema['exclusiveMinimum']) || is_float($schema['exclusiveMinimum']))
+            ? (float) $schema['exclusiveMinimum']
+            : null;
+        $exclusiveMax = isset($schema['exclusiveMaximum']) && (is_int($schema['exclusiveMaximum']) || is_float($schema['exclusiveMaximum']))
+            ? (float) $schema['exclusiveMaximum']
+            : null;
+
         if ($minSet && $maxSet) {
             $min = (float) $schema['minimum'];
             $max = (float) $schema['maximum'];
@@ -456,15 +622,50 @@ final class SchemaDataGenerator
             $max = 1000.0;
         }
 
+        $epsilon = isset($schema['multipleOf']) && (is_int($schema['multipleOf']) || is_float($schema['multipleOf']))
+            ? (float) $schema['multipleOf']
+            : max(PHP_FLOAT_EPSILON, ($max - $min) / 1000000.0);
+        $min = $exclusiveMin !== null ? max($min, $exclusiveMin + $epsilon) : $min;
+        $max = $exclusiveMax !== null ? min($max, $exclusiveMax - $epsilon) : $max;
+
+        $multipleOf = isset($schema['multipleOf']) && (is_int($schema['multipleOf']) || is_float($schema['multipleOf']))
+            ? (float) $schema['multipleOf']
+            : 0.0;
+        if ($multipleOf > 0.0) {
+            $min = round(ceil($min / $multipleOf) * $multipleOf, 12);
+            $max = round(floor($max / $multipleOf) * $multipleOf, 12);
+        }
+
         if ($max < $min) {
             $max = $min;
         }
 
+        if (($iteration % 3) === 0) {
+            return $min;
+        }
+        if (($iteration % 3) === 1) {
+            return $max;
+        }
         if ($faker !== null) {
+            if ($multipleOf > 0.0) {
+                $minimumMultiplier = (int) ceil($min / $multipleOf);
+                $maximumMultiplier = (int) floor($max / $multipleOf);
+
+                return round($faker->numberBetween($minimumMultiplier, $maximumMultiplier) * $multipleOf, 12);
+            }
+
             // randomFloat(null, …) lets faker pick precision dynamically so
             // tight ranges (e.g. minimum=0.001 maximum=0.002) don't collapse
             // to 0.00 from a fixed two-decimal rounding.
             return $faker->randomFloat(null, $min, $max);
+        }
+
+        if ($multipleOf > 0.0) {
+            $minimumMultiplier = (int) ceil($min / $multipleOf);
+            $maximumMultiplier = (int) floor($max / $multipleOf);
+            $span = $maximumMultiplier - $minimumMultiplier + 1;
+
+            return round(($minimumMultiplier + $iteration % max(1, $span)) * $multipleOf, 12);
         }
 
         // Scale the iteration-driven offset to the actual span so the value
@@ -481,5 +682,194 @@ final class SchemaDataGenerator
     private static function generateBoolean(int $iteration): bool
     {
         return ($iteration % 2) === 1;
+    }
+
+    /**
+     * @param array<string, mixed> $schema
+     *
+     * @return array<string, mixed>
+     */
+    private static function resolveComposition(array $schema, ?Generator $faker, int $iteration): array
+    {
+        foreach (['oneOf', 'anyOf'] as $keyword) {
+            if (!isset($schema[$keyword]) || !is_array($schema[$keyword]) || $schema[$keyword] === []) {
+                continue;
+            }
+            $branches = array_values(array_filter($schema[$keyword], is_array(...)));
+            if ($branches === []) {
+                continue;
+            }
+            unset($schema[$keyword]);
+            $schema = self::mergeSchemas($schema, $branches[$iteration % count($branches)]);
+            break;
+        }
+
+        if (isset($schema['allOf']) && is_array($schema['allOf'])) {
+            $branches = $schema['allOf'];
+            unset($schema['allOf']);
+            $conditionals = [];
+            foreach ($branches as $branch) {
+                if (!is_array($branch)) {
+                    continue;
+                }
+                if (isset($branch['if']) && is_array($branch['if'])) {
+                    $conditionals[] = $branch;
+                } else {
+                    $schema = self::mergeSchemas($schema, $branch);
+                }
+            }
+            if ($conditionals !== []) {
+                $selected = $conditionals[$iteration % count($conditionals)];
+                $schema = self::mergeSchemas($schema, $selected['if']);
+                if (isset($selected['then']) && is_array($selected['then'])) {
+                    $schema = self::mergeSchemas($schema, $selected['then']);
+                }
+            }
+        }
+
+        if (isset($schema['if']) && is_array($schema['if'])) {
+            $useThen = ($iteration % 2) === 0;
+            $conditional = $useThen
+                ? self::mergeSchemas($schema['if'], is_array($schema['then'] ?? null) ? $schema['then'] : [])
+                : self::mergeSchemas(
+                    ['not' => $schema['if']],
+                    is_array($schema['else'] ?? null) ? $schema['else'] : [],
+                );
+            unset($schema['if'], $schema['then'], $schema['else']);
+            $schema = self::mergeSchemas($schema, $conditional);
+        }
+
+        return $schema;
+    }
+
+    /**
+     * Merge the assertion keywords needed for deterministic allOf generation.
+     *
+     * @param array<string, mixed> $left
+     * @param array<string, mixed> $right
+     *
+     * @return array<string, mixed>
+     */
+    private static function mergeSchemas(array $left, array $right): array
+    {
+        $merged = array_merge($left, $right);
+        if (is_array($left['properties'] ?? null) || is_array($right['properties'] ?? null)) {
+            $merged['properties'] = self::mergePropertySchemas(
+                is_array($left['properties'] ?? null) ? $left['properties'] : [],
+                is_array($right['properties'] ?? null) ? $right['properties'] : [],
+            );
+        }
+        if (is_array($left['required'] ?? null) || is_array($right['required'] ?? null)) {
+            $merged['required'] = array_values(array_unique(array_merge(
+                is_array($left['required'] ?? null) ? $left['required'] : [],
+                is_array($right['required'] ?? null) ? $right['required'] : [],
+            )));
+        }
+        if (isset($left['minimum'], $right['minimum'])) {
+            $merged['minimum'] = max($left['minimum'], $right['minimum']);
+        }
+        if (isset($left['maximum'], $right['maximum'])) {
+            $merged['maximum'] = min($left['maximum'], $right['maximum']);
+        }
+        if (isset($left['minLength'], $right['minLength'])) {
+            $merged['minLength'] = max($left['minLength'], $right['minLength']);
+        }
+        if (isset($left['maxLength'], $right['maxLength'])) {
+            $merged['maxLength'] = min($left['maxLength'], $right['maxLength']);
+        }
+        foreach (['minItems', 'minProperties'] as $minimumKeyword) {
+            if (isset($left[$minimumKeyword], $right[$minimumKeyword])) {
+                $merged[$minimumKeyword] = max($left[$minimumKeyword], $right[$minimumKeyword]);
+            }
+        }
+        foreach (['maxItems', 'maxProperties'] as $maximumKeyword) {
+            if (isset($left[$maximumKeyword], $right[$maximumKeyword])) {
+                $merged[$maximumKeyword] = min($left[$maximumKeyword], $right[$maximumKeyword]);
+            }
+        }
+        if ((is_int($left['multipleOf'] ?? null) || is_float($left['multipleOf'] ?? null)) &&
+            (is_int($right['multipleOf'] ?? null) || is_float($right['multipleOf'] ?? null))) {
+            $multipleOf = DecimalMultiple::leastCommonMultiple($left['multipleOf'], $right['multipleOf']);
+            if ($multipleOf === null) {
+                throw new InvalidArgumentException(
+                    'Cannot compose allOf multipleOf constraints within the platform numeric range.',
+                );
+            }
+            $merged['multipleOf'] = $multipleOf;
+        }
+
+        return $merged;
+    }
+
+    /**
+     * @param array<string, mixed> $left
+     * @param array<string, mixed> $right
+     *
+     * @return array<string, mixed>
+     */
+    private static function mergePropertySchemas(array $left, array $right): array
+    {
+        $merged = $left;
+        foreach ($right as $name => $rightSchema) {
+            $leftSchema = $merged[$name] ?? null;
+            $merged[$name] = is_array($leftSchema) && is_array($rightSchema)
+                ? self::mergeSchemas($leftSchema, $rightSchema)
+                : $rightSchema;
+        }
+
+        return $merged;
+    }
+
+    /** @param array<string, mixed> $schema */
+    private static function generateCommonPattern(string $pattern, array $schema, int $iteration): ?string
+    {
+        $candidates = ['a', 'A', '0', 'abc', 'ABC', '123', 'test-' . $iteration, 'é', '日本語'];
+        $minimum = isset($schema['minLength']) && is_int($schema['minLength']) ? max(0, $schema['minLength']) : null;
+        $maximum = isset($schema['maxLength']) && is_int($schema['maxLength']) ? max(0, $schema['maxLength']) : null;
+        $delimiter = '~';
+        $escaped = str_replace($delimiter, '\\' . $delimiter, $pattern);
+        foreach ($candidates as $candidate) {
+            $candidateLength = self::unicodeLength($candidate);
+            $targets = array_values(array_unique(array_filter(
+                [$minimum, $maximum, $candidateLength],
+                static fn(?int $length): bool => $length !== null,
+            )));
+            foreach ($targets as $target) {
+                if ($maximum !== null && $target > $maximum) {
+                    continue;
+                }
+                $value = self::repeatToLength($candidate, $target);
+                if (($minimum === null || self::unicodeLength($value) >= $minimum) &&
+                    @preg_match($delimiter . $escaped . $delimiter . 'u', $value) === 1) {
+                    return $value;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static function repeatToLength(string $value, int $length): string
+    {
+        if ($length === 0 || $value === '') {
+            return '';
+        }
+
+        $repetitions = (int) ceil($length / self::unicodeLength($value));
+
+        return implode('', array_slice(self::unicodeCharacters(str_repeat($value, $repetitions)), 0, $length));
+    }
+
+    private static function unicodeLength(string $value): int
+    {
+        return count(self::unicodeCharacters($value));
+    }
+
+    /** @return list<string> */
+    private static function unicodeCharacters(string $value): array
+    {
+        preg_match_all('/./us', $value, $matches);
+
+        return $matches[0];
     }
 }

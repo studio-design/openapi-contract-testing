@@ -1,6 +1,9 @@
 # Schema-driven request fuzzing
 
-The `ExploresOpenApiEndpoint` trait generates N happy-path request inputs for one (method, path) operation directly from the OpenAPI spec — the PHP equivalent of [Schemathesis][schemathesis]. Pair it with the existing `ValidatesOpenApiSchema` trait and every fuzzed call automatically asserts response contract conformance and records coverage.
+The `ExploresOpenApiEndpoint` trait generates deterministic request inputs for
+one operation or a filtered whole spec. Its workflow is inspired by
+[Schemathesis][schemathesis], but the supported strategy matrix below is the
+contract; this package does not claim feature parity.
 
 ```php
 use PHPUnit\Framework\TestCase;
@@ -32,6 +35,9 @@ What you get per case (`Studio\OpenApiContractTesting\Fuzz\ExploredCase`):
 | `headers` | name → value for every `in: header` parameter (excludes the OpenAPI-reserved `Accept`/`Content-Type`/`Authorization`) |
 | `pathParams` | name → value for every `{placeholder}` segment |
 | `method`, `matchedPath` | The resolved spec template (`/v1/pets/{petId}`) and its method |
+| `kind`, `targetKeyword`, `targetPointer` | Valid/invalid classification and the single constraint targeted by a negative case |
+| `expectedStatusClasses` | Explicit response classes supplied for a negative case (for example `[4]`) |
+| `seed`, `caseIndex` | Stable replay identity |
 
 The collection is `Countable` and `IteratorAggregate`, so `foreach ($cases as $case)` works too if you prefer it over the fluent `each()` helper.
 
@@ -111,6 +117,9 @@ seed based on `(spec, method, path, global seed)`, so adding or reordering a
 different operation does not change existing cases. A dispatch, mutation, or
 assertion failure prints the spec, operation ID, method/path, both seeds, case
 index, and a minimal `OpenApiEndpointExplorer::explore(...)` replay expression.
+Each case also exposes `replayToken()`, `replaySnippet($specName)`, and
+`curlSnippet($baseUrl)`. The token identifies generation inputs; the PHP and
+curl output include the concrete generated request.
 
 Summaries are local immutable values; the explorer adds no process-global
 aggregation. Run one plan per parallel worker partition and use the existing
@@ -127,27 +136,78 @@ external effects that a database rollback cannot undo.
 
 ## Generation behaviour
 
-- Supported keywords: `type` (`string`/`integer`/`number`/`boolean`/`object`/`array`/`null`), `enum`, `format` (`email`/`idn-email`/`uuid`/`date`/`date-time`/`time`/`uri`/`url`/`iri`/`hostname`/`ipv4`/`ipv6`), `minLength`/`maxLength`, `minimum`/`maximum`, `required`, `properties`, `items`.
+Every purportedly valid value is checked against the converted JSON Schema
+before dispatch. A generator bug therefore fails locally with an `Internal
+fuzz generator defect` diagnostic instead of sending invalid data to the API.
+
+| Strategy | Valid generation | Targeted invalid mutation |
+|---|---|---|
+| Scalars | `type`, `const`, `enum`, nullable branches | wrong type, const/enum miss |
+| Strings | min/max length, common regex patterns, Unicode code points, Faker-backed email/UUID/date/time/URI/host/IP formats | below/above length, pattern miss, invalid recognized format |
+| Numbers | inclusive/exclusive bounds and `multipleOf`, including OAS 3.0 boolean-exclusive lowering | outside/equal-exclusive bound, non-multiple |
+| Arrays | `items`, `prefixItems`, min/max items, `uniqueItems` | too few/many or duplicate items |
+| Objects | properties, required, min/max properties, schema-valued/default additional properties | missing required, extra forbidden, too few/many properties, nested property constraint |
+| Composition | branch rotation for `oneOf`/`anyOf`, merged object/range assertions for `allOf`, `not`, and `if`/`then`/`else`; lowered discriminator branches use the same path | deterministic composition miss where one can be isolated |
+
+Arbitrary regex synthesis, recursive schemas, `contains`,
+`patternProperties`, `dependentSchemas`, and `unevaluated*` generation are not
+currently strategies. Those keywords remain validator features; an operation
+whose valid value cannot be synthesized fails locally or is an explicit
+whole-spec skip.
+
 - Optional object properties alternate between included and omitted across cases, so each batch exercises both required-only and required+optional shapes.
 - Required keys are always emitted.
 - Path resolution accepts both the spec template form (`/v1/pets/{petId}`) and concrete URIs that match it (`/api/v1/pets/123` with `strip_prefixes=/api`). Captured URI values are intentionally discarded — `pathParams` is always regenerated from the operation spec for consistency.
 
 ## `seed` and determinism
 
-When [`fakerphp/faker`][faker] is installed (already a transitive dev dependency via `orchestra/testbench` for most projects), generation uses Faker's locale-aware primitives and is fully deterministic for a given `seed:`. Without Faker, the trait falls back to deterministic counter-based primitives that still pass schema validation — your CI never depends on a runtime-installed package.
+When [`fakerphp/faker`][faker] is installed, generation uses Faker's
+locale-aware primitives and is deterministic for a given `seed:`. Without it,
+ordinary strings and scalar boundaries use deterministic counter-based values.
+Recognized formats such as email and UUID cannot be synthesized reliably by
+that fallback: the existing one-shot warning is followed by the valid-case
+self-check, so the operation fails locally rather than dispatching a value that
+does not satisfy its format.
 
 ```bash
-# Optional but recommended for realistic generation
+# Required when explored schemas use Faker-backed formats
 composer require --dev fakerphp/faker
 ```
 
-## Out of scope (today)
+## Negative cases and reduction
 
-The MVP intentionally targets happy-path generation. Tracked separately:
+Negative exploration requires the expected response class. There is no
+implicit "anything except 5xx" fallback:
 
-- Boundary value injection (min/max-length extremes, Unicode edge cases)
-- Negative-case generation (deliberately invalid inputs to assert 4xx responses)
-- `oneOf` / `anyOf` / `allOf` composition; regex `pattern`; `multipleOf`; `minItems` / `maxItems`
+```php
+$this->exploreInvalidEndpoint(
+    'POST',
+    '/v1/pets',
+    expectedStatusClasses: [4],
+    cases: 20,
+    seed: 7,
+)->each(function (ExploredCase $case): void {
+    $response = $this->postJson('/api/v1/pets', $case->body);
+    self::assertContains(intdiv($response->getStatusCode(), 100), $case->expectedStatusClasses);
+});
+```
+
+For a whole spec, add `->negativeCases([4])` before `dispatchUsing()` and
+inspect the same metadata in `assertResponseUsing()`. Each generated invalid
+case is self-checked to ensure it actually fails the complete schema.
+
+`FailureReducer::reduce($case, $classify)` deterministically removes body
+members only while the callback returns the original non-empty classification.
+Use a stable value such as `status:500` or an exception class. Reduction is
+deliberately classification-preserving; it never equates every failure.
+
+## Remaining gaps
+
+- Arbitrary ECMA-262 regex synthesis and recursive/reference-cycle generation.
+- Cookie and `parameters[].content` fuzz generation.
+- Structural shrinking inside nested arrays/objects; current reduction removes
+  top-level body members.
+- Measurement-based feature parity with Schemathesis.
 
 [schemathesis]: https://github.com/schemathesis/schemathesis
 [faker]: https://github.com/FakerPHP/Faker
