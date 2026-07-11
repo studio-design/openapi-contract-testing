@@ -1,0 +1,17 @@
+{
+  "name": "studio-design/openapi-contract-testing-symfony-example",
+  "description": "Runnable Symfony HttpFoundation example for studio-design/openapi-contract-testing.",
+  "license": "MIT",
+  "type": "project",
+  "require": {
+    "php": "^8.2",
+    "studio-design/openapi-contract-testing": "@dev",
+    "symfony/http-foundation": "^6.4 || ^7.0 || ^8.0",
+    "symfony/http-kernel": "^6.4 || ^7.0 || ^8.0"
+  },
+  "autoload-dev": { "psr-4": { "Examples\\Symfony\\Tests\\": "tests/" } },
+  "repositories": [{ "type": "path", "url": "../..", "options": { "symlink": true } }],
+  "scripts": { "test": "phpunit" },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}

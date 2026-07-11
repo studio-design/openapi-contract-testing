@@ -1,0 +1,10 @@
+.version-banner {
+  position: relative;
+  z-index: 30;
+  padding: 0.45rem 1rem;
+  border-bottom: 1px solid var(--vp-c-divider);
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-2);
+  font-size: 0.8rem;
+  text-align: center;
+}

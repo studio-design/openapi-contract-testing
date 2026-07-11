@@ -141,6 +141,62 @@ jobs:
         working-directory: examples/psr7
         run: composer test
 
+  quickstart-examples:
+    name: ${{ matrix.example }} quickstart
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - example: core
+            php: '8.2'
+          - example: laravel
+            php: '8.2'
+          - example: symfony
+            php: '8.2'
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+
+      - name: Install quickstart dependencies
+        working-directory: examples/${{ matrix.example }}
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Run quickstart
+        working-directory: examples/${{ matrix.example }}
+        run: composer test
+
+  docs:
+    name: Documentation site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install documentation dependencies
+        run: npm ci
+
+      - name: Audit documentation dependencies
+        run: npm audit --audit-level=high
+
+      - name: Build searchable documentation
+        env:
+          DOCS_VERSION: next
+        run: npm run docs:build
+
+      - name: Check documentation links
+        run: npm run docs:links
+
   static-analysis:
     name: PHPStan
     runs-on: ubuntu-latest

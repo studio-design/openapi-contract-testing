@@ -1,0 +1,13 @@
+{
+  "ignorePatterns": [
+    { "pattern": "^http://localhost" },
+    { "pattern": "^https://github.com/studio-design/openapi-contract-testing/actions/runs/" },
+    { "pattern": "^https://github.com/studio-design/openapi-contract-testing/tree/main/examples/(core|laravel|symfony)$" },
+    { "pattern": "^https://studio-design.github.io/openapi-contract-testing/" },
+    { "pattern": "^https://packages.tools/" },
+    { "pattern": "^https://poser.pugx.org/" }
+  ],
+  "retryOn429": true,
+  "fallbackRetryDelay": "30s",
+  "aliveStatusCodes": [200, 206, 403]
+}

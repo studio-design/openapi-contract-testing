@@ -17,6 +17,8 @@ Framework-agnostic OpenAPI 3.0/3.1/3.2 contract testing for PHPUnit **with endpo
 
 Validate your API responses against your OpenAPI specification during testing, and get a coverage report showing which endpoints have been tested.
 
+**[Search the documentation](https://studio-design.github.io/openapi-contract-testing/)** · [Core quickstart](https://studio-design.github.io/openapi-contract-testing/quickstarts/core) · [Laravel](https://studio-design.github.io/openapi-contract-testing/quickstarts/laravel) · [Symfony](https://studio-design.github.io/openapi-contract-testing/quickstarts/symfony) · [Pest](https://studio-design.github.io/openapi-contract-testing/quickstarts/pest)
+
 ## Features
 
 - **OpenAPI 3.0, 3.1 & 3.2 support** — Explicit version detection, including 3.2 `QUERY`, custom `additionalOperations`, form `querystring`, `discriminator.defaultMapping`, and observable streaming limitations
@@ -105,9 +107,23 @@ composer require --dev studio-design/openapi-contract-testing
 
 ## Quick start
 
-Three steps to your first contract-tested endpoint. The example below uses a
-PSR-7 request and response; Laravel and Symfony integrations are documented in
-[`docs/setup.md`](docs/setup.md).
+Choose the CI-tested five-minute path matching your stack:
+
+| Stack | Passing example | What it demonstrates |
+| --- | --- | --- |
+| Framework-independent PHPUnit | [`examples/core`](examples/core) | Direct response validation and coverage |
+| Laravel | [`examples/laravel`](examples/laravel) | Explicit assertion, `auto_assert`, and request validation |
+| Symfony | [`examples/symfony`](examples/symfony) | HttpFoundation request/response assertions |
+| Pest | [`examples/pest`](examples/pest) | Laravel response and request expectations |
+| PSR-7 | [`examples/psr7`](examples/psr7) | Request/response exchange validation |
+
+All paths start with the same development dependency:
+
+```bash
+composer require --dev studio-design/openapi-contract-testing
+```
+
+The example below uses a PSR-7 request and response. The searchable documentation contains the complete [core](https://studio-design.github.io/openapi-contract-testing/quickstarts/core), [Laravel](https://studio-design.github.io/openapi-contract-testing/quickstarts/laravel), [Symfony](https://studio-design.github.io/openapi-contract-testing/quickstarts/symfony), and [Pest](https://studio-design.github.io/openapi-contract-testing/quickstarts/pest) quickstarts.
 
 ### 1. Provide your OpenAPI spec
 

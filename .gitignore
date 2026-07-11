@@ -1,5 +1,8 @@
 /vendor/
 /composer.lock
+/node_modules/
+/docs/.vitepress/cache/
+/docs/.vitepress/dist/
 
 # Examples bring their own vendor/ + lockfile when run.
 /examples/*/vendor/
