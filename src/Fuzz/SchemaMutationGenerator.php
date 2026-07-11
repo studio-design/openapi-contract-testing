@@ -7,7 +7,6 @@ namespace Studio\OpenApiContractTesting\Fuzz;
 use Faker\Generator;
 use InvalidArgumentException;
 
-use function abs;
 use function array_is_list;
 use function array_key_exists;
 use function array_slice;
@@ -16,7 +15,6 @@ use function is_array;
 use function is_float;
 use function is_int;
 use function is_string;
-use function round;
 use function sprintf;
 use function str_repeat;
 
@@ -217,12 +215,8 @@ final class SchemaMutationGenerator
         unset($withoutMultipleOf['multipleOf']);
 
         if (is_int($valid)) {
-            $multipleOf = (float) $schema['multipleOf'];
-            if ($multipleOf <= 0.0) {
-                return null;
-            }
-            $reciprocal = 1.0 / $multipleOf;
-            if (abs($reciprocal - round($reciprocal)) < 1.0E-12) {
+            $integerStep = DecimalMultiple::integerStep($schema['multipleOf']);
+            if ($integerStep === null || $integerStep === 1) {
                 return null;
             }
             for ($offset = 1; $offset <= 1000; $offset++) {

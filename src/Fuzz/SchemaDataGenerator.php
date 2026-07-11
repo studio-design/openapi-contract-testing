@@ -26,6 +26,7 @@ use function count;
 use function floor;
 use function implode;
 use function in_array;
+use function intdiv;
 use function is_array;
 use function is_float;
 use function is_int;
@@ -549,9 +550,9 @@ final class SchemaDataGenerator
         $max = $exclusiveMax !== null ? min($max, $exclusiveMax) : $max;
 
         $multipleOf = isset($schema['multipleOf']) && (is_int($schema['multipleOf']) || is_float($schema['multipleOf']))
-            ? (int) $schema['multipleOf']
+            ? DecimalMultiple::integerStep($schema['multipleOf'])
             : 0;
-        if ($multipleOf > 0) {
+        if ($multipleOf !== null && $multipleOf > 0) {
             $min = (int) (ceil($min / $multipleOf) * $multipleOf);
             $max = (int) (floor($max / $multipleOf) * $multipleOf);
         }
@@ -571,7 +572,17 @@ final class SchemaDataGenerator
             return $max;
         }
         if ($faker !== null) {
+            if ($multipleOf !== null && $multipleOf > 0) {
+                return $faker->numberBetween(intdiv($min, $multipleOf), intdiv($max, $multipleOf)) * $multipleOf;
+            }
+
             return $faker->numberBetween($min, $max);
+        }
+
+        if ($multipleOf !== null && $multipleOf > 0) {
+            $span = intdiv($max - $min, $multipleOf) + 1;
+
+            return $min + ($iteration % max(1, $span)) * $multipleOf;
         }
 
         $span = $max - $min + 1;

@@ -23,6 +23,7 @@ use function array_filter;
 use function array_map;
 use function array_values;
 use function count;
+use function fmod;
 use function json_decode;
 use function json_encode;
 use function preg_match;
@@ -484,6 +485,30 @@ class SchemaDataGeneratorTest extends TestCase
         $this->assertGreaterThanOrEqual(2, $minimumValues[1]);
         $this->assertSame(-2, $maximumValues[1]);
         $this->assertLessThanOrEqual(-2, $maximumValues[0]);
+    }
+
+    #[Test]
+    public function integer_generation_preserves_fractional_multiple_of_semantics(): void
+    {
+        $onePointFive = SchemaDataGenerator::generate([
+            'type' => 'integer',
+            'multipleOf' => 1.5,
+        ], 3, seed: 1);
+        $twoPointFive = SchemaDataGenerator::generate([
+            'type' => 'integer',
+            'multipleOf' => 2.5,
+        ], 3, seed: 1);
+
+        foreach ($onePointFive as $value) {
+            $this->assertIsInt($value);
+            $this->assertSame(0.0, fmod((float) $value, 1.5));
+        }
+        foreach ($twoPointFive as $value) {
+            $this->assertIsInt($value);
+            $this->assertSame(0.0, fmod((float) $value, 2.5));
+        }
+        $this->assertSame(3, $onePointFive[0]);
+        $this->assertSame(5, $twoPointFive[0]);
     }
 
     #[Test]
