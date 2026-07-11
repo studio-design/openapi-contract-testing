@@ -404,9 +404,9 @@ final class SchemaDataGenerator
             : 16;
 
         if (isset($schema['pattern']) && is_string($schema['pattern'])) {
-            $patternValue = self::generateCommonPattern($schema['pattern'], $iteration);
+            $patternValue = self::generateCommonPattern($schema['pattern'], $schema, $iteration);
             if ($patternValue !== null) {
-                return self::clampLength($patternValue, $schema);
+                return $patternValue;
             }
         }
 
@@ -777,6 +777,16 @@ final class SchemaDataGenerator
         if (isset($left['maxLength'], $right['maxLength'])) {
             $merged['maxLength'] = min($left['maxLength'], $right['maxLength']);
         }
+        if ((is_int($left['multipleOf'] ?? null) || is_float($left['multipleOf'] ?? null)) &&
+            (is_int($right['multipleOf'] ?? null) || is_float($right['multipleOf'] ?? null))) {
+            $multipleOf = DecimalMultiple::leastCommonMultiple($left['multipleOf'], $right['multipleOf']);
+            if ($multipleOf === null) {
+                throw new InvalidArgumentException(
+                    'Cannot compose allOf multipleOf constraints within the platform numeric range.',
+                );
+            }
+            $merged['multipleOf'] = $multipleOf;
+        }
 
         return $merged;
     }
@@ -800,18 +810,44 @@ final class SchemaDataGenerator
         return $merged;
     }
 
-    private static function generateCommonPattern(string $pattern, int $iteration): ?string
+    /** @param array<string, mixed> $schema */
+    private static function generateCommonPattern(string $pattern, array $schema, int $iteration): ?string
     {
         $candidates = ['a', 'A', '0', 'abc', 'ABC', '123', 'test-' . $iteration, 'é', '日本語'];
+        $minimum = isset($schema['minLength']) && is_int($schema['minLength']) ? max(0, $schema['minLength']) : null;
+        $maximum = isset($schema['maxLength']) && is_int($schema['maxLength']) ? max(0, $schema['maxLength']) : null;
+        $delimiter = '~';
+        $escaped = str_replace($delimiter, '\\' . $delimiter, $pattern);
         foreach ($candidates as $candidate) {
-            $delimiter = '~';
-            $escaped = str_replace($delimiter, '\\' . $delimiter, $pattern);
-            if (@preg_match($delimiter . $escaped . $delimiter . 'u', $candidate) === 1) {
-                return $candidate;
+            $candidateLength = self::unicodeLength($candidate);
+            $targets = array_values(array_unique(array_filter(
+                [$minimum, $maximum, $candidateLength],
+                static fn(?int $length): bool => $length !== null,
+            )));
+            foreach ($targets as $target) {
+                if ($maximum !== null && $target > $maximum) {
+                    continue;
+                }
+                $value = self::repeatToLength($candidate, $target);
+                if (($minimum === null || self::unicodeLength($value) >= $minimum) &&
+                    @preg_match($delimiter . $escaped . $delimiter . 'u', $value) === 1) {
+                    return $value;
+                }
             }
         }
 
         return null;
+    }
+
+    private static function repeatToLength(string $value, int $length): string
+    {
+        if ($length === 0 || $value === '') {
+            return '';
+        }
+
+        $repetitions = (int) ceil($length / self::unicodeLength($value));
+
+        return implode('', array_slice(self::unicodeCharacters(str_repeat($value, $repetitions)), 0, $length));
     }
 
     private static function unicodeLength(string $value): int

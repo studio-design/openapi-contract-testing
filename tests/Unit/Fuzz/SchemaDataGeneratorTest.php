@@ -460,6 +460,20 @@ class SchemaDataGeneratorTest extends TestCase
     }
 
     #[Test]
+    public function pattern_generation_preserves_pattern_after_minimum_length_adjustment(): void
+    {
+        $schema = ['type' => 'string', 'pattern' => '^a+$', 'minLength' => 2, 'maxLength' => 5];
+
+        $values = SchemaDataGenerator::generate($schema, 3, seed: 1);
+
+        foreach ($values as $value) {
+            $this->assertMatchesRegularExpression('/^a+$/', $value);
+            $this->assertGreaterThanOrEqual(2, strlen($value));
+            $this->assertLessThanOrEqual(5, strlen($value));
+        }
+    }
+
+    #[Test]
     public function emits_numeric_boundaries_that_honor_exclusive_and_multiple_of(): void
     {
         $schema = [
@@ -617,6 +631,41 @@ class SchemaDataGeneratorTest extends TestCase
             $this->assertLessThanOrEqual(5, strlen($value['name']));
             $this->assertGreaterThanOrEqual(3, strlen($value['profile']['nickname']));
             $this->assertLessThanOrEqual(6, strlen($value['profile']['nickname']));
+        }
+    }
+
+    #[Test]
+    public function allof_combines_multiple_of_constraints(): void
+    {
+        $schema = [
+            'allOf' => [
+                ['type' => 'integer', 'multipleOf' => 2],
+                ['multipleOf' => 3],
+            ],
+        ];
+
+        $values = SchemaDataGenerator::generate($schema, 6, seed: 1);
+
+        foreach ($values as $value) {
+            $this->assertIsInt($value);
+            $this->assertSame(0, $value % 6);
+        }
+    }
+
+    #[Test]
+    public function allof_combines_decimal_multiple_of_constraints(): void
+    {
+        $schema = [
+            'allOf' => [
+                ['type' => 'number', 'multipleOf' => 1.5],
+                ['multipleOf' => 2.5],
+            ],
+        ];
+
+        $values = SchemaDataGenerator::generate($schema, 6, seed: 1);
+
+        foreach ($values as $value) {
+            $this->assertSame(0.0, fmod($value, 7.5));
         }
     }
 

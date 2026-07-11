@@ -27,6 +27,42 @@ final class DecimalMultiple
      */
     public static function integerStep(float|int $multipleOf): ?int
     {
+        $fraction = self::fraction($multipleOf);
+
+        return $fraction['numerator'] ?? null;
+    }
+
+    /**
+     * Return the smallest positive value that is an integer multiple of both
+     * finite JSON numbers.
+     */
+    public static function leastCommonMultiple(float|int $left, float|int $right): null|float|int
+    {
+        $leftFraction = self::fraction($left);
+        $rightFraction = self::fraction($right);
+        if ($leftFraction === null || $rightFraction === null) {
+            return null;
+        }
+
+        $numeratorFactor = intdiv(
+            $leftFraction['numerator'],
+            self::greatestCommonDivisor($leftFraction['numerator'], $rightFraction['numerator']),
+        );
+        if ($numeratorFactor > intdiv(PHP_INT_MAX, $rightFraction['numerator'])) {
+            return null;
+        }
+        $numerator = $numeratorFactor * $rightFraction['numerator'];
+        $denominator = self::greatestCommonDivisor(
+            $leftFraction['denominator'],
+            $rightFraction['denominator'],
+        );
+
+        return $denominator === 1 ? $numerator : $numerator / $denominator;
+    }
+
+    /** @return null|array{numerator: int, denominator: int} */
+    private static function fraction(float|int $multipleOf): ?array
+    {
         if ($multipleOf <= 0) {
             return null;
         }
@@ -55,8 +91,12 @@ final class DecimalMultiple
 
         $numerator = (int) $digits;
         $denominator = 10 ** $decimalPlaces;
+        $divisor = self::greatestCommonDivisor($numerator, $denominator);
 
-        return intdiv($numerator, self::greatestCommonDivisor($numerator, $denominator));
+        return [
+            'numerator' => intdiv($numerator, $divisor),
+            'denominator' => intdiv($denominator, $divisor),
+        ];
     }
 
     private static function fitsPlatformInteger(string $digits): bool
