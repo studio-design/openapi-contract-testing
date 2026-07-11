@@ -7,6 +7,7 @@ namespace Studio\OpenApiContractTesting\Fuzz;
 use Faker\Generator;
 use InvalidArgumentException;
 
+use function abs;
 use function array_is_list;
 use function array_key_exists;
 use function array_slice;
@@ -15,6 +16,7 @@ use function is_array;
 use function is_float;
 use function is_int;
 use function is_string;
+use function round;
 use function sprintf;
 use function str_repeat;
 
@@ -137,7 +139,10 @@ final class SchemaMutationGenerator
                 $result[] = new SchemaMutation($schema['exclusiveMaximum'], 'exclusiveMaximum', $pointer);
             }
             if (isset($schema['multipleOf']) && (is_int($schema['multipleOf']) || is_float($schema['multipleOf']))) {
-                $result[] = new SchemaMutation($valid + $schema['multipleOf'] / 2, 'multipleOf', $pointer);
+                $multipleOfCandidate = self::multipleOfCandidate($schema, $valid);
+                if ($multipleOfCandidate !== null) {
+                    $result[] = new SchemaMutation($multipleOfCandidate, 'multipleOf', $pointer);
+                }
             }
         }
 
@@ -197,5 +202,49 @@ final class SchemaMutationGenerator
         }
 
         return $result;
+    }
+
+    /**
+     * Find a same-type value that remains valid when only `multipleOf` is
+     * removed. Some combinations are tautological (`integer` +
+     * `multipleOf: 1`), so no honest single-constraint mutation exists.
+     *
+     * @param array<string, mixed> $schema
+     */
+    private static function multipleOfCandidate(array $schema, float|int $valid): null|float|int
+    {
+        $withoutMultipleOf = $schema;
+        unset($withoutMultipleOf['multipleOf']);
+
+        if (is_int($valid)) {
+            $multipleOf = (float) $schema['multipleOf'];
+            if ($multipleOf <= 0.0) {
+                return null;
+            }
+            $reciprocal = 1.0 / $multipleOf;
+            if (abs($reciprocal - round($reciprocal)) < 1.0E-12) {
+                return null;
+            }
+            for ($offset = 1; $offset <= 1000; $offset++) {
+                foreach ([$valid + $offset, $valid - $offset] as $candidate) {
+                    if (SchemaValueValidator::isValid($candidate, $withoutMultipleOf) &&
+                        !SchemaValueValidator::isValid($candidate, $schema)) {
+                        return $candidate;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        $multipleOf = (float) $schema['multipleOf'];
+        foreach ([$valid + $multipleOf / 2, $valid - $multipleOf / 2] as $candidate) {
+            if (SchemaValueValidator::isValid($candidate, $withoutMultipleOf) &&
+                !SchemaValueValidator::isValid($candidate, $schema)) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 }

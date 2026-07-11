@@ -532,13 +532,13 @@ final class SchemaDataGenerator
             : null;
 
         if ($minSet && $maxSet) {
-            $min = (int) $schema['minimum'];
-            $max = (int) $schema['maximum'];
+            $min = (int) ceil($schema['minimum']);
+            $max = (int) floor($schema['maximum']);
         } elseif ($minSet) {
-            $min = (int) $schema['minimum'];
+            $min = (int) ceil($schema['minimum']);
             $max = $min + 1000;
         } elseif ($maxSet) {
-            $max = (int) $schema['maximum'];
+            $max = (int) floor($schema['maximum']);
             $min = $max - 1000;
         } else {
             $min = 1;

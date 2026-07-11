@@ -19,7 +19,9 @@ use Studio\OpenApiContractTesting\SchemaContext;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
 
+use function array_filter;
 use function array_map;
+use function array_values;
 use function count;
 use function json_decode;
 use function json_encode;
@@ -467,6 +469,24 @@ class SchemaDataGeneratorTest extends TestCase
     }
 
     #[Test]
+    public function integer_inclusive_fractional_bounds_round_in_the_contract_safe_direction(): void
+    {
+        $minimumValues = SchemaDataGenerator::generate([
+            'type' => 'integer',
+            'minimum' => 1.5,
+        ], 2, seed: 1);
+        $maximumValues = SchemaDataGenerator::generate([
+            'type' => 'integer',
+            'maximum' => -1.5,
+        ], 2, seed: 1);
+
+        $this->assertSame(2, $minimumValues[0]);
+        $this->assertGreaterThanOrEqual(2, $minimumValues[1]);
+        $this->assertSame(-2, $maximumValues[1]);
+        $this->assertLessThanOrEqual(-2, $maximumValues[0]);
+    }
+
+    #[Test]
     public function emits_array_and_object_size_boundaries(): void
     {
         $arrays = SchemaDataGenerator::generate([
@@ -569,6 +589,43 @@ class SchemaDataGeneratorTest extends TestCase
             $keywords = array_map(static fn($mutation): string => $mutation->keyword, $mutations);
             $this->assertContains($keyword, $keywords, "missing invalid strategy for {$keyword}");
         }
+    }
+
+    #[Test]
+    public function integer_multiple_of_mutation_preserves_integer_type_and_other_constraints(): void
+    {
+        $schema = [
+            'type' => 'integer',
+            'minimum' => 0,
+            'maximum' => 10,
+            'multipleOf' => 2,
+        ];
+        $withoutMultipleOf = $schema;
+        unset($withoutMultipleOf['multipleOf']);
+
+        $mutations = SchemaMutationGenerator::generate($schema, 100, SchemaDataGenerator::createFaker(1));
+        $multipleOf = array_values(array_filter(
+            $mutations,
+            static fn($mutation): bool => $mutation->keyword === 'multipleOf',
+        ));
+
+        $this->assertCount(1, $multipleOf);
+        $this->assertIsInt($multipleOf[0]->value);
+        $this->assertTrue(SchemaValueValidator::isValid($multipleOf[0]->value, $withoutMultipleOf));
+        $this->assertFalse(SchemaValueValidator::isValid($multipleOf[0]->value, $schema));
+    }
+
+    #[Test]
+    public function integer_multiple_of_one_omits_impossible_single_constraint_mutation(): void
+    {
+        $mutations = SchemaMutationGenerator::generate(
+            ['type' => 'integer', 'multipleOf' => 1],
+            100,
+            SchemaDataGenerator::createFaker(1),
+        );
+        $keywords = array_map(static fn($mutation): string => $mutation->keyword, $mutations);
+
+        $this->assertNotContains('multipleOf', $keywords);
     }
 
     #[Test]
