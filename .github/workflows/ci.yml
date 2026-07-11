@@ -194,6 +194,11 @@ jobs:
           DOCS_VERSION: next
         run: npm run docs:build
 
+      - name: Verify rendered documentation version
+        env:
+          DOCS_VERSION: next
+        run: npm run docs:verify-version
+
       - name: Check documentation links
         run: npm run docs:links
 
