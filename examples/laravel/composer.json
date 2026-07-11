@@ -1,0 +1,16 @@
+{
+  "name": "studio-design/openapi-contract-testing-laravel-example",
+  "description": "Runnable Laravel example for studio-design/openapi-contract-testing.",
+  "license": "MIT",
+  "type": "project",
+  "require": {
+    "php": "^8.2",
+    "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
+    "studio-design/openapi-contract-testing": "@dev"
+  },
+  "autoload-dev": { "psr-4": { "Examples\\Laravel\\Tests\\": "tests/" } },
+  "repositories": [{ "type": "path", "url": "../..", "options": { "symlink": true } }],
+  "scripts": { "test": "phpunit" },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}
