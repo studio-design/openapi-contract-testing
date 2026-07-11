@@ -6,6 +6,8 @@
 
 **/ˈdʒɛs.so/** — pronounced “JESS-so”
 
+Gesso is the primer applied to a canvas before painting. It creates a stable, receptive ground on which the finished work can be built.
+
 OpenAPI contract testing for PHP.
 
 [![CI](https://github.com/studio-design/gesso/actions/workflows/ci.yml/badge.svg)](https://github.com/studio-design/gesso/actions/workflows/ci.yml)
