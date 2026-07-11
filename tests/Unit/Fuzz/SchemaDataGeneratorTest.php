@@ -10,8 +10,16 @@ use InvalidArgumentException;
 use Opis\JsonSchema\Validator;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Studio\OpenApiContractTesting\Fuzz\SchemaDataGenerator;
+use Studio\OpenApiContractTesting\Fuzz\SchemaMutationGenerator;
+use Studio\OpenApiContractTesting\Fuzz\SchemaValueValidator;
+use Studio\OpenApiContractTesting\OpenApiVersion;
+use Studio\OpenApiContractTesting\SchemaContext;
+use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
 
+use function array_map;
 use function count;
 use function json_decode;
 use function json_encode;
@@ -252,16 +260,16 @@ class SchemaDataGeneratorTest extends TestCase
     }
 
     #[Test]
-    public function nullable_type_array_picks_non_null(): void
+    public function nullable_type_array_explores_both_branches(): void
     {
         // Draft-2020 / OAS 3.1 normalised form after OpenApiSchemaConverter.
         $schema = ['type' => ['string', 'null']];
 
         $values = SchemaDataGenerator::generate($schema, 3, seed: 1);
 
-        foreach ($values as $value) {
-            $this->assertIsString($value);
-        }
+        $this->assertIsString($values[0]);
+        $this->assertIsString($values[1]);
+        $this->assertNull($values[2]);
     }
 
     #[Test]
@@ -404,12 +412,8 @@ class SchemaDataGeneratorTest extends TestCase
     }
 
     #[Test]
-    public function oneof_schema_falls_through_to_string_default(): void
+    public function generates_from_each_oneof_branch(): void
     {
-        // Pin current MVP behaviour: composite schemas resolve to `string`
-        // because resolveType() bottoms out there. If a future change adds
-        // proper composition handling, this test should be updated — and the
-        // failure makes that explicit instead of silently changing semantics.
         $schema = [
             'oneOf' => [
                 ['type' => 'object'],
@@ -417,9 +421,193 @@ class SchemaDataGeneratorTest extends TestCase
             ],
         ];
 
-        $value = SchemaDataGenerator::generateOne($schema, faker: null, iteration: 0);
+        $this->assertIsArray(SchemaDataGenerator::generateOne($schema, faker: null, iteration: 0));
+        $this->assertIsInt(SchemaDataGenerator::generateOne($schema, faker: null, iteration: 1));
+    }
 
-        $this->assertIsString($value);
+    #[Test]
+    public function emits_valid_string_length_boundaries_using_unicode_code_points(): void
+    {
+        $values = SchemaDataGenerator::generate(['type' => 'string', 'minLength' => 1, 'maxLength' => 3], 3, seed: 7);
+
+        foreach ($values as $value) {
+            $this->assertTrue(SchemaValueValidator::isValid($value, ['type' => 'string', 'minLength' => 1, 'maxLength' => 3]));
+        }
+        $this->assertSame(1, strlen($values[0]));
+        $this->assertSame(3, strlen($values[1]));
+        $this->assertSame('é', SchemaDataGenerator::generateOne(['type' => 'string', 'pattern' => '^é$'], null, 0));
+    }
+
+    #[Test]
+    public function emits_numeric_boundaries_that_honor_exclusive_and_multiple_of(): void
+    {
+        $schema = [
+            'type' => 'integer',
+            'exclusiveMinimum' => 0,
+            'exclusiveMaximum' => 10,
+            'multipleOf' => 2,
+        ];
+
+        $values = SchemaDataGenerator::generate($schema, 3, seed: 1);
+        $this->assertSame(2, $values[0]);
+        $this->assertSame(8, $values[1]);
+        $this->assertSame(0, $values[2] % 2);
+    }
+
+    #[Test]
+    public function integer_exclusive_bounds_round_in_the_contract_safe_direction(): void
+    {
+        $values = SchemaDataGenerator::generate([
+            'type' => 'integer',
+            'exclusiveMinimum' => 0.5,
+            'exclusiveMaximum' => 10.5,
+        ], 2, seed: 1);
+
+        $this->assertSame([1, 10], $values);
+    }
+
+    #[Test]
+    public function emits_array_and_object_size_boundaries(): void
+    {
+        $arrays = SchemaDataGenerator::generate([
+            'type' => 'array',
+            'minItems' => 2,
+            'maxItems' => 4,
+            'items' => ['type' => 'integer'],
+        ], 3, seed: 1);
+        $this->assertCount(2, $arrays[0]);
+        $this->assertCount(4, $arrays[1]);
+
+        $objects = SchemaDataGenerator::generate([
+            'type' => 'object',
+            'minProperties' => 2,
+            'maxProperties' => 2,
+        ], 1, seed: 1);
+        $this->assertCount(2, $objects[0]);
+    }
+
+    #[Test]
+    public function generates_allof_not_and_conditional_schemas(): void
+    {
+        $allOf = [
+            'allOf' => [
+                ['type' => 'object', 'required' => ['id'], 'properties' => ['id' => ['type' => 'integer']]],
+                ['type' => 'object', 'required' => ['name'], 'properties' => ['name' => ['type' => 'string']]],
+            ],
+        ];
+        $value = SchemaDataGenerator::generate($allOf, 1, seed: 1)[0];
+        $this->assertIsArray($value);
+        $this->assertArrayHasKey('id', $value);
+        $this->assertArrayHasKey('name', $value);
+
+        $this->assertIsNotString(SchemaDataGenerator::generate(['not' => ['type' => 'string']], 1, seed: 1)[0]);
+
+        $conditional = [
+            'type' => 'object',
+            'if' => ['required' => ['kind'], 'properties' => ['kind' => ['const' => 'a']]],
+            'then' => ['required' => ['a'], 'properties' => ['a' => ['type' => 'string']]],
+            'else' => ['required' => ['b'], 'properties' => ['b' => ['type' => 'integer']]],
+        ];
+        foreach (SchemaDataGenerator::generate($conditional, 2, seed: 1) as $conditionalValue) {
+            $this->assertTrue(SchemaValueValidator::isValid($conditionalValue, $conditional));
+        }
+    }
+
+    #[Test]
+    public function invalid_mutations_each_name_and_violate_the_target_constraint(): void
+    {
+        $schema = [
+            'type' => 'object',
+            'required' => ['name'],
+            'additionalProperties' => false,
+            'properties' => [
+                'name' => ['type' => 'string', 'minLength' => 2, 'maxLength' => 4, 'enum' => ['ab', 'cd']],
+            ],
+        ];
+
+        $mutations = SchemaMutationGenerator::generate($schema, 20, SchemaDataGenerator::createFaker(1));
+        $keywords = [];
+        foreach ($mutations as $mutation) {
+            $this->assertFalse(SchemaValueValidator::isValid($mutation->value, $schema));
+            $keywords[] = $mutation->keyword;
+        }
+
+        $this->assertContains('required', $keywords);
+        $this->assertContains('additionalProperties', $keywords);
+        $this->assertContains('enum', $keywords);
+    }
+
+    #[Test]
+    public function supported_constraint_families_have_targeted_invalid_mutations(): void
+    {
+        $schemas = [
+            'type' => ['type' => 'string'],
+            'const' => ['const' => 'fixed'],
+            'enum' => ['type' => 'string', 'enum' => ['a', 'b']],
+            'minLength' => ['type' => 'string', 'minLength' => 2],
+            'maxLength' => ['type' => 'string', 'maxLength' => 3],
+            'pattern' => ['type' => 'string', 'pattern' => '^a+$'],
+            'format' => ['type' => 'string', 'format' => 'email'],
+            'minimum' => ['type' => 'integer', 'minimum' => 2],
+            'maximum' => ['type' => 'integer', 'maximum' => 5],
+            'exclusiveMinimum' => ['type' => 'integer', 'exclusiveMinimum' => 0],
+            'exclusiveMaximum' => ['type' => 'integer', 'exclusiveMaximum' => 10],
+            'multipleOf' => ['type' => 'integer', 'multipleOf' => 2],
+            'minItems' => ['type' => 'array', 'minItems' => 2, 'items' => ['type' => 'integer']],
+            'maxItems' => ['type' => 'array', 'maxItems' => 2, 'items' => ['type' => 'integer']],
+            'uniqueItems' => ['type' => 'array', 'minItems' => 2, 'uniqueItems' => true, 'items' => ['type' => 'integer']],
+            'minProperties' => ['type' => 'object', 'minProperties' => 2],
+            'maxProperties' => ['type' => 'object', 'maxProperties' => 1],
+            'oneOf' => ['oneOf' => [['type' => 'integer'], ['type' => 'object']]],
+            'anyOf' => ['anyOf' => [['type' => 'integer'], ['type' => 'object']]],
+            'allOf' => ['allOf' => [['type' => 'string'], ['minLength' => 2]]],
+            'not' => ['not' => ['type' => 'string']],
+        ];
+
+        foreach ($schemas as $keyword => $schema) {
+            $mutations = SchemaMutationGenerator::generate($schema, 100, SchemaDataGenerator::createFaker(1));
+            $keywords = array_map(static fn($mutation): string => $mutation->keyword, $mutations);
+            $this->assertContains($keyword, $keywords, "missing invalid strategy for {$keyword}");
+        }
+    }
+
+    #[Test]
+    public function generates_discriminator_selected_composition_branches(): void
+    {
+        $cat = [
+            'type' => 'object',
+            'required' => ['kind', 'meows'],
+            'properties' => ['kind' => ['const' => 'cat'], 'meows' => ['type' => 'boolean']],
+        ];
+        $dog = [
+            'type' => 'object',
+            'required' => ['kind', 'barks'],
+            'properties' => ['kind' => ['const' => 'dog'], 'barks' => ['type' => 'boolean']],
+        ];
+        $root = ['components' => ['schemas' => ['Cat' => $cat, 'Dog' => $dog]]];
+        $converted = OpenApiSchemaConverter::convert([
+            'oneOf' => [$cat, $dog],
+            'discriminator' => [
+                'propertyName' => 'kind',
+                'mapping' => ['cat' => 'Cat', 'dog' => 'Dog'],
+            ],
+        ], OpenApiVersion::V3_1, SchemaContext::Request, new DiscriminatorContext($root, true));
+
+        $values = SchemaDataGenerator::generate($converted, 2, seed: 1);
+
+        $this->assertSame('cat', $values[0]['kind']);
+        $this->assertArrayHasKey('meows', $values[0]);
+        $this->assertSame('dog', $values[1]['kind']);
+        $this->assertArrayHasKey('barks', $values[1]);
+    }
+
+    #[Test]
+    public function self_validation_reports_an_internal_generator_defect_before_dispatch(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Internal fuzz generator defect');
+
+        SchemaDataGenerator::generate(['type' => 'string', 'pattern' => '^impossible-literal$'], 1, seed: 1);
     }
 
     #[Test]
@@ -445,5 +633,25 @@ class SchemaDataGeneratorTest extends TestCase
 
         $this->assertSame('fixed', $value[0]);
         $this->assertIsInt($value[1]);
+    }
+
+    #[Test]
+    public function native_prefix_items_honor_array_boundaries(): void
+    {
+        $schema = [
+            'type' => 'array',
+            'minItems' => 1,
+            'maxItems' => 2,
+            'prefixItems' => [
+                ['const' => 'fixed'],
+                ['type' => 'integer'],
+            ],
+            'items' => false,
+        ];
+
+        $values = SchemaDataGenerator::generate($schema, 2, seed: 1);
+
+        $this->assertCount(1, $values[0]);
+        $this->assertCount(2, $values[1]);
     }
 }

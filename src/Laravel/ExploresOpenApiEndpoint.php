@@ -19,9 +19,9 @@ use function is_string;
 /**
  * Schema-driven request fuzzing trait — issue #136.
  *
- * Generates N happy-path request inputs for a single (method, path) operation
- * directly from the OpenAPI spec, returning an iterable {@see ExplorationCases}
- * collection that the test author drives through any HTTP client of choice.
+ * Generates valid-boundary or targeted-invalid request inputs directly from
+ * the OpenAPI spec, returning an iterable {@see ExplorationCases} collection
+ * that the test author drives through any HTTP client of choice.
  * Each HTTP call still goes through the existing {@see ValidatesOpenApiSchema}
  * auto-assert hook, so the response side and coverage tracking happen
  * automatically.
@@ -73,6 +73,33 @@ trait ExploresOpenApiEndpoint
             // (InvalidOpenApiSpecException, SpecFileNotFoundException, etc.)
             // — without this, a missing or malformed spec leaks the loader's
             // raw stack trace into PHPUnit instead of a clean assertion.
+            $this->failExplore($e->getMessage());
+        }
+    }
+
+    /** @param list<int> $expectedStatusClasses */
+    public function exploreInvalidEndpoint(
+        string $method,
+        string $path,
+        array $expectedStatusClasses,
+        int $cases = 30,
+        ?int $seed = null,
+    ): ExplorationCases {
+        $specName = $this->resolveOpenApiSpec();
+        if (!is_string($specName) || $specName === '') {
+            $this->failExplore('openApiSpec() must return a non-empty spec name.');
+        }
+
+        try {
+            return OpenApiEndpointExplorer::exploreInvalid(
+                $specName,
+                $method,
+                $path,
+                $expectedStatusClasses,
+                $cases,
+                $seed,
+            );
+        } catch (InvalidArgumentException|RuntimeException $e) {
             $this->failExplore($e->getMessage());
         }
     }

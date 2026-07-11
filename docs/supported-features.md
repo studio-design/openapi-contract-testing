@@ -23,6 +23,7 @@ For supported versions, the package detects the OAS feature family from the `ope
 | Feature | 3.0 handling | 3.1 / 3.2 handling |
 |---|---|---|
 | `nullable: true` | Converted to type array `["string", "null"]`; `null` appended to `enum` if present | Not applicable (uses type arrays natively) |
+| Boolean `exclusiveMinimum` / `exclusiveMaximum` | Lowered with its numeric `minimum` / `maximum` to the Draft 07 numeric form | Native numeric JSON Schema keyword |
 | `prefixItems` | N/A | Preserved and enforced natively by JSON Schema 2020-12 |
 | `$dynamicRef` / `$dynamicAnchor` | N/A | Preserved and enforced natively |
 | `examples` (array) | Removed (Draft 2020-12 keyword, not Draft 07) | Removed (Draft 2020-12 keyword, not Draft 07) |

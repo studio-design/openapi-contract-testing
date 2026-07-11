@@ -8,6 +8,7 @@ use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
+use Studio\OpenApiContractTesting\Fuzz\ExplorationCaseKind;
 use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
 use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
 use Studio\OpenApiContractTesting\Fuzz\OpenApiSpecExploration;
@@ -53,6 +54,18 @@ class ExploresOpenApiEndpointTest extends TestCase
         $cases = $this->exploreEndpoint('POST', '/v1/pets', cases: 5, seed: 1);
 
         $this->assertCount(5, $cases);
+    }
+
+    #[Test]
+    public function exposes_negative_endpoint_exploration(): void
+    {
+        $cases = $this->exploreInvalidEndpoint('POST', '/v1/pets', [4], cases: 2, seed: 1);
+
+        $this->assertCount(2, $cases);
+        foreach ($cases as $case) {
+            $this->assertSame(ExplorationCaseKind::Invalid, $case->kind);
+            $this->assertSame([4], $case->expectedStatusClasses);
+        }
     }
 
     #[Test]

@@ -90,6 +90,13 @@ operations. `authenticateUsing()`, `setUpUsing()`, `tearDownUsing()`, and
 `ExploredOperation` rows (including their coverage keys), and a list of
 `ExplorationSkip` entries. See [schema-driven request fuzzing](fuzzing.md).
 
+Call `negativeCases([4])` to switch a whole-spec plan to targeted invalid
+inputs and carry explicit expected response classes on each `ExploredCase`.
+For one operation, use
+`OpenApiEndpointExplorer::exploreInvalid(..., expectedStatusClasses: [4])` or
+Laravel's `exploreInvalidEndpoint()`. `FailureReducer::reduce()` minimizes a
+failing body while preserving a caller-defined failure classification.
+
 ## `OpenApiSpecLoader`
 
 Manages spec loading and configuration.

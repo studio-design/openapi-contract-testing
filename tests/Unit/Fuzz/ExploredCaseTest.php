@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
+use Studio\OpenApiContractTesting\Fuzz\FailureReducer;
 use Studio\OpenApiContractTesting\HttpMethod;
 
 class ExploredCaseTest extends TestCase
@@ -46,5 +47,44 @@ class ExploredCaseTest extends TestCase
         $this->assertSame(['petId' => 7], $case->pathParams);
         $this->assertSame(HttpMethod::POST, $case->method);
         $this->assertSame('/v1/pets', $case->matchedPath);
+    }
+
+    #[Test]
+    public function renders_php_and_curl_reproduction_output(): void
+    {
+        $case = new ExploredCase(
+            body: ['name' => 'Snowy'],
+            query: ['dryRun' => true],
+            headers: ['X-Trace' => 'abc'],
+            pathParams: ['petId' => 7],
+            method: HttpMethod::POST,
+            matchedPath: '/v1/pets/{petId}',
+            seed: 42,
+            caseIndex: 2,
+        );
+
+        $this->assertStringContainsString('cases: 3, seed: 42', $case->replaySnippet('petstore'));
+        $this->assertStringContainsString("curl -X POST 'https://api.example.test/v1/pets/7?", $case->curlSnippet('https://api.example.test'));
+        $this->assertStringContainsString("--data '{\"name\":\"Snowy\"}'", $case->curlSnippet());
+    }
+
+    #[Test]
+    public function reducer_preserves_the_original_failure_classification(): void
+    {
+        $case = new ExploredCase(
+            body: ['trigger' => true, 'noiseA' => 1, 'noiseB' => 2],
+            query: [],
+            headers: [],
+            pathParams: [],
+            method: HttpMethod::POST,
+            matchedPath: '/v1/pets',
+        );
+
+        $reduced = FailureReducer::reduce(
+            $case,
+            static fn(ExploredCase $candidate): ?string => ($candidate->body['trigger'] ?? false) === true ? 'status:500' : null,
+        );
+
+        $this->assertSame(['trigger' => true], $reduced->body);
     }
 }

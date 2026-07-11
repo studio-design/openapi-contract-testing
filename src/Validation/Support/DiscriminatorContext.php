@@ -26,7 +26,7 @@ use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
  *    it both terminates the recursion and avoids combinatorial blow-up for
  *    mappings with many values.
  *
- * Non-body call sites (parameter / header validators, the fuzz explorer) pass
+ * Non-body call sites (parameter / header validators) pass
  * {@see self::disabled()} — those positions never carry a `discriminator` and
  * have no root to resolve against, so lowering is a no-op there.
  *

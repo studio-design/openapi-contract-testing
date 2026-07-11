@@ -58,6 +58,9 @@ final class OpenApiSpecExploration
     private array $excludedOperationIds = [];
     private bool $includeDeprecated = false;
 
+    /** @var null|list<int> */
+    private ?array $negativeExpectedStatusClasses = null;
+
     /** @var null|callable(ExploredOperation): void */
     private $authenticate;
 
@@ -153,6 +156,30 @@ final class OpenApiSpecExploration
         return $this;
     }
 
+    /**
+     * Switch the plan to single-constraint invalid cases. The expected status
+     * classes are carried by every ExploredCase for the response assertion.
+     *
+     * @param list<int> $expectedStatusClasses
+     */
+    public function negativeCases(array $expectedStatusClasses): self
+    {
+        if ($expectedStatusClasses === []) {
+            throw new InvalidArgumentException('negativeCases() requires at least one expected HTTP status class.');
+        }
+        foreach ($expectedStatusClasses as $statusClass) {
+            if ($statusClass < 1 || $statusClass > 5) {
+                throw new InvalidArgumentException(sprintf(
+                    'Expected HTTP status class must be between 1 and 5, got %d.',
+                    $statusClass,
+                ));
+            }
+        }
+        $this->negativeExpectedStatusClasses = $expectedStatusClasses;
+
+        return $this;
+    }
+
     /** @param callable(ExploredOperation): void $callback */
     public function authenticateUsing(callable $callback): self
     {
@@ -233,13 +260,22 @@ final class OpenApiSpecExploration
                 }
 
                 try {
-                    $cases = OpenApiEndpointExplorer::explore(
-                        $this->specName,
-                        $operation->method,
-                        $operation->path,
-                        $this->casesPerOperation,
-                        $operation->seed,
-                    );
+                    $cases = $this->negativeExpectedStatusClasses === null
+                        ? OpenApiEndpointExplorer::explore(
+                            $this->specName,
+                            $operation->method,
+                            $operation->path,
+                            $this->casesPerOperation,
+                            $operation->seed,
+                        )
+                        : OpenApiEndpointExplorer::exploreInvalid(
+                            $this->specName,
+                            $operation->method,
+                            $operation->path,
+                            $this->negativeExpectedStatusClasses,
+                            $this->casesPerOperation,
+                            $operation->seed,
+                        );
                 } catch (InvalidArgumentException $e) {
                     $skips[] = new ExplorationSkip($operation, $e->getMessage());
 
@@ -417,7 +453,7 @@ final class OpenApiSpecExploration
                     }
                     $executedCases++;
                 } catch (Throwable $e) {
-                    throw new RuntimeException($this->caseFailureMessage($operation, $caseIndex), 0, $e);
+                    throw new RuntimeException($this->caseFailureMessage($operation, $case, $caseIndex), 0, $e);
                 }
             }
         } finally {
@@ -427,7 +463,7 @@ final class OpenApiSpecExploration
         }
     }
 
-    private function caseFailureMessage(ExploredOperation $operation, int $caseIndex): string
+    private function caseFailureMessage(ExploredOperation $operation, ExploredCase $case, int $caseIndex): string
     {
         return sprintf(
             "Whole-spec exploration failed.\nSpec: %s\nOperation: %s\nMethod/path: %s %s\nGlobal seed: %d\nOperation seed: %d\nCase: %d\nReplay: %s",
@@ -438,7 +474,7 @@ final class OpenApiSpecExploration
             $this->seed,
             $operation->seed,
             $caseIndex,
-            $operation->replaySnippet($caseIndex),
+            $case->replaySnippet($operation->specName),
         );
     }
 }

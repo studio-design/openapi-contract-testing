@@ -9,6 +9,7 @@ use Opis\JsonSchema\Validator;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
+use Studio\OpenApiContractTesting\Fuzz\ExplorationCaseKind;
 use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
 use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
 use Studio\OpenApiContractTesting\Fuzz\OpenApiEndpointExplorer;
@@ -214,6 +215,37 @@ class OpenApiEndpointExplorerTest extends TestCase
         $this->assertCount(1, $cases);
         foreach ($cases as $case) {
             $this->assertSame(HttpMethod::POST, $case->method);
+        }
+    }
+
+    #[Test]
+    public function negative_exploration_requires_expected_status_classes(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('expected HTTP status class');
+
+        OpenApiEndpointExplorer::exploreInvalid('petstore-3.0', 'POST', '/v1/pets', [], cases: 1);
+    }
+
+    #[Test]
+    public function negative_exploration_exposes_target_and_replay_metadata(): void
+    {
+        $cases = OpenApiEndpointExplorer::exploreInvalid(
+            'petstore-3.0',
+            'POST',
+            '/v1/pets',
+            expectedStatusClasses: [4],
+            cases: 3,
+            seed: 17,
+        );
+
+        foreach ($cases as $index => $case) {
+            $this->assertSame(ExplorationCaseKind::Invalid, $case->kind);
+            $this->assertNotNull($case->targetKeyword);
+            $this->assertSame([4], $case->expectedStatusClasses);
+            $this->assertSame(17, $case->seed);
+            $this->assertSame($index, $case->caseIndex);
+            $this->assertNotSame('', $case->replayToken());
         }
     }
 }

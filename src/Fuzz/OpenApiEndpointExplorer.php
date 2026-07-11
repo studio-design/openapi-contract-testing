@@ -15,11 +15,13 @@ use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
 use Studio\OpenApiContractTesting\Spec\OpenApiSchemaDialect;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 use Studio\OpenApiContractTesting\Validation\Request\ParameterCollector;
+use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
 use ValueError;
 
 use function array_filter;
 use function array_keys;
 use function array_map;
+use function count;
 use function implode;
 use function is_array;
 use function is_string;
@@ -42,8 +44,8 @@ use function trim;
  * `in:path` parameters are always (re)generated from the operation's spec
  * so callers never depend on whichever URI form they passed.
  *
- * Out-of-scope today: `oneOf`/`anyOf`/`allOf` body composition, non-JSON
- * media types (only `application/json` is generated for `requestBody`).
+ * Only JSON-compatible request bodies and schema-form parameters are
+ * generated; unsupported media/parameter forms fail loudly.
  */
 final class OpenApiEndpointExplorer
 {
@@ -57,6 +59,129 @@ final class OpenApiEndpointExplorer
         string $path,
         int $cases = 30,
         ?int $seed = null,
+    ): ExplorationCases {
+        return self::buildValidCases($specName, $method, $path, $cases, $seed);
+    }
+
+    /**
+     * Generate request cases that each violate one identified schema keyword.
+     * Expected response classes are explicit by design: negative contract
+     * tests must assert the documented client-error behavior, not merely
+     * accept every response that is not a 5xx.
+     *
+     * @param list<int> $expectedStatusClasses
+     */
+    public static function exploreInvalid(
+        string $specName,
+        string $method,
+        string $path,
+        array $expectedStatusClasses,
+        int $cases = 30,
+        ?int $seed = null,
+    ): ExplorationCases {
+        if ($expectedStatusClasses === []) {
+            throw new InvalidArgumentException('exploreInvalid() requires at least one expected HTTP status class.');
+        }
+        foreach ($expectedStatusClasses as $statusClass) {
+            if ($statusClass < 1 || $statusClass > 5) {
+                throw new InvalidArgumentException(sprintf('Expected HTTP status class must be between 1 and 5, got %d.', $statusClass));
+            }
+        }
+
+        $validCases = self::buildValidCases($specName, $method, $path, $cases, $seed);
+        [$bodySchema, $parameterSchemas, $bodyRequired] = self::schemasForOperation($specName, $method, $path);
+        $faker = SchemaDataGenerator::createFaker($seed);
+        $built = [];
+
+        foreach ($validCases as $index => $validCase) {
+            $targets = [];
+            if ($bodyRequired) {
+                $targets[] = [
+                    'location' => 'body',
+                    'name' => null,
+                    'mutation' => new SchemaMutation(null, 'required', ''),
+                    'remove' => true,
+                ];
+            }
+            if ($bodySchema !== null) {
+                try {
+                    foreach (SchemaMutationGenerator::generate($bodySchema, 100, $faker, $index) as $mutation) {
+                        $targets[] = ['location' => 'body', 'name' => null, 'mutation' => $mutation, 'remove' => false];
+                    }
+                } catch (InvalidArgumentException) {
+                    // Try parameter constraints before declaring the operation unsupported.
+                }
+            }
+            foreach ($parameterSchemas as $parameter) {
+                if ($parameter['required']) {
+                    $targets[] = [
+                        'location' => $parameter['in'],
+                        'name' => $parameter['name'],
+                        'mutation' => new SchemaMutation(null, 'required', ''),
+                        'remove' => true,
+                    ];
+                }
+
+                try {
+                    foreach (SchemaMutationGenerator::generate($parameter['schema'], 100, $faker, $index) as $mutation) {
+                        $targets[] = [
+                            'location' => $parameter['in'],
+                            'name' => $parameter['name'],
+                            'mutation' => $mutation,
+                            'remove' => false,
+                        ];
+                    }
+                } catch (InvalidArgumentException) {
+                    // This parameter has no supported deterministic mutation.
+                }
+            }
+
+            if ($targets === []) {
+                throw new InvalidArgumentException(sprintf(
+                    "Operation %s '%s' in spec '%s' has no supported invalid mutation target.",
+                    strtoupper($method),
+                    $validCase->matchedPath,
+                    $specName,
+                ));
+            }
+
+            $target = $targets[$index % count($targets)];
+            /** @var SchemaMutation $mutation */
+            $mutation = $target['mutation'];
+            $mutated = $target['remove'] === true
+                ? self::removeInput($validCase, $target['location'], $target['name'])
+                : match ($target['location']) {
+                    'body' => $validCase->withBody($mutation->value),
+                    'query' => $validCase->withQuery(self::replaceValue($validCase->query, $target['name'], $mutation->value)),
+                    'header' => $validCase->withHeaders(self::replaceValue($validCase->headers, $target['name'], $mutation->value)),
+                    'path' => $validCase->withPathParams(self::replaceValue($validCase->pathParams, $target['name'], $mutation->value)),
+                    default => $validCase,
+                };
+            $built[] = new ExploredCase(
+                $mutated->body,
+                $mutated->query,
+                $mutated->headers,
+                $mutated->pathParams,
+                $mutated->method,
+                $mutated->matchedPath,
+                ExplorationCaseKind::Invalid,
+                $mutation->keyword,
+                $target['location'] . $mutation->pointer,
+                $expectedStatusClasses,
+                $seed,
+                $index,
+            );
+        }
+
+        return new ExplorationCases($built);
+    }
+
+    private static function buildValidCases(
+        string $specName,
+        string $method,
+        string $path,
+        int $cases,
+        ?int $seed,
     ): ExplorationCases {
         if ($cases < 1) {
             throw new InvalidArgumentException(sprintf(
@@ -105,7 +230,7 @@ final class OpenApiEndpointExplorer
 
         $version = OpenApiVersion::fromSpec($spec);
         $jsonSchemaDialect = OpenApiSchemaDialect::fromSpec($spec, $version);
-        $bodySchema = self::extractRequestBodySchema($operation, $version, $methodUpper, $matchedPath, $specName, $jsonSchemaDialect);
+        $bodySchema = self::extractRequestBodySchema($operation, $version, $methodUpper, $matchedPath, $specName, $jsonSchemaDialect, $spec);
         /** @var list<array<string, mixed>> $parameters */
         $parameters = ParameterCollector::collect($methodUpper, $matchedPath, $pathSpec, $operation)->parameters;
         self::assertParametersGeneratable($parameters, $methodUpper, $matchedPath, $specName);
@@ -113,17 +238,107 @@ final class OpenApiEndpointExplorer
         $faker = SchemaDataGenerator::createFaker($seed);
         $built = [];
         for ($i = 0; $i < $cases; $i++) {
+            $body = $bodySchema !== null ? SchemaDataGenerator::generateOne($bodySchema, $faker, $i) : null;
+            if ($bodySchema !== null) {
+                SchemaValueValidator::assertValid($body, $bodySchema, $i);
+            }
+            $query = self::generateParameterValues($parameters, 'query', $version, $jsonSchemaDialect, $faker, $i);
+            $headers = self::generateParameterValues($parameters, 'header', $version, $jsonSchemaDialect, $faker, $i);
+            $pathParams = self::generateParameterValues($parameters, 'path', $version, $jsonSchemaDialect, $faker, $i);
             $built[] = new ExploredCase(
-                body: $bodySchema !== null ? SchemaDataGenerator::generateOne($bodySchema, $faker, $i) : null,
-                query: self::generateParameterValues($parameters, 'query', $version, $jsonSchemaDialect, $faker, $i),
-                headers: self::generateParameterValues($parameters, 'header', $version, $jsonSchemaDialect, $faker, $i),
-                pathParams: self::generateParameterValues($parameters, 'path', $version, $jsonSchemaDialect, $faker, $i),
+                body: $body,
+                query: $query,
+                headers: $headers,
+                pathParams: $pathParams,
                 method: $methodEnum,
                 matchedPath: $matchedPath,
+                seed: $seed,
+                caseIndex: $i,
             );
         }
 
         return new ExplorationCases($built);
+    }
+
+    /**
+     * @return array{0: null|array<string, mixed>, 1: list<array{in: string, name: string, required: bool, schema: array<string, mixed>}>, 2: bool}
+     */
+    private static function schemasForOperation(string $specName, string $method, string $path): array
+    {
+        $spec = OpenApiSpecLoader::load($specName);
+        /** @var array<string, mixed> $paths */
+        $paths = is_array($spec['paths'] ?? null) ? $spec['paths'] : [];
+        $matchedPath = self::resolveMatchedPath($paths, $path);
+        if ($matchedPath === null || !is_array($paths[$matchedPath] ?? null)) {
+            throw new InvalidArgumentException(sprintf("Path '%s' is not declared in OpenAPI spec '%s'.", $path, $specName));
+        }
+        $methodUpper = strtoupper($method);
+        $pathSpec = $paths[$matchedPath];
+        $resolved = OpenApiOperationResolver::resolve($pathSpec, $methodUpper);
+        if (!$resolved['found'] || !is_array($resolved['operation'])) {
+            throw new InvalidArgumentException(sprintf("Operation %s '%s' is not declared in OpenAPI spec '%s'.", $methodUpper, $matchedPath, $specName));
+        }
+        $operation = $resolved['operation'];
+        $version = OpenApiVersion::fromSpec($spec);
+        $dialect = OpenApiSchemaDialect::fromSpec($spec, $version);
+        $body = self::extractRequestBodySchema($operation, $version, $methodUpper, $matchedPath, $specName, $dialect, $spec);
+        $parameterSchemas = [];
+        foreach (ParameterCollector::collect($methodUpper, $matchedPath, $pathSpec, $operation)->parameters as $parameter) {
+            if (!is_string($parameter['in'] ?? null) || !is_string($parameter['name'] ?? null) || !is_array($parameter['schema'] ?? null)) {
+                continue;
+            }
+            $parameterSchemas[] = [
+                'in' => $parameter['in'],
+                'name' => $parameter['name'],
+                'required' => ($parameter['required'] ?? false) === true || $parameter['in'] === 'path',
+                'schema' => OpenApiSchemaConverter::convert($parameter['schema'], $version, SchemaContext::Request, null, $dialect),
+            ];
+        }
+
+        return [$body, $parameterSchemas, ($operation['requestBody']['required'] ?? false) === true];
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     *
+     * @return array<string, mixed>
+     */
+    private static function replaceValue(array $values, mixed $name, mixed $value): array
+    {
+        if (is_string($name)) {
+            $values[$name] = $value;
+        }
+
+        return $values;
+    }
+
+    private static function removeInput(ExploredCase $case, mixed $location, mixed $name): ExploredCase
+    {
+        if ($location === 'body') {
+            return $case->withBody(null);
+        }
+        if (!is_string($name)) {
+            return $case;
+        }
+
+        return match ($location) {
+            'query' => $case->withQuery(self::withoutKey($case->query, $name)),
+            'header' => $case->withHeaders(self::withoutKey($case->headers, $name)),
+            'path' => $case->withPathParams(self::withoutKey($case->pathParams, $name)),
+            default => $case,
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     *
+     * @return array<string, mixed>
+     */
+    private static function withoutKey(array $values, string $name): array
+    {
+        unset($values[$name]);
+
+        return $values;
     }
 
     /**
@@ -167,6 +382,7 @@ final class OpenApiEndpointExplorer
      * mode the rest of the library tries to avoid.
      *
      * @param array<string, mixed> $operation
+     * @param array<string, mixed> $spec
      *
      * @return null|array<string, mixed>
      *
@@ -179,6 +395,7 @@ final class OpenApiEndpointExplorer
         string $matchedPath,
         string $specName,
         string $jsonSchemaDialect,
+        array $spec,
     ): ?array {
         $requestBody = $operation['requestBody'] ?? null;
         if (!is_array($requestBody)) {
@@ -219,7 +436,13 @@ final class OpenApiEndpointExplorer
             return null;
         }
 
-        return OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request, null, $jsonSchemaDialect);
+        return OpenApiSchemaConverter::convert(
+            $schema,
+            $version,
+            SchemaContext::Request,
+            new DiscriminatorContext($spec, true),
+            $jsonSchemaDialect,
+        );
     }
 
     /**
@@ -293,7 +516,9 @@ final class OpenApiEndpointExplorer
                 continue;
             }
             $converted = OpenApiSchemaConverter::convert($schema, $version, SchemaContext::Request, null, $jsonSchemaDialect);
-            $values[$name] = SchemaDataGenerator::generateOne($converted, $faker, $iteration);
+            $value = SchemaDataGenerator::generateOne($converted, $faker, $iteration);
+            SchemaValueValidator::assertValid($value, $converted, $iteration);
+            $values[$name] = $value;
         }
 
         return $values;
