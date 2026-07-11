@@ -6,9 +6,7 @@
 
 **/ˈdʒɛs.so/** — pronounced “JESS-so”
 
-Gesso is the primer applied to a canvas before painting. It creates a stable, receptive ground on which the finished work can be built.
-
-OpenAPI contract testing for PHP.
+Gesso is the primer applied to a canvas before painting—a stable, receptive ground on which the finished work can be built. Gesso brings that same idea to APIs, providing a dependable foundation for OpenAPI contract testing in PHP.
 
 [![CI](https://github.com/studio-design/gesso/actions/workflows/ci.yml/badge.svg)](https://github.com/studio-design/gesso/actions/workflows/ci.yml)
 [![Latest Stable Version](https://poser.pugx.org/studio-design/openapi-contract-testing/v)](https://packagist.org/packages/studio-design/openapi-contract-testing)
