@@ -86,6 +86,24 @@ class SchemaDataGeneratorTest extends TestCase
     }
 
     #[Test]
+    public function number_generation_honors_multiple_of_after_boundary_cases(): void
+    {
+        $schema = [
+            'type' => 'number',
+            'minimum' => 0,
+            'maximum' => 10,
+            'multipleOf' => 2,
+        ];
+
+        $values = SchemaDataGenerator::generate($schema, 30, seed: 1);
+
+        foreach ($values as $value) {
+            $this->assertIsFloat($value);
+            $this->assertSame(0.0, fmod($value, 2.0));
+        }
+    }
+
+    #[Test]
     public function generates_booleans(): void
     {
         $values = SchemaDataGenerator::generate(['type' => 'boolean'], 4, seed: 1);
@@ -711,7 +729,7 @@ class SchemaDataGeneratorTest extends TestCase
                 ['type' => 'integer'],
             ],
             'items' => false,
-        ], faker: null, iteration: 0);
+        ], faker: null, iteration: 1);
 
         $this->assertSame('fixed', $value[0]);
         $this->assertIsInt($value[1]);
@@ -735,5 +753,26 @@ class SchemaDataGeneratorTest extends TestCase
 
         $this->assertCount(1, $values[0]);
         $this->assertCount(2, $values[1]);
+    }
+
+    #[Test]
+    public function prefix_items_do_not_imply_minimum_length_and_respect_max_items(): void
+    {
+        $schema = [
+            'type' => 'array',
+            'maxItems' => 1,
+            'prefixItems' => [
+                ['type' => 'string'],
+                ['type' => 'integer'],
+                ['type' => 'boolean'],
+            ],
+        ];
+
+        $values = SchemaDataGenerator::generate($schema, 6, seed: 1);
+
+        $this->assertSame([], $values[0]);
+        foreach ($values as $value) {
+            $this->assertLessThanOrEqual(1, count($value));
+        }
     }
 }

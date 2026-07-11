@@ -316,13 +316,16 @@ final class SchemaDataGenerator
         $prefixItems = $schema['prefixItems'] ?? null;
         if (is_array($prefixItems)) {
             $prefixCount = count($prefixItems);
-            $minimum = isset($schema['minItems']) && is_int($schema['minItems']) ? max(0, $schema['minItems']) : $prefixCount;
-            $maximum = isset($schema['maxItems']) && is_int($schema['maxItems']) ? max(0, $schema['maxItems']) : $prefixCount;
+            $minimum = isset($schema['minItems']) && is_int($schema['minItems']) ? max(0, $schema['minItems']) : 0;
+            $maximum = isset($schema['maxItems']) && is_int($schema['maxItems']) ? max(0, $schema['maxItems']) : null;
             $size = match ($iteration % 3) {
                 0 => $minimum,
-                1 => $maximum,
+                1 => $maximum ?? $prefixCount,
                 default => $prefixCount,
             };
+            if ($maximum !== null) {
+                $size = min($size, $maximum);
+            }
             if (($schema['items'] ?? true) === false) {
                 $size = min($size, $prefixCount);
             }
@@ -644,10 +647,25 @@ final class SchemaDataGenerator
             return $max;
         }
         if ($faker !== null) {
+            if ($multipleOf > 0.0) {
+                $minimumMultiplier = (int) ceil($min / $multipleOf);
+                $maximumMultiplier = (int) floor($max / $multipleOf);
+
+                return round($faker->numberBetween($minimumMultiplier, $maximumMultiplier) * $multipleOf, 12);
+            }
+
             // randomFloat(null, …) lets faker pick precision dynamically so
             // tight ranges (e.g. minimum=0.001 maximum=0.002) don't collapse
             // to 0.00 from a fixed two-decimal rounding.
             return $faker->randomFloat(null, $min, $max);
+        }
+
+        if ($multipleOf > 0.0) {
+            $minimumMultiplier = (int) ceil($min / $multipleOf);
+            $maximumMultiplier = (int) floor($max / $multipleOf);
+            $span = $maximumMultiplier - $minimumMultiplier + 1;
+
+            return round(($minimumMultiplier + $iteration % max(1, $span)) * $multipleOf, 12);
         }
 
         // Scale the iteration-driven offset to the actual span so the value
