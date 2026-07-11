@@ -671,6 +671,52 @@ class SchemaDataGeneratorTest extends TestCase
     }
 
     #[Test]
+    public function allof_combines_array_size_boundaries(): void
+    {
+        $schema = [
+            'allOf' => [
+                [
+                    'type' => 'array',
+                    'items' => ['type' => 'string'],
+                    'minItems' => 3,
+                    'maxItems' => 8,
+                ],
+                ['minItems' => 1, 'maxItems' => 5],
+            ],
+        ];
+
+        $values = SchemaDataGenerator::generate($schema, 3, seed: 1);
+
+        $this->assertCount(3, $values[0]);
+        $this->assertCount(5, $values[1]);
+        foreach ($values as $value) {
+            $this->assertGreaterThanOrEqual(3, count($value));
+            $this->assertLessThanOrEqual(5, count($value));
+        }
+    }
+
+    #[Test]
+    public function allof_combines_object_size_boundaries(): void
+    {
+        $schema = [
+            'allOf' => [
+                ['type' => 'object', 'minProperties' => 3, 'maxProperties' => 8],
+                ['minProperties' => 1, 'maxProperties' => 5],
+            ],
+        ];
+
+        $values = SchemaDataGenerator::generate($schema, 3, seed: 1);
+
+        $this->assertCount(3, $values[0]);
+        $this->assertCount(5, $values[1]);
+        foreach ($values as $value) {
+            $this->assertIsArray($value);
+            $this->assertGreaterThanOrEqual(3, count($value));
+            $this->assertLessThanOrEqual(5, count($value));
+        }
+    }
+
+    #[Test]
     public function invalid_mutations_each_name_and_violate_the_target_constraint(): void
     {
         $schema = [

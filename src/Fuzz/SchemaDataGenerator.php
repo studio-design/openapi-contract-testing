@@ -777,6 +777,16 @@ final class SchemaDataGenerator
         if (isset($left['maxLength'], $right['maxLength'])) {
             $merged['maxLength'] = min($left['maxLength'], $right['maxLength']);
         }
+        foreach (['minItems', 'minProperties'] as $minimumKeyword) {
+            if (isset($left[$minimumKeyword], $right[$minimumKeyword])) {
+                $merged[$minimumKeyword] = max($left[$minimumKeyword], $right[$minimumKeyword]);
+            }
+        }
+        foreach (['maxItems', 'maxProperties'] as $maximumKeyword) {
+            if (isset($left[$maximumKeyword], $right[$maximumKeyword])) {
+                $merged[$maximumKeyword] = min($left[$maximumKeyword], $right[$maximumKeyword]);
+            }
+        }
         if ((is_int($left['multipleOf'] ?? null) || is_float($left['multipleOf'] ?? null)) &&
             (is_int($right['multipleOf'] ?? null) || is_float($right['multipleOf'] ?? null))) {
             $multipleOf = DecimalMultiple::leastCommonMultiple($left['multipleOf'], $right['multipleOf']);
