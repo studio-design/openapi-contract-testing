@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Gesso">
+  <rect width="512" height="512" rx="72" fill="#222222"/>
+  <g stroke="#f2efe8" stroke-width="5">
+    <path d="M286 286H408M286 347H408M286 408H408M286 286V408M347 286V408M408 286V408"/>
+  </g>
+  <path fill="#f2efe8" d="M104 104H408V250L391 247L378 258L363 254L349 268L332 265L318 280L301 276L287 291L271 287L257 302L240 298L226 313L210 309L195 324L179 320L164 335L148 331L134 346L104 344Z"/>
+  <path fill="#222222" d="m151 341-38-38 247-247 38 38Z"/>
+</svg>
