@@ -280,6 +280,8 @@ final class OpenApiSpecExploration
                     $skips[] = new ExplorationSkip($operation, $e->getMessage());
 
                     continue;
+                } catch (Throwable $e) {
+                    throw new RuntimeException($this->generationFailureMessage($operation, $e), 0, $e);
                 }
 
                 $this->runOperation($operation, $cases, $executedCases);
@@ -476,5 +478,35 @@ final class OpenApiSpecExploration
             $caseIndex,
             $case->replaySnippet($operation->specName),
         );
+    }
+
+    private function generationFailureMessage(ExploredOperation $operation, Throwable $failure): string
+    {
+        $caseIndex = $failure instanceof FuzzGenerationException ? $failure->caseIndex : null;
+        $case = $caseIndex === null ? '(unknown)' : (string) $caseIndex;
+        $replay = $caseIndex === null
+            ? '(unavailable before a case index was assigned)'
+            : $this->generationReplaySnippet($operation, $caseIndex);
+
+        return sprintf(
+            "Whole-spec input generation failed.\nSpec: %s\nOperation: %s\nMethod/path: %s %s\nGlobal seed: %d\nOperation seed: %d\nCase: %s\nReplay: %s",
+            $operation->specName,
+            $operation->operationId ?? '(none)',
+            $operation->method,
+            $operation->path,
+            $this->seed,
+            $operation->seed,
+            $case,
+            $replay,
+        );
+    }
+
+    private function generationReplaySnippet(ExploredOperation $operation, int $caseIndex): string
+    {
+        if ($this->negativeExpectedStatusClasses !== null) {
+            return $operation->replayInvalidSnippet($caseIndex, $this->negativeExpectedStatusClasses);
+        }
+
+        return $operation->replaySnippet($caseIndex);
     }
 }

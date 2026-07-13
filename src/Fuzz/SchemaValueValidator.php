@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Fuzz;
 
 use Opis\JsonSchema\Validator;
-use RuntimeException;
 
 use function json_decode;
 use function json_encode;
@@ -31,9 +30,9 @@ final class SchemaValueValidator
             return;
         }
 
-        throw new RuntimeException(sprintf(
+        throw new FuzzGenerationException(sprintf(
             'Internal fuzz generator defect: valid case %d does not satisfy its converted JSON Schema.',
             $iteration,
-        ));
+        ), $iteration);
     }
 }

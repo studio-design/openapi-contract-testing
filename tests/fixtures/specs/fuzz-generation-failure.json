@@ -1,0 +1,30 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Whole-spec generation failure fixture",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/broken": {
+      "post": {
+        "operationId": "createBrokenResource",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string",
+                "enum": [1]
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Created"
+          }
+        }
+      }
+    }
+  }
+}
