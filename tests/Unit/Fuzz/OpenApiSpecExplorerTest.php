@@ -306,7 +306,7 @@ class OpenApiSpecExplorerTest extends TestCase
             $this->assertStringContainsString('Case: 0', $e->getMessage());
             $this->assertStringContainsString("OpenApiEndpointExplorer::explore('fuzz-generation-failure'", $e->getMessage());
             $this->assertInstanceOf(FuzzGenerationException::class, $e->getPrevious());
-            $this->assertStringContainsString('Internal fuzz generator defect: valid case 0', $e->getPrevious()?->getMessage());
+            $this->assertStringContainsString('Internal fuzz generator defect: valid case 0', $e->getPrevious()->getMessage());
             $this->assertFalse($dispatched);
         }
     }
