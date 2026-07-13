@@ -10,6 +10,31 @@ the README for the full surface contract.
 
 ## Unreleased
 
+## [1.9.0](https://github.com/studio-design/gesso/compare/v1.8.0...v1.9.0) (2026-07-13)
+
+
+### Features
+
+* **cli:** add pre-test OpenAPI doctor command ([#291](https://github.com/studio-design/gesso/issues/291)) ([9b6c1f0](https://github.com/studio-design/gesso/commit/9b6c1f0aee6d9cf95db8e6fa346289021629f8c2))
+* **fuzz:** add advanced generation strategies ([#296](https://github.com/studio-design/gesso/issues/296)) ([40c787f](https://github.com/studio-design/gesso/commit/40c787fd34061c9551cf111fba77840c21fb8724))
+* **fuzz:** add whole-spec exploration ([#295](https://github.com/studio-design/gesso/issues/295)) ([9b30ab2](https://github.com/studio-design/gesso/commit/9b30ab25750704270b1fd1b6f3ab6b5c1f619e04))
+* **fuzz:** generate values for common hostname patterns ([#312](https://github.com/studio-design/gesso/issues/312)) ([56e2592](https://github.com/studio-design/gesso/commit/56e25927527ab2c0fe37540533b010802f428cca))
+* **fuzz:** include operation context in generation failures ([#311](https://github.com/studio-design/gesso/issues/311)) ([e9a0da0](https://github.com/studio-design/gesso/commit/e9a0da0baeafa750bf505dc67c75a1138a3fab0e))
+* **laravel:** add OpenAPI route parity command ([#292](https://github.com/studio-design/gesso/issues/292)) ([532bd4a](https://github.com/studio-design/gesso/commit/532bd4a2973e69cbfb854621a25c936c6fb7ed1b))
+* **psr7:** add request and response validation ([#294](https://github.com/studio-design/gesso/issues/294)) ([3a64c9d](https://github.com/studio-design/gesso/commit/3a64c9dcde823e1a859ee9fcb399ff2b6145b538))
+* **spec:** add OpenAPI 3.2 support ([#288](https://github.com/studio-design/gesso/issues/288)) ([d06589a](https://github.com/studio-design/gesso/commit/d06589aabcec211be90cc3dd99dfb45ec6cf6d08))
+* **spec:** validate OAS 3.1/3.2 with native JSON Schema ([#289](https://github.com/studio-design/gesso/issues/289)) ([8c6416d](https://github.com/studio-design/gesso/commit/8c6416dcd7edf179010f5f1cdc71a1e146a5c403))
+
+
+### Bug Fixes
+
+* **deps:** require patched Guzzle versions ([#285](https://github.com/studio-design/gesso/issues/285)) ([32274ee](https://github.com/studio-design/gesso/commit/32274ee3208adb9db58c4b5c6c5168cf076a8615))
+* **docs:** stabilize PSR-7 interface link ([#316](https://github.com/studio-design/gesso/issues/316)) ([8dd5a12](https://github.com/studio-design/gesso/commit/8dd5a12d6b3d754f70f7a5510120dc12bb5821ae))
+* **fuzz:** generate common phone number patterns ([#314](https://github.com/studio-design/gesso/issues/314)) ([68653c3](https://github.com/studio-design/gesso/commit/68653c390c2ac5fd4c09807fe21897132bd13593))
+* **fuzz:** generate simple fixed-quantifier regex patterns ([#310](https://github.com/studio-design/gesso/issues/310)) ([5a27f5a](https://github.com/studio-design/gesso/commit/5a27f5a5bf64dbf815a7b01ca4d790618a5ba0c2))
+* **laravel:** keep large route parity JSON observable ([#309](https://github.com/studio-design/gesso/issues/309)) ([d2e3767](https://github.com/studio-design/gesso/commit/d2e37674ae3d21bdb0c9e18c89bdb74cabad91c4))
+* **spec:** reject unsupported OpenAPI versions ([#287](https://github.com/studio-design/gesso/issues/287)) ([177bf35](https://github.com/studio-design/gesso/commit/177bf35ef36d0c28b7e70b6963fb53824d259924))
+
 ## [1.8.0](https://github.com/studio-design/openapi-contract-testing/compare/v1.7.0...v1.8.0) (2026-06-03)
 
 
