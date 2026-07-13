@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\OpenApiContractTesting\Fuzz;
 
+use function implode;
 use function sprintf;
 use function var_export;
 
@@ -35,6 +36,25 @@ final readonly class ExploredOperation
             var_export($this->specName, true),
             var_export($this->method, true),
             var_export($this->path, true),
+            $caseIndex + 1,
+            $this->seed,
+            $caseIndex,
+        );
+    }
+
+    /**
+     * Return a minimal expression that regenerates the exact negative input case.
+     *
+     * @param list<int> $expectedStatusClasses
+     */
+    public function replayInvalidSnippet(int $caseIndex, array $expectedStatusClasses): string
+    {
+        return sprintf(
+            'OpenApiEndpointExplorer::exploreInvalid(%s, %s, %s, expectedStatusClasses: [%s], cases: %d, seed: %d)->cases[%d]',
+            var_export($this->specName, true),
+            var_export($this->method, true),
+            var_export($this->path, true),
+            implode(', ', $expectedStatusClasses),
             $caseIndex + 1,
             $this->seed,
             $caseIndex,

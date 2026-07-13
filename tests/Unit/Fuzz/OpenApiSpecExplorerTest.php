@@ -12,6 +12,7 @@ use Studio\OpenApiContractTesting\Fuzz\ExplorationCaseKind;
 use Studio\OpenApiContractTesting\Fuzz\ExplorationSkip;
 use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
 use Studio\OpenApiContractTesting\Fuzz\ExploredOperation;
+use Studio\OpenApiContractTesting\Fuzz\FuzzGenerationException;
 use Studio\OpenApiContractTesting\Fuzz\OpenApiSpecExplorer;
 use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
 
@@ -278,6 +279,52 @@ class OpenApiSpecExplorerTest extends TestCase
             $this->assertStringContainsString('Global seed: 77', $e->getMessage());
             $this->assertStringContainsString('OpenApiEndpointExplorer::explore(', $e->getMessage());
             $this->assertSame('application failure', $e->getPrevious()?->getMessage());
+        }
+    }
+
+    #[Test]
+    public function valid_generation_failure_contains_operation_context_before_dispatch(): void
+    {
+        $dispatched = false;
+
+        try {
+            OpenApiSpecExplorer::explore('fuzz-generation-failure', casesPerOperation: 1, seed: 77)
+                ->dispatchUsing(static function () use (&$dispatched): null {
+                    $dispatched = true;
+
+                    return null;
+                })
+                ->assertResponses();
+            $this->fail('Expected whole-spec input generation to fail.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('Whole-spec input generation failed.', $e->getMessage());
+            $this->assertStringContainsString('Spec: fuzz-generation-failure', $e->getMessage());
+            $this->assertStringContainsString('Operation: createBrokenResource', $e->getMessage());
+            $this->assertStringContainsString('Method/path: POST /broken', $e->getMessage());
+            $this->assertStringContainsString('Global seed: 77', $e->getMessage());
+            $this->assertStringContainsString('Operation seed:', $e->getMessage());
+            $this->assertStringContainsString('Case: 0', $e->getMessage());
+            $this->assertStringContainsString("OpenApiEndpointExplorer::explore('fuzz-generation-failure'", $e->getMessage());
+            $this->assertInstanceOf(FuzzGenerationException::class, $e->getPrevious());
+            $this->assertStringContainsString('Internal fuzz generator defect: valid case 0', $e->getPrevious()->getMessage());
+            $this->assertFalse($dispatched);
+        }
+    }
+
+    #[Test]
+    public function negative_generation_failure_contains_negative_replay_context(): void
+    {
+        try {
+            OpenApiSpecExplorer::explore('fuzz-generation-failure', casesPerOperation: 1, seed: 78)
+                ->negativeCases([4])
+                ->dispatchUsing(static fn(): null => null)
+                ->assertResponses();
+            $this->fail('Expected whole-spec negative input generation to fail.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('Case: 0', $e->getMessage());
+            $this->assertStringContainsString("OpenApiEndpointExplorer::exploreInvalid('fuzz-generation-failure'", $e->getMessage());
+            $this->assertStringContainsString('expectedStatusClasses: [4]', $e->getMessage());
+            $this->assertInstanceOf(FuzzGenerationException::class, $e->getPrevious());
         }
     }
 
