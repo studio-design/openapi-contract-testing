@@ -293,6 +293,11 @@ Exit codes are `0` for a usable contract, `1` for diagnostic failure, and `2`
 for invalid usage. JSON uses `schemaVersion: 1`; issue fields are `severity`,
 `category`, `spec`, `message`, and nullable `suggestion`.
 
+Migration status: unchanged. The exact v1.9 help and invalid-usage output are
+captured under `tests/fixtures/compatibility/` and exercised through the
+installed-style binary integration test, including exit code and output
+channel.
+
 ### Coverage merge
 
 Executable: `openapi-coverage-merge`.
@@ -308,6 +313,11 @@ Accepted options:
 
 Exit codes are `0` for success or a warn-only result, `1` for data, gate, or
 write failure, and `2` for invalid configuration or usage.
+
+Migration status: unchanged. The exact v1.9 help and invalid-usage output are
+captured under `tests/fixtures/compatibility/` and exercised through the
+installed-style binary integration test, including exit code and output
+channel.
 
 ## Versioned and machine-readable formats
 

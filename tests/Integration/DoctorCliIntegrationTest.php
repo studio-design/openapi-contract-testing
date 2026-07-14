@@ -12,6 +12,7 @@ use PHPUnit\Framework\TestCase;
 use function dirname;
 use function escapeshellarg;
 use function fclose;
+use function file_get_contents;
 use function is_resource;
 use function json_decode;
 use function proc_close;
@@ -88,11 +89,27 @@ class DoctorCliIntegrationTest extends TestCase
     #[Test]
     public function composer_bin_help_documents_exit_codes(): void
     {
-        [$exit, $stdout] = $this->runCli(['doctor', '--help']);
+        [$exit, $stdout, $stderr] = $this->runCli(['doctor', '--help']);
 
         $this->assertSame(0, $exit);
-        $this->assertStringContainsString('Exit codes:', $stdout);
-        $this->assertStringContainsString('--spec', $stdout);
+        $this->assertSame('', $stderr);
+        $this->assertSame(
+            file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-contract-help.txt'),
+            $stdout,
+        );
+    }
+
+    #[Test]
+    public function composer_bin_missing_spec_matches_v1_9_usage_error(): void
+    {
+        [$exit, $stdout, $stderr] = $this->runCli(['doctor']);
+
+        $this->assertSame(2, $exit);
+        $this->assertSame('', $stdout);
+        $this->assertSame(
+            file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-contract-usage-error.txt'),
+            $stderr,
+        );
     }
 
     /**

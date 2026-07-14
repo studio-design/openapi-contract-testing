@@ -135,20 +135,27 @@ class CoverageMergeCliIntegrationTest extends TestCase
     #[Test]
     public function bin_help_flag_prints_usage_and_exits_zero(): void
     {
-        [$exit, $stdout] = $this->runCli(['--help']);
+        [$exit, $stdout, $stderr] = $this->runCli(['--help']);
 
         $this->assertSame(0, $exit);
-        $this->assertStringContainsString('openapi-coverage-merge', $stdout);
-        $this->assertStringContainsString('--spec-base-path', $stdout);
+        $this->assertSame('', $stderr);
+        $this->assertSame(
+            file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-coverage-merge-help.txt'),
+            $stdout,
+        );
     }
 
     #[Test]
     public function bin_exits_two_when_spec_base_path_is_missing(): void
     {
-        [$exit, , $stderr] = $this->runCli(['--specs=petstore-3.0']);
+        [$exit, $stdout, $stderr] = $this->runCli(['--specs=petstore-3.0']);
 
         $this->assertSame(2, $exit);
-        $this->assertStringContainsString('--spec-base-path is required', $stderr);
+        $this->assertSame('', $stdout);
+        $this->assertSame(
+            file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-coverage-merge-usage-error.txt'),
+            $stderr,
+        );
     }
 
     #[Test]
