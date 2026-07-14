@@ -1,0 +1,17 @@
+{
+    "name": "gesso-fixture/dual-install",
+    "type": "project",
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "../repository"
+        },
+        {
+            "packagist.org": false
+        }
+    ],
+    "require": {
+        "studio-design/gesso": "^2.0",
+        "studio-design/openapi-contract-testing": "^1.10"
+    }
+}

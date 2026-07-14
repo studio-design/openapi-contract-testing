@@ -1,0 +1,16 @@
+{
+    "name": "gesso-fixture/new-only",
+    "type": "project",
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "../repository"
+        },
+        {
+            "packagist.org": false
+        }
+    ],
+    "require": {
+        "studio-design/gesso": "^2.0"
+    }
+}
