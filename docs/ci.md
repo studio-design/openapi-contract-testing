@@ -79,7 +79,7 @@ Example: write every format from one PHPUnit run:
 Same idea from the paratest merge CLI:
 
 ```bash
-vendor/bin/openapi-coverage-merge \
+vendor/bin/gesso coverage:merge \
   --spec-base-path=openapi/bundled \
   --specs=front,admin \
   --output-file=build/coverage.md \

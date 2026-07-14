@@ -2,7 +2,7 @@
 
 `studio-design/gesso` can emit a single self-contained HTML
 report via the `html_output` PHPUnit Extension parameter or the `--html-output`
-flag on `openapi-coverage-merge`. The file is intended for human review (PR
+flag on `gesso coverage:merge`. The file is intended for human review (PR
 comments, CI artifact preview, offline inspection).
 
 A sample document is committed in the repository at [`docs/samples/coverage.html`](https://github.com/studio-design/gesso/blob/main/docs/samples/coverage.html).
@@ -42,7 +42,7 @@ PHPUnit Extension:
 Paratest merge CLI:
 
 ```bash
-vendor/bin/openapi-coverage-merge \
+vendor/bin/gesso coverage:merge \
   --spec-base-path=openapi \
   --html-output=build/coverage.html
 ```

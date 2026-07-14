@@ -32,7 +32,7 @@ maintenance cost.
   Keep policy in the core when it is not framework-specific.
 - `src/Fuzz/`, `src/Schema/`: generated exploration cases and enum-drift checks.
 - `src/Internal/`: implementation details; do not expose these as public API.
-- `bin/openapi-contract`, `bin/openapi-coverage-merge`: Composer-installed CLIs.
+- `bin/gesso`: Composer-installed CLI for `doctor` and `coverage:merge`.
 - `tests/Unit`, `tests/Integration`, `tests/fixtures`: tests and representative
   OpenAPI fixtures. Pest integration tests run through a separate command.
 - `docs/`: focused guides. Start with `docs/setup.md`,

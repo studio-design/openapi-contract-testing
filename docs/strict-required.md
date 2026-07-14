@@ -213,7 +213,7 @@ A future release may add an opt-out attribute (e.g. `#[StrictRequiredPerCallIgno
 Paratest / Pest `--parallel` is supported. Each worker exports its observations via the coverage sidecar envelope (v2). Pass `--strict-required=<mode>` to the merge CLI to evaluate the gate after the workers complete:
 
 ```bash
-vendor/bin/openapi-coverage-merge \
+vendor/bin/gesso coverage:merge \
   --spec-base-path=tests/fixtures/specs \
   --specs=front \
   --sidecar-dir=$RUNNER_TEMP/openapi-sidecars \

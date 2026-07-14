@@ -19,6 +19,7 @@ use function proc_close;
 use function proc_open;
 use function realpath;
 use function sprintf;
+use function str_replace;
 use function stream_get_contents;
 
 class DoctorCliIntegrationTest extends TestCase
@@ -94,7 +95,11 @@ class DoctorCliIntegrationTest extends TestCase
         $this->assertSame(0, $exit);
         $this->assertSame('', $stderr);
         $this->assertSame(
-            file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-contract-help.txt'),
+            str_replace(
+                'openapi-contract doctor',
+                'gesso doctor',
+                (string) file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-contract-help.txt'),
+            ),
             $stdout,
         );
     }
@@ -107,7 +112,11 @@ class DoctorCliIntegrationTest extends TestCase
         $this->assertSame(2, $exit);
         $this->assertSame('', $stdout);
         $this->assertSame(
-            file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-contract-usage-error.txt'),
+            str_replace(
+                'openapi-contract doctor',
+                'gesso doctor',
+                (string) file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-contract-usage-error.txt'),
+            ),
             $stderr,
         );
     }
@@ -119,7 +128,7 @@ class DoctorCliIntegrationTest extends TestCase
      */
     private function runCli(array $args): array
     {
-        $command = sprintf('php %s', escapeshellarg($this->repoRoot . '/bin/openapi-contract'));
+        $command = sprintf('php %s doctor', escapeshellarg($this->repoRoot . '/bin/gesso'));
         foreach ($args as $arg) {
             $command .= ' ' . escapeshellarg($arg);
         }

@@ -38,6 +38,7 @@ final class RuntimeSupportPolicyTest extends TestCase
         $this->assertSame('studio-design/gesso', $composer['name'] ?? null);
         $this->assertSame(['Studio\\Gesso\\' => 'src/'], $composer['autoload']['psr-4'] ?? null);
         $this->assertSame(['Studio\\Gesso\\Tests\\' => 'tests/'], $composer['autoload-dev']['psr-4'] ?? null);
+        $this->assertSame(['bin/gesso'], $composer['bin'] ?? null);
         $this->assertSame('*', $composer['conflict']['studio-design/openapi-contract-testing'] ?? null);
         $this->assertArrayNotHasKey('replace', $composer);
         $this->assertNotContains('src/Compatibility/GessoAliasLoader.php', $composer['autoload']['files'] ?? []);
@@ -45,6 +46,8 @@ final class RuntimeSupportPolicyTest extends TestCase
             ['Studio\\Gesso\\Laravel\\GessoServiceProvider'],
             $composer['extra']['laravel']['providers'] ?? null,
         );
+        $this->assertFileDoesNotExist(__DIR__ . '/../../../bin/openapi-contract');
+        $this->assertFileDoesNotExist(__DIR__ . '/../../../bin/openapi-coverage-merge');
     }
 
     /**

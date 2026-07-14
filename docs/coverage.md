@@ -141,7 +141,7 @@ Out-of-range or non-numeric values produce a `WARNING` to stderr and skip that g
 For paratest / `pest --parallel`, the merge CLI accepts the same options as flags:
 
 ```bash
-vendor/bin/openapi-coverage-merge \
+vendor/bin/gesso coverage:merge \
     --spec-base-path=openapi/bundled \
     --specs=front,admin \
     --min-endpoint-coverage=80 \

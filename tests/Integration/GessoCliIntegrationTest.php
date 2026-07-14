@@ -31,7 +31,7 @@ final class GessoCliIntegrationTest extends TestCase
     }
 
     /** @return iterable<string, array{0: list<string>}> */
-    public static function provideRoot_help_lists_the_v1_10_gesso_commandsCases(): iterable
+    public static function provideRoot_help_lists_the_v2_gesso_commandsCases(): iterable
     {
         yield 'no arguments' => [[]];
         yield 'list' => [['list']];
@@ -41,8 +41,8 @@ final class GessoCliIntegrationTest extends TestCase
 
     /** @param list<string> $arguments */
     #[Test]
-    #[DataProvider('provideRoot_help_lists_the_v1_10_gesso_commandsCases')]
-    public function root_help_lists_the_v1_10_gesso_commands(array $arguments): void
+    #[DataProvider('provideRoot_help_lists_the_v2_gesso_commandsCases')]
+    public function root_help_lists_the_v2_gesso_commands(array $arguments): void
     {
         [$exit, $stdout, $stderr] = $this->runCli($arguments);
 
