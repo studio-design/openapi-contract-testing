@@ -1,0 +1,15 @@
+{
+    "identity_neutral_prefixes": [
+        "[OpenAPI Coverage]",
+        "[OpenAPI Doctor]",
+        "[OpenAPI Enum Drift]",
+        "[OpenAPI Strict Required]",
+        "[OpenAPI Strict Required per-call]"
+    ],
+    "legacy_branded_prefix_occurrences": {
+        "[openapi-contract-testing]": [
+            "src/Fuzz/SchemaDataGenerator.php",
+            "src/Laravel/ValidatesOpenApiSchema.php"
+        ]
+    }
+}
