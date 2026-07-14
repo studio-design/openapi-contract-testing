@@ -5,6 +5,7 @@ This library follows [Semantic Versioning 2.0](https://semver.org/). v1.0.0 is t
 - [What's covered by SemVer in v1.x](#whats-covered-by-semver-in-v1x)
 - [What's NOT covered by SemVer](#whats-not-covered-by-semver)
 - [Support policy](#support-policy)
+- [v1 maintenance lifecycle](#v1-maintenance-lifecycle)
 - [Release checklist](#release-checklist)
 
 ## What's covered by SemVer in v1.x
@@ -76,6 +77,57 @@ See [UPGRADING.md](https://github.com/studio-design/gesso/blob/main/UPGRADING.md
 | Laravel (optional adapter) | Whatever `orchestra/testbench` `^9 || ^10 || ^11` supports. |
 
 Bug fixes and security updates land on the latest minor of v1.x. There is no LTS branch for older minors — upgrade to the latest minor to receive fixes.
+
+## v1 maintenance lifecycle
+
+v1.10.0 is the final planned feature minor of the original
+`studio-design/openapi-contract-testing` package. It may add backward-compatible
+migration aids and deprecations for Gesso 2.0. SemVer requires a minor bump when
+public API is deprecated and a major bump for its incompatible removal. This
+project additionally requires migration deprecations to ship in v1.10.0 before
+removal in v2. After v1.10.0, the v1 line receives patches from the `1.x`
+maintenance branch:
+
+| Period | Dates | Accepted changes |
+| --- | --- | --- |
+| Active maintenance | through 2026-12-31 | Security fixes, backward-compatible bug fixes, and critical ecosystem interoperability fixes |
+| Security maintenance | 2027-01-01 through 2027-06-30 | Security fixes only; non-security changes require evidence that they are necessary to ship a security fix safely |
+| End of life | from 2027-07-01 | No releases or support commitment; migrate to `studio-design/gesso` |
+
+These dates are calendar deadlines in UTC and do not move automatically if the
+v2 schedule changes. If v2 stable is not available before active maintenance
+ends, the maintainers must publish a revised calendar before 2026-12-31 rather
+than silently extending or shortening support.
+
+The v1 Composer PHP constraint remains `^8.2`; a patch release does not raise
+the declared floor. [PHP 8.2 reaches upstream security EOL][php-support] on
+2026-12-31.
+Compatibility checks may continue during v1 security maintenance, but Gesso
+cannot provide fixes for vulnerabilities in an EOL PHP runtime. Consumers
+should run v1 on a PHP branch still supported by the PHP project.
+
+The `1.x` branch is created from the v1.10.0 release commit only after its tag
+and GitHub release have been produced by release-please. `main` then becomes the
+v2 development line. Both branches use release-please independently; v1 patch
+tags remain `v1.10.z` and v2 tags use `v2.y.z`.
+
+Changes that affect both majors land on `main` first, then are cherry-picked
+from the squashed commit into a new branch based on `1.x` and reviewed in a
+separate PR targeting `1.x`. A v1-only compatibility or security fix may target
+`1.x` directly when no equivalent v2 change is needed. Never merge `main` into
+`1.x`, and never combine unrelated backports. The maintenance PR must preserve
+the v1 public compatibility surface and pass the same required checks as a
+`main` PR.
+
+The old Composer package remains installable throughout this lifecycle. It is
+[marked abandoned][composer-abandoned] with `studio-design/gesso` as its
+suggested replacement only after the v2 stable package is installable and its
+migration path has been verified. Abandonment is a migration signal, not
+permission to remove existing v1 tags. The package remains supported according
+to the dates above even if the abandonment notice is added earlier.
+
+[composer-abandoned]: https://getcomposer.org/doc/04-schema.md#abandoned
+[php-support]: https://www.php.net/supported-versions.php
 
 ## Release checklist
 

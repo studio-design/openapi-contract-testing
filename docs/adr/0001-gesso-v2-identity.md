@@ -105,15 +105,16 @@ Before the first breaking rename is merged:
    proves lazy aliases and records their identity limits; whether aliases ship
    remains a release-policy decision.
 5. Define the v1 maintenance branch and end-of-support date before v2
-   pre-releases begin.
+   pre-releases begin. The completed
+   [v1 maintenance lifecycle](../versioning.md#v1-maintenance-lifecycle) fixes
+   the `1.x` branch workflow, accepted changes, and 2027-07-01 EOL date.
 
 ## Open decisions
 
 The following require evidence or maintainer approval before this ADR becomes
 Accepted:
 
-- whether the final transition release is v1.10.0 and which Gesso aliases it
-  can safely provide;
+- which forward `Studio\\Gesso\\` aliases v1.10.0 can safely provide;
 - whether any legacy PHP namespace shim ships in v2, and its exact removal
   version;
 - whether `gesso coverage:merge` replaces the standalone binary immediately or
@@ -122,7 +123,6 @@ Accepted:
 - which machine-readable formats require a schema-version increment;
 - the PHP minimum version and supported PHPUnit matrix at the planned v2 GA
   date;
-- the duration and scope of v1 security or critical-fix support.
 
 ## Consequences
 

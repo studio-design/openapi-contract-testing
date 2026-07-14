@@ -2,15 +2,20 @@
 
 ## Supported Versions
 
-Only the latest minor of v1.x receives security fixes. There is no LTS
-branch for older minors — upgrade to the latest minor of v1.x to receive
-fixes. v0.x is no longer supported now that v1.0 has shipped.
+Only the latest minor of each maintained major receives security fixes. There
+is no support branch for older v1 minors — upgrade to the latest published v1
+minor to receive fixes. After v1.10.0 is published, that supported line is
+v1.10.x. The v1 security-support period ends on 2027-06-30; v1 is end-of-life
+from 2027-07-01. See the
+[versioning policy](docs/versioning.md#v1-maintenance-lifecycle) for the
+active-maintenance and security-only phases. v0.x is unsupported.
 
-| Version  | Supported |
-| -------- | --------- |
-| 1.x (latest minor) | ✓ |
-| 1.x (older minors) | ✗ — upgrade to the latest minor |
-| 0.x      | ✗ — upgrade to v1.x |
+| Version | Supported |
+| --- | --- |
+| 2.x (latest minor, after stable release) | ✓ |
+| 1.x (latest published minor) | ✓ through 2027-06-30 |
+| 1.x (older minors) | ✗ — upgrade to the latest published minor |
+| 0.x | ✗ — upgrade to a maintained version |
 
 ## Reporting a Vulnerability
 
