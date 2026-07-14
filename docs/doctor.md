@@ -1,13 +1,13 @@
 # Doctor command
 
-`openapi-contract doctor` answers one focused question before the test suite starts: can this package load and enforce the selected OpenAPI contract as configured?
+`gesso doctor` answers one focused question before the test suite starts: can this package load and enforce the selected OpenAPI contract as configured?
 
 It is not a replacement for a semantic or style linter such as Spectral or Redocly.
 
 ## Basic usage
 
 ```bash
-vendor/bin/openapi-contract doctor \
+vendor/bin/gesso doctor \
   --spec=openapi/front.yaml \
   --strip-prefix=/api
 ```
@@ -21,7 +21,7 @@ JSON and YAML are supported. YAML requires the optional `symfony/yaml` package, 
 Repeat `--spec`, or provide comma-separated paths:
 
 ```bash
-vendor/bin/openapi-contract doctor \
+vendor/bin/gesso doctor \
   --spec=openapi/front.yaml \
   --spec=openapi/admin.json \
   --strip-prefix=/api
@@ -34,7 +34,7 @@ vendor/bin/openapi-contract doctor \
 Remote references remain opt-in because diagnostics must not access the network unexpectedly:
 
 ```bash
-vendor/bin/openapi-contract doctor \
+vendor/bin/gesso doctor \
   --spec=openapi/root.yaml \
   --allow-remote-refs
 ```

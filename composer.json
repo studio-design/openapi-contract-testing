@@ -47,9 +47,7 @@
         ]
     },
     "bin": [
-        "bin/gesso",
-        "bin/openapi-contract",
-        "bin/openapi-coverage-merge"
+        "bin/gesso"
     ],
     "autoload-dev": {
         "psr-4": {

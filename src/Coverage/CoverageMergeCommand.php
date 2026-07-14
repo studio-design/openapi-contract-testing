@@ -45,7 +45,7 @@ use function unlink;
  * counterpart to the in-process subscriber rendering.
  *
  * Designed to be invoked as a separate step after the parallel test run
- * finishes (e.g. via `bin/openapi-coverage-merge`), but the actual work
+ * finishes (e.g. via `gesso coverage:merge`), but the actual work
  * lives here as a class so it can be unit-tested without spawning a
  * subprocess.
  *
@@ -72,8 +72,8 @@ use function unlink;
  * }
  *
  * @internal Not part of the package's public API. Do not use from user code.
- *           The `openapi-coverage-merge` and `gesso coverage:merge` CLI
- *           surfaces are the documented invocation paths; this class's
+ *           The `gesso coverage:merge` CLI surface is the documented
+ *           invocation path; this class's
  *           constructor / methods may change in any release without a SemVer
  *           bump.
  */
@@ -85,7 +85,7 @@ final class CoverageMergeCommand
     public function __construct(
         private mixed $stderrWriter = null,
         private mixed $stdoutWriter = null,
-        private readonly string $invocation = 'openapi-coverage-merge',
+        private readonly string $invocation = 'gesso coverage:merge',
     ) {}
 
     /**
@@ -157,7 +157,7 @@ final class CoverageMergeCommand
         return $opts;
     }
 
-    public static function usage(string $invocation = 'openapi-coverage-merge'): string
+    public static function usage(string $invocation = 'gesso coverage:merge'): string
     {
         return <<<USAGE
             {$invocation} — combine paratest worker sidecars into one coverage report.

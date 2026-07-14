@@ -324,6 +324,11 @@ V1.10 adds the forward-compatible `gesso` entry point. It dispatches
 rendering the new invocation names in help and usage output. The legacy
 binaries remain the v1.9-compatible paths until the v1 line reaches EOL.
 
+V2 migration status: implemented. Composer exposes only `bin/gesso`; the
+legacy standalone files are absent. Installed-style integration tests invoke
+both subcommands through that binary and retain the v1.9 command options,
+output channels, and exit-code semantics under the Gesso invocation names.
+
 ### Doctor
 
 Executable and command: `openapi-contract doctor`.

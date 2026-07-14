@@ -2,7 +2,7 @@
 
 `studio-design/gesso` can emit machine-readable coverage
 output via the `json_output` PHPUnit Extension parameter or the
-`--json-output` flag on `openapi-coverage-merge`. This page documents the
+`--json-output` flag on `gesso coverage:merge`. This page documents the
 schema so downstream consumers (custom dashboards, contract-coverage
 analytics, scripted gating) can rely on a stable shape.
 
@@ -92,7 +92,7 @@ PHPUnit Extension:
 Paratest merge CLI:
 
 ```bash
-vendor/bin/openapi-coverage-merge \
+vendor/bin/gesso coverage:merge \
   --spec-base-path=openapi \
   --json-output=build/coverage.json
 ```

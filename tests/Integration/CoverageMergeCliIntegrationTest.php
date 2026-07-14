@@ -26,13 +26,14 @@ use function proc_open;
 use function realpath;
 use function rmdir;
 use function sprintf;
+use function str_replace;
 use function stream_get_contents;
 use function sys_get_temp_dir;
 use function uniqid;
 use function unlink;
 
 /**
- * Spawns the real `bin/openapi-coverage-merge` against fixture sidecars and
+ * Spawns the real `gesso coverage:merge` command against fixture sidecars and
  * asserts the combined Markdown report it produces. The unit tests cover
  * `CoverageMergeCommand::run()` directly; this test pins the bin shim
  * (autoload discovery, argv parsing, exit code) on the actual filesystem so
@@ -140,7 +141,11 @@ class CoverageMergeCliIntegrationTest extends TestCase
         $this->assertSame(0, $exit);
         $this->assertSame('', $stderr);
         $this->assertSame(
-            file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-coverage-merge-help.txt'),
+            str_replace(
+                'openapi-coverage-merge',
+                'gesso coverage:merge',
+                (string) file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-coverage-merge-help.txt'),
+            ),
             $stdout,
         );
     }
@@ -153,7 +158,11 @@ class CoverageMergeCliIntegrationTest extends TestCase
         $this->assertSame(2, $exit);
         $this->assertSame('', $stdout);
         $this->assertSame(
-            file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-coverage-merge-usage-error.txt'),
+            str_replace(
+                'openapi-coverage-merge',
+                'gesso coverage:merge',
+                (string) file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-coverage-merge-usage-error.txt'),
+            ),
             $stderr,
         );
     }
@@ -294,7 +303,7 @@ class CoverageMergeCliIntegrationTest extends TestCase
      */
     private function runCli(array $args): array
     {
-        $cmd = sprintf('php %s', escapeshellarg($this->repoRoot . '/bin/openapi-coverage-merge'));
+        $cmd = sprintf('php %s coverage:merge', escapeshellarg($this->repoRoot . '/bin/gesso'));
         foreach ($args as $arg) {
             $cmd .= ' ' . escapeshellarg($arg);
         }

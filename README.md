@@ -147,7 +147,7 @@ openapi/
 Before running your first test, verify that the package can load and enforce the contract:
 
 ```bash
-vendor/bin/openapi-contract doctor \
+vendor/bin/gesso doctor \
   --spec=openapi/root.yaml \
   --strip-prefix=/api \
   --phpunit-snippet
@@ -224,7 +224,7 @@ To validate every response automatically, set `'auto_assert' => true` and drop t
 |---|---|
 | PSR-7 request / response / exchange validation and PSR-15 test recipe | [`docs/psr7.md`](docs/psr7.md) |
 | Full setup, Laravel / Symfony / framework-agnostic adapters, auto-assert, opt-out attributes, request validation, HTTP `$ref` | [`docs/setup.md`](docs/setup.md) |
-| Pre-test compatibility diagnostics (`openapi-contract doctor`) | [`docs/doctor.md`](docs/doctor.md) |
+| Pre-test compatibility diagnostics (`gesso doctor`) | [`docs/doctor.md`](docs/doctor.md) |
 | Laravel route/spec parity (`openapi:routes`) | [`docs/laravel-route-parity.md`](docs/laravel-route-parity.md) |
 | Pest plugin: `expect()->toMatchOpenApiResponseSchema()` and friends | [`docs/pest-plugin.md`](docs/pest-plugin.md) |
 | Schema-driven request fuzzing | [`docs/fuzzing.md`](docs/fuzzing.md) |

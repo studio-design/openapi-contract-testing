@@ -73,8 +73,7 @@ use function substr;
  * @phpstan-type DoctorIssue array{severity: 'error'|'warning'|'skipped', category: string, spec: ?string, message: string, suggestion: ?string}
  * @phpstan-type SpecResult array{path: string, name: string, openapi: string, dialect: string, operations: int, responses: int}
  *
- * @internal The `openapi-contract doctor` and `gesso doctor` CLI surfaces are
- *           the supported APIs.
+ * @internal The `gesso doctor` CLI surface is the supported API.
  */
 final class DoctorCommand
 {
@@ -88,7 +87,7 @@ final class DoctorCommand
         private mixed $stdoutWriter = null,
         private mixed $stderrWriter = null,
         private mixed $remoteTransportFactory = null,
-        private readonly string $invocation = 'openapi-contract doctor',
+        private readonly string $invocation = 'gesso doctor',
     ) {}
 
     /**
@@ -154,7 +153,7 @@ final class DoctorCommand
         return $options;
     }
 
-    public static function usage(string $invocation = 'openapi-contract doctor'): string
+    public static function usage(string $invocation = 'gesso doctor'): string
     {
         return <<<USAGE
             {$invocation} — check whether this package can load and enforce your contract.

@@ -26,13 +26,13 @@ vendor/bin/pest --parallel --processes=4
 # (or `vendor/bin/paratest --processes=4`)
 
 # 2. Merge sidecars into a single coverage report.
-vendor/bin/openapi-coverage-merge \
+vendor/bin/gesso coverage:merge \
     --spec-base-path=openapi/bundled \
     --specs=front,admin \
     --output-file=coverage-report.md
 ```
 
-`vendor/bin/openapi-coverage-merge` flags:
+`vendor/bin/gesso coverage:merge` flags:
 
 | Flag | Default | Description |
 |---|---|---|
