@@ -100,7 +100,10 @@ Before the first breaking rename is merged:
 4. Verify any proposed namespace compatibility mechanism across classes,
    interfaces, traits, enums, attributes, reflection, serialization, and
    Composer optimized autoloading. Do not assume `class_alias()` covers every
-   supported use case without tests.
+   supported use case without tests. The completed
+   [namespace compatibility spike](../migration/v2-namespace-compatibility-spike.md)
+   proves lazy aliases and records their identity limits; whether aliases ship
+   remains a release-policy decision.
 5. Define the v1 maintenance branch and end-of-support date before v2
    pre-releases begin.
 
@@ -171,5 +174,7 @@ Gesso 2.0 is not ready for stable release until all of the following pass:
 - [Composer repositories and package renaming](https://getcomposer.org/doc/05-repositories.md)
 - [Packagist package naming](https://packagist.org/about)
 - [PSR-4 autoloading](https://www.php-fig.org/psr/psr-4/)
+- [PHP `class_alias()`](https://www.php.net/class-alias)
+- [Composer autoloader optimization](https://getcomposer.org/doc/articles/autoloader-optimization.md)
 - [Symfony backward compatibility promise](https://symfony.com/doc/current/contributing/code/bc.html)
 - [Laminas migration tooling](https://docs.laminas.dev/migration/)
