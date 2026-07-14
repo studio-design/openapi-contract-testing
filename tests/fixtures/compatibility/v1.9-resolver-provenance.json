@@ -1,0 +1,26 @@
+{
+    "components": {
+        "schemas": {
+            "Cat": {
+                "type": "object",
+                "required": [
+                    "meow"
+                ]
+            }
+        }
+    },
+    "schema": {
+        "oneOf": [
+            {
+                "type": "object",
+                "required": [
+                    "meow"
+                ],
+                "x-studio-openapi-contract-testing-implicit-schema-name": "Cat"
+            },
+            {
+                "type": "object"
+            }
+        ]
+    }
+}

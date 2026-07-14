@@ -417,8 +417,19 @@ Other stable operational prefixes that require rename or parity tests include:
 
 The OpenAPI vendor extension
 `x-studio-openapi-contract-testing-implicit-schema-name` is embedded in spec
-input rather than PHP source. Its Gesso replacement and any dual-read period
-must be decided explicitly.
+resolution output rather than PHP source. It is resolver-owned provenance, not
+an accepted user extension: an authored value is removed before resolution to
+prevent spoofed discriminator mappings. The exact v1 output is pinned by a
+compatibility fixture.
+
+V2 decision: the resolver generates
+`x-studio-gesso-implicit-schema-name`, removes both old and new names from
+input, and consumes only the newly generated Gesso marker. There is no
+dual-read period because a legacy input field cannot be authenticated as
+resolver output. Consumers must carry the original OpenAPI Description across
+the upgrade rather than persist and reload a resolved array. The validation
+semantics remain unchanged; v2 tests must cover direct-reference generation,
+both spoofed input names, and implicit discriminator parity.
 
 ## v2 migration verification matrix
 
