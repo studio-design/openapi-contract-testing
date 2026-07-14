@@ -1,0 +1,64 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Studio\OpenApiContractTesting\Cli\DoctorCommand;
+use Studio\OpenApiContractTesting\Coverage\CoverageMergeCommand;
+
+$autoloadCandidates = [
+    __DIR__ . '/../vendor/autoload.php',
+    __DIR__ . '/../../../autoload.php',
+];
+
+$autoload = null;
+foreach ($autoloadCandidates as $candidate) {
+    if (file_exists($candidate)) {
+        $autoload = $candidate;
+
+        break;
+    }
+}
+
+if ($autoload === null) {
+    fwrite(STDERR, "[Gesso] FATAL: could not locate Composer autoload.\n");
+    exit(1);
+}
+
+require $autoload;
+
+$usage = <<<'USAGE'
+    Gesso — OpenAPI contract testing for PHP.
+
+    Usage:
+      gesso <command> [options]
+
+    Commands:
+      doctor           Check whether Gesso can load and enforce a contract.
+      coverage:merge   Combine parallel-worker coverage sidecars.
+
+    Run `gesso <command> --help` for command-specific options.
+
+    USAGE;
+
+$argv = $_SERVER['argv'] ?? [];
+array_shift($argv);
+$commandName = array_shift($argv);
+
+if ($commandName === null || $commandName === 'list' || $commandName === '--help' || $commandName === '-h') {
+    fwrite(STDOUT, $usage);
+    exit(0);
+}
+
+if ($commandName === 'doctor') {
+    $command = new DoctorCommand(invocation: 'gesso doctor');
+    exit($command->run(DoctorCommand::parseArgv($argv)));
+}
+
+if ($commandName === 'coverage:merge') {
+    $command = new CoverageMergeCommand(invocation: 'gesso coverage:merge');
+    exit($command->run(CoverageMergeCommand::parseArgv($argv)));
+}
+
+fwrite(STDERR, "[Gesso] Unknown command: {$commandName}\n\n{$usage}");
+exit(2);

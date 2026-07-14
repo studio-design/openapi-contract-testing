@@ -85,6 +85,21 @@ the legacy PHP identity is removed. Reflection, serialization, configuration,
 commands, and package requirements are not made portable by the v1 aliases and
 must follow their documented migration steps.
 
+### CLI transition policy
+
+V1.10.0 adds the `gesso` Composer binary with `doctor` and
+`coverage:merge` subcommands. The existing `openapi-contract` and
+`openapi-coverage-merge` binaries remain unchanged throughout v1 maintenance.
+Consumers can therefore migrate CI and local scripts separately from the v2
+Composer package switch.
+
+Gesso v2 ships only the unified `gesso` binary. It does not retain deprecated
+standalone executable shims. Keeping the old binaries in v1.10 provides the
+overlap period; carrying them into v2 would preserve the legacy technical
+identity that the major release exists to remove. Command options, exit codes,
+and command-specific output remain compatible unless a separately documented
+v2 change requires otherwise.
+
 ## Scope boundaries
 
 The v2 identity migration does not by itself authorize unrelated redesigns.
@@ -128,8 +143,6 @@ Before the first breaking rename is merged:
 The following require evidence or maintainer approval before this ADR becomes
 Accepted:
 
-- whether `gesso coverage:merge` replaces the standalone binary immediately or
-  keeps a deprecated executable shim;
 - how conflicts between old and new Laravel configuration are reported;
 - which machine-readable formats require a schema-version increment;
 - the PHP minimum version and supported PHPUnit matrix at the planned v2 GA

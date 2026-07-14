@@ -15,7 +15,9 @@ This library follows [Semantic Versioning 2.0](https://semver.org/). v1.0.0 is t
 - Public constants and their values
 - Enum cases (additions are minor; removals or renames are major)
 - The `OpenApiValidationResult` shape (`outcome()`, `errors()`, `matchedPath()`, `skipReason()`, `isValid()`, `isSkipped()`)
-- The CLI surface of `bin/openapi-coverage-merge` (flags, exit codes, and the versioned sidecar inputs and filename patterns it accepts)
+- The CLI surfaces of `bin/openapi-contract`, `bin/openapi-coverage-merge`, and
+  the v1.10 `bin/gesso` entry point (commands, flags, exit codes, and versioned
+  inputs and output where applicable)
 - The Laravel `openapi:routes` command surface (flags, exit codes, and versioned JSON output)
 - The `OpenApiCoverageExtension` PHPUnit configuration parameters (`spec_base_path`, `strip_prefixes`, `specs`, `output_file`, `console_output`, …)
 - The Laravel `ValidatesOpenApiSchema` trait's public methods
@@ -90,10 +92,12 @@ maintenance branch:
 
 V1.10.0 also provides lazy `Studio\Gesso\` aliases for all non-`@internal`
 public PHP types. Consumers should use these aliases to migrate imports before
-changing Composer packages. The aliases do not cover configuration, commands,
-wire formats, or literal class-name identity, and v2 does not provide a reverse
-legacy namespace shim. Follow the [staged v2 migration guide](migration/v2.md)
-for these boundaries.
+changing Composer packages. The aliases do not cover configuration, wire
+formats, or literal class-name identity, and v2 does not provide a reverse
+legacy namespace shim. V1.10 adds `gesso doctor` and `gesso coverage:merge` so
+command invocations can move before the package switch; the v1 standalone
+binaries remain supported until v1 EOL and are removed in v2. Follow the
+[staged v2 migration guide](migration/v2.md) for these boundaries.
 
 | Period | Dates | Accepted changes |
 | --- | --- | --- |
