@@ -65,6 +65,37 @@ class OpenApiRefResolverTest extends TestCase
     }
 
     #[Test]
+    public function preserves_provenance_names_as_component_and_property_names(): void
+    {
+        $names = [
+            'x-studio-openapi-contract-testing-implicit-schema-name',
+            OpenApiRefResolver::IMPLICIT_SCHEMA_NAME_EXTENSION,
+        ];
+        $schemas = [];
+        $properties = [];
+        foreach ($names as $name) {
+            $schemas[$name] = ['type' => 'string'];
+            $properties[$name] = ['$ref' => '#/components/schemas/' . $name];
+        }
+        $schemas['Holder'] = [
+            'type' => 'object',
+            'properties' => $properties,
+        ];
+
+        $resolved = OpenApiRefResolver::resolve([
+            'components' => ['schemas' => $schemas],
+        ]);
+
+        foreach ($names as $name) {
+            $this->assertSame(['type' => 'string'], $resolved['components']['schemas'][$name]);
+            $this->assertSame(
+                ['type' => 'string'],
+                $resolved['components']['schemas']['Holder']['properties'][$name],
+            );
+        }
+    }
+
+    #[Test]
     public function resolves_nested_refs(): void
     {
         $spec = [

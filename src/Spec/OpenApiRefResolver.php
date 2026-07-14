@@ -233,13 +233,16 @@ final class OpenApiRefResolver
         array &$documentCache,
         bool $captureImplicitSchemaName = false,
     ): void {
-        // Reserve both provenance keys for resolver-generated data. Removing
-        // user-authored values before descent prevents an inline schema from
-        // spoofing an implicit discriminator mapping across the v1/v2 rename.
-        unset(
-            $node[self::LEGACY_IMPLICIT_SCHEMA_NAME_EXTENSION],
-            $node[self::IMPLICIT_SCHEMA_NAME_EXTENSION],
-        );
+        // Reserve both provenance fields for resolver-generated data. Keys at
+        // the current level of a user-named map are property/component names,
+        // not Schema Object fields, so preserve them and scrub the provenance
+        // only after descending into each named child.
+        if (!$insideUserNamedMap) {
+            unset(
+                $node[self::LEGACY_IMPLICIT_SCHEMA_NAME_EXTENSION],
+                $node[self::IMPLICIT_SCHEMA_NAME_EXTENSION],
+            );
+        }
 
         if (!$insideUserNamedMap && array_key_exists('$ref', $node)) {
             $ref = self::assertStringRef($node['$ref']);
