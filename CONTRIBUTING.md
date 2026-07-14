@@ -104,6 +104,27 @@ version per package path; this repo is single-package so it stays
 `{ ".": "X.Y.Z" }`. The `.` key is the bot's package-root identifier; do
 not rename or duplicate it.
 
+### Maintenance branches and backports
+
+After v1.10.0 is released, `main` is the v2 development branch and `1.x` is the
+v1 maintenance branch. The support windows and accepted change classes are
+defined in [`docs/versioning.md`](docs/versioning.md#v1-maintenance-lifecycle).
+
+For a fix shared by both majors:
+
+1. Merge and verify the fix on `main`.
+2. Create a branch from the latest `1.x` and cherry-pick the squashed `main`
+   commit. Resolve only differences required by the v1 codebase.
+3. Open a separate PR targeting `1.x`, using the same Conventional Commit title
+   when it still describes the backport.
+4. Run the normal checks. Do not merge `main` into `1.x` or group unrelated
+   backports in one PR.
+
+A v1-only fix may start directly from `1.x`. release-please runs independently
+for pushes to `main` and `1.x`; merge the release PR for the branch whose line
+you intend to publish. Tags and `CHANGELOG.md` remain release-please-owned on
+both branches.
+
 ### Discipline
 
 - **Never push a `v*` tag manually.** The release-please manifest tracks
