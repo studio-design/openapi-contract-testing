@@ -39,6 +39,12 @@ parameters:
         - src/Pest/Autoload.php
         - tests/Pest.php
         - tests/Integration/Pest
+        # This is an isolated Composer package that deliberately resolves the
+        # old namespace at runtime and contains an optional adapter whose base
+        # class must stay unavailable. Its integration test remains analysed;
+        # analysing the fixture itself would require stubs that invalidate the
+        # behavior being tested.
+        - tests/fixtures/namespace-compatibility
         # EnumScanner fixture dir holds intentionally-unused trait/abstract
         # files so the scanner can walk past them; PHPStan would otherwise
         # flag them as `trait.unused`.

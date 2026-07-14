@@ -1,0 +1,17 @@
+{
+    "name": "studio-design/gesso-namespace-compatibility-fixture",
+    "description": "Isolated fixture for the Gesso namespace compatibility spike",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "Studio\\Gesso\\": "src/"
+        },
+        "files": [
+            "src/Compatibility/legacy_namespace.php"
+        ]
+    }
+}

@@ -393,6 +393,12 @@ must be decided explicitly.
 | Coverage | v1 JSON and sidecar | v2 output | v1 worker payload merged by v2 reader |
 | Doctor/routes | schema v1 consumers | v2 identity | incompatible field change requires version bump |
 
+The PHP row now has an executable
+[namespace compatibility spike](v2-namespace-compatibility-spike.md). It proves
+that a lazy alias loader works under Composer's authoritative classmap and pins
+the observable reflection and serialization limits. It does not yet add a shim
+to the released package.
+
 ## Change-control checklist
 
 For every v2 identity PR:
