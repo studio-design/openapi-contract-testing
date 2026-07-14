@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Spec;
+namespace Studio\Gesso\Tests\Unit\Spec;
 
 use const E_USER_WARNING;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Exception\MalformedDiscriminatorException;
-use Studio\OpenApiContractTesting\OpenApiVersion;
-use Studio\OpenApiContractTesting\SchemaContext;
-use Studio\OpenApiContractTesting\Spec\OpenApiRefResolver;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
-use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
-use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
+use Studio\Gesso\Exception\MalformedDiscriminatorException;
+use Studio\Gesso\OpenApiVersion;
+use Studio\Gesso\SchemaContext;
+use Studio\Gesso\Spec\OpenApiRefResolver;
+use Studio\Gesso\Spec\OpenApiSchemaConverter;
+use Studio\Gesso\Validation\Support\DiscriminatorContext;
+use Studio\Gesso\Validation\Support\ObjectConverter;
+use Studio\Gesso\Validation\Support\SchemaValidatorRunner;
 
 use function restore_error_handler;
 use function set_error_handler;

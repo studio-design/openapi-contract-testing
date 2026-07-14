@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\PHPUnit;
+namespace Studio\Gesso\PHPUnit;
 
 use const FILE_APPEND;
 use const PHP_EOL;
@@ -13,24 +13,24 @@ use PHPUnit\Runner\Extension\Extension;
 use PHPUnit\Runner\Extension\Facade;
 use PHPUnit\Runner\Extension\ParameterCollection;
 use PHPUnit\TextUI\Configuration\Configuration;
-use Studio\OpenApiContractTesting\Coverage\InvalidCoverageOutputPathException;
-use Studio\OpenApiContractTesting\Coverage\InvalidThresholdConfigurationException;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\Exception\EnumBindingException;
-use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
-use Studio\OpenApiContractTesting\Exception\EnumDriftException;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
-use Studio\OpenApiContractTesting\Internal\EnumScanner;
-use Studio\OpenApiContractTesting\Internal\PartialRunDecision;
-use Studio\OpenApiContractTesting\Schema\EnumDriftAsserter;
-use Studio\OpenApiContractTesting\Schema\EnumDriftReport;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredMode;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallChecker;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallMode;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorEnforcement;
+use Studio\Gesso\Coverage\InvalidCoverageOutputPathException;
+use Studio\Gesso\Coverage\InvalidThresholdConfigurationException;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Exception\EnumBindingException;
+use Studio\Gesso\Exception\EnumBindingReason;
+use Studio\Gesso\Exception\EnumDriftException;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Exception\SpecFileNotFoundException;
+use Studio\Gesso\Internal\EnumScanner;
+use Studio\Gesso\Internal\PartialRunDecision;
+use Studio\Gesso\Schema\EnumDriftAsserter;
+use Studio\Gesso\Schema\EnumDriftReport;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Strict\StrictRequiredMode;
+use Studio\Gesso\Validation\Strict\StrictRequiredPerCallChecker;
+use Studio\Gesso\Validation\Strict\StrictRequiredPerCallMode;
+use Studio\Gesso\Validation\Strict\StrictRequiredTracker;
+use Studio\Gesso\Validation\Support\DiscriminatorEnforcement;
 
 use function array_filter;
 use function array_map;

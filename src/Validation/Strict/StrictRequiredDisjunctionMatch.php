@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Strict;
+namespace Studio\Gesso\Validation\Strict;
 
 /**
  * Lookup result returned by {@see StrictRequiredSchemaAnalysis::lookup()}

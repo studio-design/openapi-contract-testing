@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Spec;
+namespace Studio\Gesso\Tests\Unit\Spec;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
+use Studio\Gesso\Spec\OpenApiPathMatcher;
 
 class OpenApiPathMatcherTest extends TestCase
 {

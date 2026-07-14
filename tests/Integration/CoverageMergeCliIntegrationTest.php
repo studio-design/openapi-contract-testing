@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Integration;
+namespace Studio\Gesso\Tests\Integration;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Coverage\CoverageSidecarEnvelope;
-use Studio\OpenApiContractTesting\Coverage\CoverageSidecarWriter;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
+use Studio\Gesso\Coverage\CoverageSidecarEnvelope;
+use Studio\Gesso\Coverage\CoverageSidecarWriter;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Strict\StrictRequiredTracker;
 
 use function dirname;
 use function escapeshellarg;

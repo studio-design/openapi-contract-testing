@@ -1,7 +1,7 @@
 # Pest quickstart
 
 ```bash
-composer require --dev studio-design/openapi-contract-testing pestphp/pest
+composer require --dev studio-design/gesso pestphp/pest
 ```
 
 Use the automatically registered expectation with a Laravel response:

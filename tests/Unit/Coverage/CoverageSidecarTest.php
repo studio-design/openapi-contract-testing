@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
+namespace Studio\Gesso\Tests\Unit\Coverage;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
-use Studio\OpenApiContractTesting\Coverage\CoverageSidecarEnvelope;
-use Studio\OpenApiContractTesting\Coverage\CoverageSidecarReader;
-use Studio\OpenApiContractTesting\Coverage\CoverageSidecarWriter;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
+use Studio\Gesso\Coverage\CoverageSidecarEnvelope;
+use Studio\Gesso\Coverage\CoverageSidecarReader;
+use Studio\Gesso\Coverage\CoverageSidecarWriter;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Validation\Strict\StrictRequiredTracker;
 
 use function array_map;
 use function file_put_contents;

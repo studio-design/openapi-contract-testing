@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Coverage;
+namespace Studio\Gesso\Coverage;
 
 use const FILE_APPEND;
 
 use InvalidArgumentException;
 use RuntimeException;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
-use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
-use Studio\OpenApiContractTesting\PHPUnit\CoverageReportSubscriber;
-use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredAsserter;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredMode;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Exception\SpecFileNotFoundException;
+use Studio\Gesso\PHPUnit\ConsoleOutput;
+use Studio\Gesso\PHPUnit\CoverageReportSubscriber;
+use Studio\Gesso\PHPUnit\OpenApiCoverageExtension;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Strict\StrictRequiredAsserter;
+use Studio\Gesso\Validation\Strict\StrictRequiredMode;
+use Studio\Gesso\Validation\Strict\StrictRequiredTracker;
 use Throwable;
 
 use function array_filter;

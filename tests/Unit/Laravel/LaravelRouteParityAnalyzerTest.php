@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Laravel;
+namespace Studio\Gesso\Tests\Unit\Laravel;
 
 use Illuminate\Routing\Route;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Laravel\RouteParity\LaravelRouteParityAnalyzer;
+use Studio\Gesso\Laravel\RouteParity\LaravelRouteParityAnalyzer;
 
 use function array_column;
 

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Strict;
+namespace Studio\Gesso\Tests\Unit\Validation\Strict;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallMode;
+use Studio\Gesso\Validation\Strict\StrictRequiredPerCallMode;
 
 final class StrictRequiredPerCallModeTest extends TestCase
 {

@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Psr7;
+namespace Studio\Gesso\Tests\Unit\Psr7;
 
 use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\Psr7\OpenApiAssertions;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Psr7\OpenApiAssertions;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 final class OpenApiAssertionsTest extends TestCase
 {

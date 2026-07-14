@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Psr7;
+namespace Studio\Gesso\Psr7;
 
-use Studio\OpenApiContractTesting\OpenApiValidationResult;
+use Studio\Gesso\OpenApiValidationResult;
 
 use function array_map;
 use function array_merge;

@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Strict;
+namespace Studio\Gesso\Validation\Strict;
 
 use const E_USER_WARNING;
 
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
-use Studio\OpenApiContractTesting\Exception\StrictRequiredDriftException;
-use Studio\OpenApiContractTesting\PHPUnit\CoverageReportSubscriber;
-use Studio\OpenApiContractTesting\Schema\EnumDriftAsserter;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Exception\SpecFileNotFoundException;
+use Studio\Gesso\Exception\StrictRequiredDriftException;
+use Studio\Gesso\PHPUnit\CoverageReportSubscriber;
+use Studio\Gesso\Schema\EnumDriftAsserter;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 use function array_diff;
 use function array_keys;

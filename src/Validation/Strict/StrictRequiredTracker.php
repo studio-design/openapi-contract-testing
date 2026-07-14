@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Strict;
+namespace Studio\Gesso\Validation\Strict;
 
 use const E_USER_WARNING;
 
 use InvalidArgumentException;
-use Studio\OpenApiContractTesting\Coverage\CoverageSidecarEnvelope;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+use Studio\Gesso\Coverage\CoverageSidecarEnvelope;
+use Studio\Gesso\OpenApiResponseValidator;
 
 use function array_intersect;
 use function array_is_list;
@@ -68,7 +68,7 @@ final class StrictRequiredTracker
      * Wildcard sentinel for "no content type negotiated" — used when a
      * response body is observed but the validator could not pin a specific
      * content-type spec key. Mirrors
-     * {@see \Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker::ANY_CONTENT_TYPE}
+     * {@see \Studio\Gesso\Coverage\OpenApiCoverageTracker::ANY_CONTENT_TYPE}
      * so the two tracker outputs read consistently in merged reports.
      */
     public const ANY_CONTENT_TYPE = '*';
@@ -129,7 +129,7 @@ final class StrictRequiredTracker
      * already has recorded observations — that pattern almost always means
      * a test forgot to call {@see self::resetCurrent()} before re-installing
      * and is about to silently drop observations. Mirrors the same guard on
-     * {@see \Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker::setCurrent()}.
+     * {@see \Studio\Gesso\Coverage\OpenApiCoverageTracker::setCurrent()}.
      *
      * @internal
      */

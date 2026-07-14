@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Integration\Laravel;
+namespace Studio\Gesso\Tests\Integration\Laravel;
 
 use const JSON_PRETTY_PRINT;
 use const JSON_THROW_ON_ERROR;
@@ -11,7 +11,7 @@ use const JSON_UNESCAPED_SLASHES;
 use Illuminate\Support\ServiceProvider;
 use Orchestra\Testbench\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Studio\OpenApiContractTesting\Laravel\OpenApiContractTestingServiceProvider;
+use Studio\Gesso\Laravel\OpenApiContractTestingServiceProvider;
 
 use function config_path;
 use function dirname;

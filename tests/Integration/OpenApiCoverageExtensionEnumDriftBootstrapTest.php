@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Integration;
+namespace Studio\Gesso\Tests\Integration;
 
 use const ENT_QUOTES;
 use const ENT_XML1;
@@ -56,7 +56,7 @@ class OpenApiCoverageExtensionEnumDriftBootstrapTest extends TestCase
         [$exit, $output] = $this->runPhpunit([
             'enum_drift_enabled' => 'true',
             'enum_drift_scan_namespaces' =>
-                'Studio\\OpenApiContractTesting\\Tests\\Integration\\Schema\\Fixture\\AutoDiscovery\\Drifting\\',
+                'Studio\\Gesso\\Tests\\Integration\\Schema\\Fixture\\AutoDiscovery\\Drifting\\',
         ]);
 
         $this->assertNotSame(0, $exit, "Expected non-zero exit; output was:\n" . $output);
@@ -70,7 +70,7 @@ class OpenApiCoverageExtensionEnumDriftBootstrapTest extends TestCase
         [$exit, $output] = $this->runPhpunit([
             'enum_drift_enabled' => 'true',
             'enum_drift_scan_namespaces' =>
-                'Studio\\OpenApiContractTesting\\Tests\\Integration\\Schema\\Fixture\\AutoDiscovery\\Drifting\\',
+                'Studio\\Gesso\\Tests\\Integration\\Schema\\Fixture\\AutoDiscovery\\Drifting\\',
             'enum_drift_fail_on_drift' => 'false',
         ]);
 
@@ -85,7 +85,7 @@ class OpenApiCoverageExtensionEnumDriftBootstrapTest extends TestCase
         [$exit, $output] = $this->runPhpunit([
             'enum_drift_enabled' => 'true',
             'enum_drift_scan_namespaces' =>
-                'Studio\\OpenApiContractTesting\\Tests\\Integration\\Schema\\Fixture\\AutoDiscovery\\Clean\\',
+                'Studio\\Gesso\\Tests\\Integration\\Schema\\Fixture\\AutoDiscovery\\Clean\\',
         ]);
 
         $this->assertSame(0, $exit, "Expected zero exit; output was:\n" . $output);
@@ -129,7 +129,7 @@ class OpenApiCoverageExtensionEnumDriftBootstrapTest extends TestCase
             [
                 'enum_drift_enabled' => 'true',
                 'enum_drift_scan_namespaces' =>
-                    'Studio\\OpenApiContractTesting\\Tests\\Integration\\Schema\\Fixture\\AutoDiscovery\\Issue170\\',
+                    'Studio\\Gesso\\Tests\\Integration\\Schema\\Fixture\\AutoDiscovery\\Issue170\\',
                 'enum_spec_base_path' => $this->repoRoot . '/tests/fixtures/specs/issue-170',
             ],
             specBasePath: $this->repoRoot . '/tests/fixtures/specs/issue-170/bundled',
@@ -150,7 +150,7 @@ class OpenApiCoverageExtensionEnumDriftBootstrapTest extends TestCase
             [
                 'enum_drift_enabled' => 'true',
                 'enum_drift_scan_namespaces' =>
-                    'Studio\\OpenApiContractTesting\\Tests\\Integration\\Schema\\Fixture\\AutoDiscovery\\Issue170Drifting\\',
+                    'Studio\\Gesso\\Tests\\Integration\\Schema\\Fixture\\AutoDiscovery\\Issue170Drifting\\',
                 'enum_spec_base_path' => $this->repoRoot . '/tests/fixtures/specs/issue-170',
             ],
             specBasePath: $this->repoRoot . '/tests/fixtures/specs/issue-170/bundled',
@@ -203,7 +203,7 @@ class OpenApiCoverageExtensionEnumDriftBootstrapTest extends TestCase
             '<?xml version="1.0" encoding="UTF-8"?>'
             . '<phpunit bootstrap="%s/vendor/autoload.php" cacheDirectory="%s/.phpunit.cache" colors="false">'
             . '<testsuites><testsuite name="Smoke"><directory>%s/tests/Integration/Fixture/Smoke</directory></testsuite></testsuites>'
-            . '<extensions><bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">'
+            . '<extensions><bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">'
             . '%s'
             . '</bootstrap></extensions>'
             . '</phpunit>',
@@ -270,7 +270,7 @@ class OpenApiCoverageExtensionEnumDriftBootstrapTest extends TestCase
             '<?xml version="1.0" encoding="UTF-8"?>'
             . '<phpunit bootstrap="%s/vendor/autoload.php" cacheDirectory="%s/.phpunit.cache" colors="false">'
             . '<testsuites><testsuite name="Smoke"><directory>%s/tests/Integration/Fixture/Smoke</directory></testsuite></testsuites>'
-            . '<extensions><bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">'
+            . '<extensions><bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">'
             . '<parameter name="spec_base_path" value="%s"/>'
             . '<parameter name="specs" value="%s"/>'
             . '%s'

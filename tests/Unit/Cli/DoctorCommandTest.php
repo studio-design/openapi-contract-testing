@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Cli;
+namespace Studio\Gesso\Tests\Unit\Cli;
 
 use const JSON_THROW_ON_ERROR;
 
 use GuzzleHttp\Psr7\HttpFactory;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Cli\DoctorCommand;
-use Studio\OpenApiContractTesting\Tests\Helpers\FakeHttpClient;
+use Studio\Gesso\Cli\DoctorCommand;
+use Studio\Gesso\Tests\Helpers\FakeHttpClient;
 
 use function array_column;
 use function file_put_contents;

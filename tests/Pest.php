@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Studio\OpenApiContractTesting\Tests\Helpers\PestLaravelTestCase;
+use Studio\Gesso\Tests\Helpers\PestLaravelTestCase;
 
 /*
 |--------------------------------------------------------------------------

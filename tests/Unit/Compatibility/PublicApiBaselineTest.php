@@ -2,20 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Compatibility;
+namespace Studio\Gesso\Tests\Unit\Compatibility;
 
 use const JSON_THROW_ON_ERROR;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Coverage\ConsoleCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\HtmlCoverageRenderer;
-use Studio\OpenApiContractTesting\Tests\Helpers\PublicApiInventory;
-use Studio\OpenApiContractTesting\Tests\Unit\Compatibility\Fixture\PublicApiReturnTypeFixture;
+use Studio\Gesso\Coverage\ConsoleCoverageRenderer;
+use Studio\Gesso\Coverage\HtmlCoverageRenderer;
+use Studio\Gesso\Tests\Helpers\PublicApiInventory;
+use Studio\Gesso\Tests\Unit\Compatibility\Fixture\PublicApiReturnTypeFixture;
 
 use function dirname;
 use function file_get_contents;
 use function json_decode;
+use function str_replace;
 
 final class PublicApiBaselineTest extends TestCase
 {
@@ -24,7 +25,7 @@ final class PublicApiBaselineTest extends TestCase
     {
         $inventory = PublicApiInventory::capture(
             __DIR__ . '/Fixture',
-            'Studio\\OpenApiContractTesting\\Tests\\Unit\\Compatibility\\Fixture\\',
+            'Studio\\Gesso\\Tests\\Unit\\Compatibility\\Fixture\\',
         );
         $methods = $inventory[PublicApiReturnTypeFixture::class]['methods'];
 
@@ -41,7 +42,7 @@ final class PublicApiBaselineTest extends TestCase
         $root = dirname(__DIR__, 3);
         $inventory = PublicApiInventory::capture(
             $root . '/src',
-            'Studio\\OpenApiContractTesting\\',
+            'Studio\\Gesso\\',
         );
 
         $implicitConstructor = $inventory[ConsoleCoverageRenderer::class];
@@ -58,10 +59,10 @@ final class PublicApiBaselineTest extends TestCase
     }
 
     #[Test]
-    public function public_php_api_matches_the_v1_9_baseline(): void
+    public function public_php_api_matches_the_v2_baseline(): void
     {
         $root = dirname(__DIR__, 3);
-        $baselinePath = $root . '/tests/fixtures/compatibility/v1.9-public-api.json';
+        $baselinePath = $root . '/tests/fixtures/compatibility/v2-public-api.json';
         $baselineJson = file_get_contents($baselinePath);
 
         $this->assertNotFalse($baselineJson, "Unable to read {$baselinePath}");
@@ -70,7 +71,7 @@ final class PublicApiBaselineTest extends TestCase
         $expected = json_decode($baselineJson, true, flags: JSON_THROW_ON_ERROR);
         $actual = PublicApiInventory::capture(
             $root . '/src',
-            'Studio\\OpenApiContractTesting\\',
+            'Studio\\Gesso\\',
         );
 
         $this->assertSame(
@@ -79,5 +80,24 @@ final class PublicApiBaselineTest extends TestCase
             'The non-@internal PHP API changed. If intentional, document the migration first, '
             . 'then regenerate with `php scripts/export-public-api.php --write`.',
         );
+    }
+
+    #[Test]
+    public function v2_public_api_only_changes_the_namespace_from_v1_9(): void
+    {
+        $root = dirname(__DIR__, 3);
+        $v1Json = file_get_contents($root . '/tests/fixtures/compatibility/v1.9-public-api.json');
+        $v2Json = file_get_contents($root . '/tests/fixtures/compatibility/v2-public-api.json');
+
+        $this->assertNotFalse($v1Json);
+        $this->assertNotFalse($v2Json);
+
+        $mappedV1Json = str_replace(
+            'Studio\\\\OpenApiContractTesting',
+            'Studio\\\\Gesso',
+            $v1Json,
+        );
+
+        $this->assertJsonStringEqualsJsonString($mappedV1Json, $v2Json);
     }
 }

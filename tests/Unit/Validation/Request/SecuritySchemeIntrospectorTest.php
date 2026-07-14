@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Request;
+namespace Studio\Gesso\Tests\Unit\Validation\Request;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Validation\Request\SecuritySchemeIntrospector;
-use Studio\OpenApiContractTesting\Validation\Request\SecurityValidator;
+use Studio\Gesso\Validation\Request\SecuritySchemeIntrospector;
+use Studio\Gesso\Validation\Request\SecurityValidator;
 
 /**
  * Covers the spec-side "does this endpoint accept a bearer credential?" probe

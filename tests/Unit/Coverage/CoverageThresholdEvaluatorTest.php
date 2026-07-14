@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
+namespace Studio\Gesso\Tests\Unit\Coverage;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Coverage\CoverageThresholdEvaluator;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Coverage\CoverageThresholdEvaluator;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
 
 use function explode;
 use function str_repeat;

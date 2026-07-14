@@ -1,6 +1,6 @@
 # Coverage JSON Schema
 
-`studio-design/openapi-contract-testing` can emit machine-readable coverage
+`studio-design/gesso` can emit machine-readable coverage
 output via the `json_output` PHPUnit Extension parameter or the
 `--json-output` flag on `openapi-coverage-merge`. This page documents the
 schema so downstream consumers (custom dashboards, contract-coverage
@@ -82,7 +82,7 @@ PHPUnit Extension:
 
 ```xml
 <extensions>
-  <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+  <bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
     <parameter name="spec_base_path" value="openapi" />
     <parameter name="json_output" value="build/coverage.json" />
   </bootstrap>

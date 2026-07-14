@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Support;
+namespace Studio\Gesso\Validation\Support;
 
 use InvalidArgumentException;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+use Studio\Gesso\OpenApiResponseValidator;
 
 use function preg_last_error_msg;
 use function preg_match;

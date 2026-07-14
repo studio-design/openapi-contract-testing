@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Attribute;
+namespace Studio\Gesso\Attribute;
 
 use Attribute;
-use Studio\OpenApiContractTesting\Schema\EnumDriftAsserter;
+use Studio\Gesso\Schema\EnumDriftAsserter;
 
 /**
  * Bind a backed PHP enum to its OpenAPI `enum` definition file. Pure

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Integration\Schema\Fixture;
+namespace Studio\Gesso\Tests\Integration\Schema\Fixture;
 
-use Studio\OpenApiContractTesting\Attribute\BoundToOpenApiEnum;
+use Studio\Gesso\Attribute\BoundToOpenApiEnum;
 
 /**
  * Drifts on purpose: 'betaFeature' is a PHP-only addition (drift type 1),

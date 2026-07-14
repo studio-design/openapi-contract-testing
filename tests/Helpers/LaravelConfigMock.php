@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Laravel;
+namespace Studio\Gesso\Laravel;
 
 use Illuminate\Container\Container;
 
@@ -18,7 +18,7 @@ use function class_exists;
  *
  * PHP resolves unqualified function calls by checking the current namespace first,
  * then falling back to the global namespace. Because the ValidatesOpenApiSchema trait
- * lives in Studio\OpenApiContractTesting\Laravel and calls config() without a leading
+ * lives in Studio\Gesso\Laravel and calls config() without a leading
  * backslash, this function takes priority over any global \config() that might exist
  * at runtime.
  *

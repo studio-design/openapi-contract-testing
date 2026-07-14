@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Compatibility;
+namespace Studio\Gesso\Tests\Unit\Compatibility;
 
 use const JSON_THROW_ON_ERROR;
 use const T_CONSTANT_ENCAPSED_STRING;

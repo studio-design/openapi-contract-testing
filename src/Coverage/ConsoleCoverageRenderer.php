@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Coverage;
+namespace Studio\Gesso\Coverage;
 
 use const STR_PAD_RIGHT;
 
-use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
+use Studio\Gesso\PHPUnit\ConsoleOutput;
 
 use function round;
 use function sprintf;

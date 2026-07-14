@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\PHPUnit;
+namespace Studio\Gesso\PHPUnit;
 
 use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\AssertionFailedError;
-use Studio\OpenApiContractTesting\Internal\StackTraceFilter;
-use Studio\OpenApiContractTesting\Schema\EnumDriftAsserter;
-use Studio\OpenApiContractTesting\Schema\EnumDriftReport;
+use Studio\Gesso\Internal\StackTraceFilter;
+use Studio\Gesso\Schema\EnumDriftAsserter;
+use Studio\Gesso\Schema\EnumDriftReport;
 
 use function array_filter;
 use function array_values;

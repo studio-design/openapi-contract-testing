@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Strict;
+namespace Studio\Gesso\Tests\Unit\Validation\Strict;
 
 use const E_USER_WARNING;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
-use Studio\OpenApiContractTesting\DecodedBody;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredAsserter;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredMode;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallChecker;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallMode;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
+use Studio\Gesso\DecodedBody;
+use Studio\Gesso\OpenApiResponseValidator;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Strict\StrictRequiredAsserter;
+use Studio\Gesso\Validation\Strict\StrictRequiredMode;
+use Studio\Gesso\Validation\Strict\StrictRequiredPerCallChecker;
+use Studio\Gesso\Validation\Strict\StrictRequiredPerCallMode;
+use Studio\Gesso\Validation\Strict\StrictRequiredTracker;
 
 use function array_keys;
 use function restore_error_handler;

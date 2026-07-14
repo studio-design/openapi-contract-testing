@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\Gesso\Tests\Unit;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
-use Studio\OpenApiContractTesting\DecodedBody;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\DecodedBody;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\OpenApiResponseValidator;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 use function array_map;
 use function count;

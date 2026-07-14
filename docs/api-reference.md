@@ -38,7 +38,7 @@ Prefer `outcome()` when you need to distinguish all three states explicitly — 
 
 ```php
 use PHPUnit\Framework\AssertionFailedError;
-use Studio\OpenApiContractTesting\OpenApiValidationOutcome;
+use Studio\Gesso\OpenApiValidationOutcome;
 
 match ($result->outcome()) {
     OpenApiValidationOutcome::Success => null, // schema matched
@@ -53,7 +53,7 @@ Adapts PSR-7 messages to the request and response validators and records the
 same coverage as framework integrations:
 
 ```php
-use Studio\OpenApiContractTesting\Psr7\OpenApiPsr7Validator;
+use Studio\Gesso\Psr7\OpenApiPsr7Validator;
 
 $validator = new OpenApiPsr7Validator('front');
 
@@ -73,7 +73,7 @@ Builds a deterministic whole-spec exploration plan around the existing
 single-operation generator:
 
 ```php
-use Studio\OpenApiContractTesting\Fuzz\OpenApiSpecExplorer;
+use Studio\Gesso\Fuzz\OpenApiSpecExplorer;
 
 $summary = OpenApiSpecExplorer::explore('front', casesPerOperation: 20, seed: 1)
     ->includeTags(['public'])
@@ -112,7 +112,7 @@ OpenApiSpecLoader::reset(); // For testing
 Tracks which endpoints have been exercised, at `(method, path, statusCode, contentType)` granularity. The Laravel trait records via the tracker automatically; framework-agnostic adapters call it directly.
 
 ```php
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
 
 // Request-side: an endpoint was reached without a response assertion
 OpenApiCoverageTracker::recordRequest('front', 'GET', '/v1/pets');

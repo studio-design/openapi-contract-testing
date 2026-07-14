@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Strict;
+namespace Studio\Gesso\Validation\Strict;
 
 use stdClass;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+use Studio\Gesso\OpenApiResponseValidator;
 
 use function array_intersect;
 use function array_is_list;

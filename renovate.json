@@ -10,7 +10,7 @@
   "packageRules": [
     {
       "description": "Skip the example's path-linked self reference (resolved from the working tree, not Packagist)",
-      "matchPackageNames": ["studio-design/openapi-contract-testing"],
+      "matchPackageNames": ["studio-design/gesso"],
       "enabled": false
     },
     {

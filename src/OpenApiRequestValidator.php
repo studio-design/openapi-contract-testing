@@ -2,28 +2,28 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting;
+namespace Studio\Gesso;
 
 use RuntimeException;
-use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
-use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaDialect;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Request\HeaderParameterValidator;
-use Studio\OpenApiContractTesting\Validation\Request\ParameterCollector;
-use Studio\OpenApiContractTesting\Validation\Request\PathParameterValidator;
-use Studio\OpenApiContractTesting\Validation\Request\QueryParameterValidator;
-use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidationResult;
-use Studio\OpenApiContractTesting\Validation\Request\RequestBodyValidator;
-use Studio\OpenApiContractTesting\Validation\Request\SecurityValidator;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorEnforcement;
-use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
-use Studio\OpenApiContractTesting\Validation\Support\PathDiagnosticsFormatter;
-use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
-use Studio\OpenApiContractTesting\Validation\Support\SpecResponseKeyResolver;
-use Studio\OpenApiContractTesting\Validation\Support\StatusCodePatternSet;
-use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
+use Studio\Gesso\Spec\OpenApiOperationResolver;
+use Studio\Gesso\Spec\OpenApiPathMatcher;
+use Studio\Gesso\Spec\OpenApiSchemaDialect;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Request\HeaderParameterValidator;
+use Studio\Gesso\Validation\Request\ParameterCollector;
+use Studio\Gesso\Validation\Request\PathParameterValidator;
+use Studio\Gesso\Validation\Request\QueryParameterValidator;
+use Studio\Gesso\Validation\Request\RequestBodyValidationResult;
+use Studio\Gesso\Validation\Request\RequestBodyValidator;
+use Studio\Gesso\Validation\Request\SecurityValidator;
+use Studio\Gesso\Validation\Support\DiscriminatorContext;
+use Studio\Gesso\Validation\Support\DiscriminatorEnforcement;
+use Studio\Gesso\Validation\Support\MalformedSpecNode;
+use Studio\Gesso\Validation\Support\PathDiagnosticsFormatter;
+use Studio\Gesso\Validation\Support\SchemaValidatorRunner;
+use Studio\Gesso\Validation\Support\SpecResponseKeyResolver;
+use Studio\Gesso\Validation\Support\StatusCodePatternSet;
+use Studio\Gesso\Validation\Support\ValidatorErrorBoundary;
 
 use function array_key_exists;
 use function array_keys;

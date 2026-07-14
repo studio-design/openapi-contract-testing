@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Spec;
+namespace Studio\Gesso\Tests\Unit\Spec;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver;
+use Studio\Gesso\Attribute\OpenApiSpec;
+use Studio\Gesso\Spec\OpenApiSpecResolver;
 
 #[OpenApiSpec('petstore-3.0')]
 class OpenApiSpecResolverTest extends TestCase

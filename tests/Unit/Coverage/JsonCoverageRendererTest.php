@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
+namespace Studio\Gesso\Tests\Unit\Coverage;
 
 use DateTimeImmutable;
 use DateTimeZone;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
-use Studio\OpenApiContractTesting\Coverage\JsonCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
+use Studio\Gesso\Coverage\EndpointCoverageState;
+use Studio\Gesso\Coverage\JsonCoverageRenderer;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Coverage\ResponseCoverageState;
 
 use function array_keys;
 use function explode;
@@ -49,6 +49,7 @@ class JsonCoverageRendererTest extends TestCase
         $this->assertSame('studio-design/openapi-contract-testing', $payload['tool']['name']);
         $this->assertIsString($payload['tool']['version']);
         $this->assertNotSame('', $payload['tool']['version']);
+        $this->assertNotSame('unknown', $payload['tool']['version']);
     }
 
     #[Test]

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Request;
+namespace Studio\Gesso\Validation\Request;
 
 use const E_USER_WARNING;
 
-use Studio\OpenApiContractTesting\Validation\Support\HeaderNormalizer;
+use Studio\Gesso\Validation\Support\HeaderNormalizer;
 
 use function array_key_exists;
 use function array_key_first;

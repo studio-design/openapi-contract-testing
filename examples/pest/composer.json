@@ -1,11 +1,11 @@
 {
-    "name": "studio-design/openapi-contract-testing-pest-example",
-    "description": "Runnable Pest plugin example for studio-design/openapi-contract-testing.",
+    "name": "studio-design/gesso-pest-example",
+    "description": "Runnable Pest plugin example for studio-design/gesso.",
     "license": "MIT",
     "type": "project",
     "require": {
         "php": "^8.3",
-        "studio-design/openapi-contract-testing": "@dev",
+        "studio-design/gesso": "@dev",
         "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
         "pestphp/pest": "^4.0"
     },

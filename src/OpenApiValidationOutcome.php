@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting;
+namespace Studio\Gesso;
 
 /**
  * Tri-state outcome of an OpenAPI validation run, exposed via

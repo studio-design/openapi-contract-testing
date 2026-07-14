@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\PHPUnit;
+namespace Studio\Gesso\PHPUnit;
 
 use const FILE_APPEND;
 use const STDERR;
@@ -10,23 +10,23 @@ use const STDERR;
 use PHPUnit\Event\TestRunner\ExecutionFinished;
 use PHPUnit\Event\TestRunner\ExecutionFinishedSubscriber;
 use RuntimeException;
-use Studio\OpenApiContractTesting\Coverage\ConsoleCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\CoverageMergeCommand;
-use Studio\OpenApiContractTesting\Coverage\CoverageSidecarEnvelope;
-use Studio\OpenApiContractTesting\Coverage\CoverageSidecarWriter;
-use Studio\OpenApiContractTesting\Coverage\CoverageThresholdEvaluator;
-use Studio\OpenApiContractTesting\Coverage\HtmlCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\JsonCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\JUnitCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\MarkdownCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
-use Studio\OpenApiContractTesting\Internal\PartialRunDecision;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredAsserter;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredMode;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
+use Studio\Gesso\Coverage\ConsoleCoverageRenderer;
+use Studio\Gesso\Coverage\CoverageMergeCommand;
+use Studio\Gesso\Coverage\CoverageSidecarEnvelope;
+use Studio\Gesso\Coverage\CoverageSidecarWriter;
+use Studio\Gesso\Coverage\CoverageThresholdEvaluator;
+use Studio\Gesso\Coverage\HtmlCoverageRenderer;
+use Studio\Gesso\Coverage\JsonCoverageRenderer;
+use Studio\Gesso\Coverage\JUnitCoverageRenderer;
+use Studio\Gesso\Coverage\MarkdownCoverageRenderer;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Exception\SpecFileNotFoundException;
+use Studio\Gesso\Internal\PartialRunDecision;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Strict\StrictRequiredAsserter;
+use Studio\Gesso\Validation\Strict\StrictRequiredMode;
+use Studio\Gesso\Validation\Strict\StrictRequiredTracker;
 use Throwable;
 
 use function count;

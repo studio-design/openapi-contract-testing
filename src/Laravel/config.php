@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use Studio\OpenApiContractTesting\OpenApiRequestValidator;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+use Studio\Gesso\OpenApiRequestValidator;
+use Studio\Gesso\OpenApiResponseValidator;
 
 return [
     'default_spec' => '',

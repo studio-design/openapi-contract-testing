@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Support;
+namespace Studio\Gesso\Validation\Support;
 
 use function array_is_list;
 use function get_debug_type;

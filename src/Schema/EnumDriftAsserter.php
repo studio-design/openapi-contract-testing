@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Schema;
+namespace Studio\Gesso\Schema;
 
 use const E_USER_WARNING;
 use const JSON_THROW_ON_ERROR;
@@ -11,13 +11,13 @@ use BackedEnum;
 use JsonException;
 use ReflectionEnum;
 use ReflectionException;
-use Studio\OpenApiContractTesting\Attribute\BoundToOpenApiEnum;
-use Studio\OpenApiContractTesting\Exception\EnumBindingException;
-use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
-use Studio\OpenApiContractTesting\Exception\EnumDriftException;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Attribute\BoundToOpenApiEnum;
+use Studio\Gesso\Exception\EnumBindingException;
+use Studio\Gesso\Exception\EnumBindingReason;
+use Studio\Gesso\Exception\EnumDriftException;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 use function array_filter;
 use function array_map;

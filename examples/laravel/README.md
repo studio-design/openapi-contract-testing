@@ -1,7 +1,7 @@
 # Laravel quickstart
 
 ```bash
-composer require --dev studio-design/openapi-contract-testing
+composer require --dev studio-design/gesso
 php artisan vendor:publish --tag=openapi-contract-testing
 composer install
 composer test

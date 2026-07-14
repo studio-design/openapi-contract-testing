@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Compatibility;
+namespace Studio\Gesso\Tests\Unit\Compatibility;
 
 use const JSON_PRETTY_PRINT;
 use const JSON_THROW_ON_ERROR;
@@ -11,7 +11,7 @@ use const JSON_UNESCAPED_UNICODE;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Spec\OpenApiRefResolver;
+use Studio\Gesso\Spec\OpenApiRefResolver;
 
 use function dirname;
 use function file_get_contents;

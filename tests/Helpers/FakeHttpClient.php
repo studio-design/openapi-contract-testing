@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Helpers;
+namespace Studio\Gesso\Tests\Helpers;
 
 use GuzzleHttp\Psr7\Response;
 use Psr\Http\Client\ClientInterface;

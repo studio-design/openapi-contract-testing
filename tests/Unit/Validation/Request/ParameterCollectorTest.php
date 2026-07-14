@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Request;
+namespace Studio\Gesso\Tests\Unit\Validation\Request;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Validation\Request\ParameterCollector;
+use Studio\Gesso\Validation\Request\ParameterCollector;
 
 class ParameterCollectorTest extends TestCase
 {

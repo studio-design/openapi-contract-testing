@@ -9,16 +9,18 @@
 Gesso is the primer applied to a canvas before painting—a stable, receptive ground on which the finished work can be built. Gesso brings that same idea to APIs, providing a dependable foundation for OpenAPI contract testing in PHP.
 
 [![CI](https://github.com/studio-design/gesso/actions/workflows/ci.yml/badge.svg)](https://github.com/studio-design/gesso/actions/workflows/ci.yml)
-[![Latest Stable Version](https://poser.pugx.org/studio-design/openapi-contract-testing/v)](https://packagist.org/packages/studio-design/openapi-contract-testing)
-[![Total Downloads](https://poser.pugx.org/studio-design/openapi-contract-testing/downloads)](https://packagist.org/packages/studio-design/openapi-contract-testing)
-[![PHP Version Require](https://poser.pugx.org/studio-design/openapi-contract-testing/require/php)](https://packagist.org/packages/studio-design/openapi-contract-testing)
-[![License](https://poser.pugx.org/studio-design/openapi-contract-testing/license)](https://packagist.org/packages/studio-design/openapi-contract-testing)
+[![Latest Stable Version](https://poser.pugx.org/studio-design/gesso/v)](https://packagist.org/packages/studio-design/gesso)
+[![Total Downloads](https://poser.pugx.org/studio-design/gesso/downloads)](https://packagist.org/packages/studio-design/gesso)
+[![PHP Version Require](https://poser.pugx.org/studio-design/gesso/require/php)](https://packagist.org/packages/studio-design/gesso)
+[![License](https://poser.pugx.org/studio-design/gesso/license)](https://packagist.org/packages/studio-design/gesso)
 
 Gesso provides framework-agnostic OpenAPI 3.0/3.1/3.2 contract testing for PHPUnit **with endpoint coverage tracking**.
 
 Validate your API responses against your OpenAPI specification during testing, and get a coverage report showing which endpoints have been tested.
 
-Gesso remains distributed as `studio-design/openapi-contract-testing`; existing Composer requirements, PHP namespaces, and configuration keys do not change.
+Gesso 2 is distributed as `studio-design/gesso` and declares its public PHP API
+under `Studio\Gesso\`. Follow the [staged v2 migration guide](docs/migration/v2.md)
+when upgrading from `studio-design/openapi-contract-testing` v1.10.
 
 **[Search the documentation](https://studio-design.github.io/gesso/)** · [Core quickstart](https://studio-design.github.io/gesso/quickstarts/core) · [Laravel](https://studio-design.github.io/gesso/quickstarts/laravel) · [Symfony](https://studio-design.github.io/gesso/quickstarts/symfony) · [Pest](https://studio-design.github.io/gesso/quickstarts/pest)
 
@@ -97,7 +99,7 @@ Choose based on the workflow you need rather than on a single yes/no feature cou
 ## Installation
 
 ```bash
-composer require --dev studio-design/openapi-contract-testing
+composer require --dev studio-design/gesso
 ```
 
 > **YAML specs require `symfony/yaml`.** It is listed under `suggest` so it isn't installed automatically. If your spec is JSON, you can skip this. If your spec is `.yaml` / `.yml`, add it explicitly:
@@ -123,7 +125,7 @@ Choose the CI-tested five-minute path matching your stack:
 All paths start with the same development dependency:
 
 ```bash
-composer require --dev studio-design/openapi-contract-testing
+composer require --dev studio-design/gesso
 ```
 
 The example below uses a PSR-7 request and response. The searchable documentation contains the complete [core](https://studio-design.github.io/gesso/quickstarts/core), [Laravel](https://studio-design.github.io/gesso/quickstarts/laravel), [Symfony](https://studio-design.github.io/gesso/quickstarts/symfony), and [Pest](https://studio-design.github.io/gesso/quickstarts/pest) quickstarts.
@@ -157,7 +159,7 @@ Then register the emitted configuration:
 
 ```xml
 <extensions>
-    <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+    <bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
         <parameter name="spec_base_path" value="openapi/bundled"/>
         <parameter name="strip_prefixes" value="/api"/>
         <parameter name="specs" value="front,admin"/>
@@ -171,7 +173,7 @@ When your application or HTTP client already returns PSR-7 messages, validate
 both sides and record coverage with one framework-independent call:
 
 ```php
-use Studio\OpenApiContractTesting\Psr7\OpenApiPsr7Validator;
+use Studio\Gesso\Psr7\OpenApiPsr7Validator;
 
 $validator = new OpenApiPsr7Validator('front');
 $result = $validator->validateExchange($request, $response);
@@ -193,7 +195,7 @@ php artisan vendor:publish --tag=openapi-contract-testing
 Set `default_spec` in the published `config/openapi-contract-testing.php`, then mix in the trait:
 
 ```php
-use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
+use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
 
 class GetPetsTest extends TestCase
 {

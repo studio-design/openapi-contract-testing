@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Integration\Schema\Fixture\AutoDiscovery\Issue170Drifting;
+namespace Studio\Gesso\Tests\Integration\Schema\Fixture\AutoDiscovery\Issue170Drifting;
 
-use Studio\OpenApiContractTesting\Attribute\BoundToOpenApiEnum;
+use Studio\Gesso\Attribute\BoundToOpenApiEnum;
 
 /**
  * Auto-discovery + enum_spec_base_path drift fixture (issue #170).

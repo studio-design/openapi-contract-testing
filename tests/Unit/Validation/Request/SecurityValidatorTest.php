@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Request;
+namespace Studio\Gesso\Tests\Unit\Validation\Request;
 
 use const E_USER_WARNING;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Validation\Request\SecurityValidator;
+use Studio\Gesso\Validation\Request\SecurityValidator;
 
 use function restore_error_handler;
 use function set_error_handler;

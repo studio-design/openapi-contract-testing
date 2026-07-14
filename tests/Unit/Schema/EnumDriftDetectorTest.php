@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Schema;
+namespace Studio\Gesso\Tests\Unit\Schema;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Schema\EnumDriftDetector;
+use Studio\Gesso\Schema\EnumDriftDetector;
 
 use function array_keys;
 

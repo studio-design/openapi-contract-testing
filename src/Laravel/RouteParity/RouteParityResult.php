@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Laravel\RouteParity;
+namespace Studio\Gesso\Laravel\RouteParity;
 
 use JsonSerializable;
 

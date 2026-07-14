@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\Gesso\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Attribute\SkipOpenApi;
-use Studio\OpenApiContractTesting\SkipOpenApiResolver;
+use Studio\Gesso\Attribute\SkipOpenApi;
+use Studio\Gesso\SkipOpenApiResolver;
 
 #[SkipOpenApi(reason: 'class-level')]
 class SkipOpenApiResolverClassLevelTest extends TestCase

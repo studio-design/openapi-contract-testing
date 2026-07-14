@@ -2,31 +2,31 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Schema;
+namespace Studio\Gesso\Tests\Unit\Schema;
 
 use const E_USER_WARNING;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Exception\EnumBindingException;
-use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
-use Studio\OpenApiContractTesting\Exception\EnumDriftException;
-use Studio\OpenApiContractTesting\Schema\EnumDriftAsserter;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\EmptySpecEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\EnumKeyNotArrayEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\IntegerBackedDriftEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\IntegerBackedEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\MalformedSpecEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\MatchingEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\NoEnumKeySpecEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\NonScalarSpecValueEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\NotAnEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\PhpExtraEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\PureEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\SpecExtraEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\SpecFileMissingEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\UnattributedEnum;
+use Studio\Gesso\Exception\EnumBindingException;
+use Studio\Gesso\Exception\EnumBindingReason;
+use Studio\Gesso\Exception\EnumDriftException;
+use Studio\Gesso\Schema\EnumDriftAsserter;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\EmptySpecEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\EnumKeyNotArrayEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\IntegerBackedDriftEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\IntegerBackedEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\MalformedSpecEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\MatchingEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\NoEnumKeySpecEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\NonScalarSpecValueEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\NotAnEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\PhpExtraEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\PureEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\SpecExtraEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\SpecFileMissingEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\UnattributedEnum;
 
 use function restore_error_handler;
 use function set_error_handler;

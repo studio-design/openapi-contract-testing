@@ -1,6 +1,6 @@
 # Coverage HTML Output
 
-`studio-design/openapi-contract-testing` can emit a single self-contained HTML
+`studio-design/gesso` can emit a single self-contained HTML
 report via the `html_output` PHPUnit Extension parameter or the `--html-output`
 flag on `openapi-coverage-merge`. The file is intended for human review (PR
 comments, CI artifact preview, offline inspection).
@@ -32,7 +32,7 @@ PHPUnit Extension:
 
 ```xml
 <extensions>
-  <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+  <bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
     <parameter name="spec_base_path" value="openapi" />
     <parameter name="html_output" value="build/coverage.html" />
   </bootstrap>

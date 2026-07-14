@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Request;
+namespace Studio\Gesso\Validation\Request;
 
-use Studio\OpenApiContractTesting\OpenApiVersion;
-use Studio\OpenApiContractTesting\SchemaContext;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
-use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
-use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
-use Studio\OpenApiContractTesting\Validation\Support\TypeCoercer;
+use Studio\Gesso\OpenApiVersion;
+use Studio\Gesso\SchemaContext;
+use Studio\Gesso\Spec\OpenApiSchemaConverter;
+use Studio\Gesso\Validation\Support\ObjectConverter;
+use Studio\Gesso\Validation\Support\SchemaValidatorRunner;
+use Studio\Gesso\Validation\Support\TypeCoercer;
 
 use function array_key_exists;
 use function is_array;

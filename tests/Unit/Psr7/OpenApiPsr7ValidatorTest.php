@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Psr7;
+namespace Studio\Gesso\Tests\Unit\Psr7;
 
 use GuzzleHttp\Psr7\NoSeekStream;
 use GuzzleHttp\Psr7\Request;
@@ -15,9 +15,9 @@ use Nyholm\Psr7\ServerRequest as NyholmServerRequest;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\Psr7\OpenApiPsr7Validator;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Psr7\OpenApiPsr7Validator;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 final class OpenApiPsr7ValidatorTest extends TestCase
 {

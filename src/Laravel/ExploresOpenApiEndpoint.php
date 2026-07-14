@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Laravel;
+namespace Studio\Gesso\Laravel;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\AssertionFailedError;
 use RuntimeException;
-use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
-use Studio\OpenApiContractTesting\Fuzz\OpenApiEndpointExplorer;
-use Studio\OpenApiContractTesting\Fuzz\OpenApiSpecExploration;
-use Studio\OpenApiContractTesting\Fuzz\OpenApiSpecExplorer;
-use Studio\OpenApiContractTesting\Internal\StackTraceFilter;
+use Studio\Gesso\Fuzz\ExplorationCases;
+use Studio\Gesso\Fuzz\OpenApiEndpointExplorer;
+use Studio\Gesso\Fuzz\OpenApiSpecExploration;
+use Studio\Gesso\Fuzz\OpenApiSpecExplorer;
+use Studio\Gesso\Internal\StackTraceFilter;
 
 use function is_string;
 

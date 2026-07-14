@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting;
+namespace Studio\Gesso;
 
 use ReflectionClass;
 use ReflectionMethod;
-use Studio\OpenApiContractTesting\Attribute\SkipOpenApi;
+use Studio\Gesso\Attribute\SkipOpenApi;
 
 trait SkipOpenApiResolver
 {

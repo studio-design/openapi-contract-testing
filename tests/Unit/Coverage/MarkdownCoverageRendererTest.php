@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
+namespace Studio\Gesso\Tests\Unit\Coverage;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
-use Studio\OpenApiContractTesting\Coverage\MarkdownCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
+use Studio\Gesso\Coverage\EndpointCoverageState;
+use Studio\Gesso\Coverage\MarkdownCoverageRenderer;
+use Studio\Gesso\Coverage\ResponseCoverageState;
 
 use function explode;
 use function strpos;

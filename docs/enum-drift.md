@@ -19,7 +19,7 @@ Runtime contract validation only sees enum values your tests actually return. Tw
 ## `#[BoundToOpenApiEnum]` — bind a PHP enum to its spec file
 
 ```php
-use Studio\OpenApiContractTesting\Attribute\BoundToOpenApiEnum;
+use Studio\Gesso\Attribute\BoundToOpenApiEnum;
 
 #[BoundToOpenApiEnum('_shared/components/schemas/enums/NotificationCodeEnum.json')]
 enum NotificationCodeEnum: string
@@ -59,7 +59,7 @@ openapi/
 
 ```xml
 <extensions>
-    <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+    <bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
         <parameter name="spec_base_path" value="openapi/bundled"/>
         <parameter name="enum_spec_base_path" value="openapi"/>
         <parameter name="specs" value="front,store,admin"/>
@@ -84,7 +84,7 @@ If `enum_spec_base_path` is configured but the directory does not exist, the ass
 Call from any test (or from a dedicated drift-only test) to verify all bound enums match their spec files:
 
 ```php
-use Studio\OpenApiContractTesting\Schema\EnumDriftAsserter;
+use Studio\Gesso\Schema\EnumDriftAsserter;
 
 public function test_no_enum_drift(): void
 {
@@ -130,7 +130,7 @@ The `AssertsNoEnumDrift` trait wraps the same comparison and bumps PHPUnit's ass
 ```php
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\PHPUnit\AssertsNoEnumDrift;
+use Studio\Gesso\PHPUnit\AssertsNoEnumDrift;
 
 class EnumDriftTest extends TestCase
 {
@@ -178,7 +178,7 @@ Add the opt-in parameters to your `phpunit.xml`:
 
 ```xml
 <extensions>
-    <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+    <bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
         <parameter name="spec_base_path" value="openapi/dist"/>
         <parameter name="enum_drift_enabled" value="true"/>
         <parameter name="enum_drift_scan_namespaces" value="App\Enums,App\Domain\Enums"/>

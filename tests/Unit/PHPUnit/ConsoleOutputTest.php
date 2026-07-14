@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\PHPUnit;
+namespace Studio\Gesso\Tests\Unit\PHPUnit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
+use Studio\Gesso\PHPUnit\ConsoleOutput;
 
 use function putenv;
 

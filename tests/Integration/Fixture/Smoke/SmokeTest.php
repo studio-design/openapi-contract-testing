@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Integration\Fixture\Smoke;
+namespace Studio\Gesso\Tests\Integration\Fixture\Smoke;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Tests\Integration\OpenApiCoverageExtensionEnumDriftBootstrapTest;
+use Studio\Gesso\Tests\Integration\OpenApiCoverageExtensionEnumDriftBootstrapTest;
 
 /**
  * One-trivial-assertion fixture used by

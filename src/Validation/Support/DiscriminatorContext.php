@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Support;
+namespace Studio\Gesso\Validation\Support;
 
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
+use Studio\Gesso\Spec\OpenApiSchemaConverter;
 
 /**
  * Carries everything {@see OpenApiSchemaConverter} needs to lower a schema's

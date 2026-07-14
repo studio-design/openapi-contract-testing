@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Spec;
+namespace Studio\Gesso\Spec;
 
 use function abs;
 use function array_map;

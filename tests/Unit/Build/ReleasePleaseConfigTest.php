@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Build;
+namespace Studio\Gesso\Tests\Unit\Build;
 
 use const JSON_THROW_ON_ERROR;
 

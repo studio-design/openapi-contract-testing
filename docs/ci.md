@@ -16,7 +16,7 @@ Use the `output_file` parameter to write a Markdown report to a file. This is us
 
 ```xml
 <extensions>
-    <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+    <bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
         <parameter name="spec_base_path" value="openapi/bundled"/>
         <parameter name="specs" value="front,admin"/>
         <parameter name="output_file" value="coverage-report.md"/>
@@ -65,7 +65,7 @@ Example: write every format from one PHPUnit run:
 
 ```xml
 <extensions>
-    <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+    <bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
         <parameter name="spec_base_path" value="openapi/bundled"/>
         <parameter name="specs" value="front,admin"/>
         <parameter name="output_file" value="build/coverage.md"/>
@@ -144,7 +144,7 @@ only fires on the sequential (or merge) rendering path.
 を立てて partial 判定を解除できる:
 
 ```xml
-<bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+<bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
     <parameter name="default_testsuite_as_full" value="true"/>
     <parameter name="strict_required" value="warn"/>
 </bootstrap>

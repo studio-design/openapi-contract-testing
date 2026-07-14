@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Integration;
+namespace Studio\Gesso\Tests\Integration;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Exception\EnumDriftException;
-use Studio\OpenApiContractTesting\Schema\EnumDriftAsserter;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Tests\Integration\Schema\Fixture\IntegrationBundledExternalEnum;
-use Studio\OpenApiContractTesting\Tests\Integration\Schema\Fixture\IntegrationNotificationCodeEnum;
-use Studio\OpenApiContractTesting\Tests\Integration\Schema\Fixture\IntegrationPetStatusEnum;
+use Studio\Gesso\Exception\EnumDriftException;
+use Studio\Gesso\Schema\EnumDriftAsserter;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Tests\Integration\Schema\Fixture\IntegrationBundledExternalEnum;
+use Studio\Gesso\Tests\Integration\Schema\Fixture\IntegrationNotificationCodeEnum;
+use Studio\Gesso\Tests\Integration\Schema\Fixture\IntegrationPetStatusEnum;
 
 /**
  * End-to-end exercise: a realistic bundle layout with `_shared/components/

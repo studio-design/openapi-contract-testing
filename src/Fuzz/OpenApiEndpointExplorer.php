@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Fuzz;
+namespace Studio\Gesso\Fuzz;
 
 use Faker\Generator;
 use InvalidArgumentException;
-use Studio\OpenApiContractTesting\HttpMethod;
-use Studio\OpenApiContractTesting\OpenApiVersion;
-use Studio\OpenApiContractTesting\SchemaContext;
-use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
-use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaDialect;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Request\ParameterCollector;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
+use Studio\Gesso\HttpMethod;
+use Studio\Gesso\OpenApiVersion;
+use Studio\Gesso\SchemaContext;
+use Studio\Gesso\Spec\OpenApiOperationResolver;
+use Studio\Gesso\Spec\OpenApiPathMatcher;
+use Studio\Gesso\Spec\OpenApiSchemaConverter;
+use Studio\Gesso\Spec\OpenApiSchemaDialect;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Request\ParameterCollector;
+use Studio\Gesso\Validation\Support\DiscriminatorContext;
 use ValueError;
 
 use function array_filter;

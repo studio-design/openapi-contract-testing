@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting;
+namespace Studio\Gesso;
 
 /**
  * Direction of validation for a schema conversion. Drives asymmetric handling

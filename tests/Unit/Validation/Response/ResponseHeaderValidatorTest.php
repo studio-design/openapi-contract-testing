@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Response;
+namespace Studio\Gesso\Tests\Unit\Validation\Response;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\OpenApiVersion;
-use Studio\OpenApiContractTesting\Validation\Response\ResponseHeaderValidator;
-use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
+use Studio\Gesso\OpenApiVersion;
+use Studio\Gesso\Validation\Response\ResponseHeaderValidator;
+use Studio\Gesso\Validation\Support\SchemaValidatorRunner;
 
 class ResponseHeaderValidatorTest extends TestCase
 {

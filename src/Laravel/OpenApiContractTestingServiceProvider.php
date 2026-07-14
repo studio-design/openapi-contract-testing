@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Laravel;
+namespace Studio\Gesso\Laravel;
 
 use Illuminate\Support\ServiceProvider;
-use Studio\OpenApiContractTesting\Laravel\Commands\OpenApiRoutesCommand;
+use Studio\Gesso\Laravel\Commands\OpenApiRoutesCommand;
 
 class OpenApiContractTestingServiceProvider extends ServiceProvider
 {

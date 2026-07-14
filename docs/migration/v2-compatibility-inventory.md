@@ -68,6 +68,11 @@ project resolves and that both direct dual installation and a transitive old
 `^1.10` requirement fail dependency resolution. The conflict is added to the
 root `composer.json` only when `main` becomes the v2 development line.
 
+Migration status: implemented on the v2 development line. The root package is
+`studio-design/gesso`, only `Studio\Gesso\` is mapped by Composer, the v1 alias
+bootstrap is removed, and the old package is declared as a conflict rather than
+a replacement.
+
 ## PHP public types
 
 Every type below maps by replacing the prefix
@@ -261,11 +266,11 @@ Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension
   -> Studio\Gesso\PHPUnit\OpenApiCoverageExtension
 ```
 
-Migration status: contract fixed; implementation pending the v2 development
-line. The short class name, XML structure, parameters, defaults, accepted
+Migration status: implemented on the v2 development line. The short class name,
+XML structure, parameters, defaults, accepted
 values, validation behavior, relative-path behavior, and environment inputs
 remain unchanged. The v2 package does not provide the legacy FQCN. Its consumer
-fixture must prove that the Gesso FQCN boots with representative parameters and
+fixture proves that the Gesso FQCN boots with representative parameters and
 that the legacy FQCN fails extension loading; the existing parameter tests keep
 covering the complete missing, empty, invalid, and supported-value matrix.
 

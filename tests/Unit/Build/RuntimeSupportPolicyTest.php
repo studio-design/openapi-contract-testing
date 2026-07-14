@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Build;
+namespace Studio\Gesso\Tests\Unit\Build;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -31,12 +31,30 @@ final class RuntimeSupportPolicyTest extends TestCase
      * @throws JsonException
      */
     #[Test]
+    public function root_package_uses_only_the_v2_composer_and_namespace_identity(): void
+    {
+        $composer = self::composerJson(__DIR__ . '/../../../composer.json');
+
+        $this->assertSame('studio-design/gesso', $composer['name'] ?? null);
+        $this->assertSame(['Studio\\Gesso\\' => 'src/'], $composer['autoload']['psr-4'] ?? null);
+        $this->assertSame(['Studio\\Gesso\\Tests\\' => 'tests/'], $composer['autoload-dev']['psr-4'] ?? null);
+        $this->assertSame('*', $composer['conflict']['studio-design/openapi-contract-testing'] ?? null);
+        $this->assertArrayNotHasKey('replace', $composer);
+        $this->assertNotContains('src/Compatibility/GessoAliasLoader.php', $composer['autoload']['files'] ?? []);
+    }
+
+    /**
+     * @throws JsonException
+     */
+    #[Test]
     public function runnable_examples_share_the_v2_php_floor(): void
     {
         foreach (['core', 'laravel', 'pest', 'psr7', 'symfony'] as $example) {
             $composer = self::composerJson(__DIR__ . '/../../../examples/' . $example . '/composer.json');
 
             $this->assertSame('^8.3', $composer['require']['php'] ?? null, $example);
+            $this->assertSame('@dev', $composer['require']['studio-design/gesso'] ?? null, $example);
+            $this->assertArrayNotHasKey('studio-design/openapi-contract-testing', $composer['require'], $example);
         }
     }
 

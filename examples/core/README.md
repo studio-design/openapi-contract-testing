@@ -1,7 +1,7 @@
 # Core quickstart
 
 ```bash
-composer require --dev studio-design/openapi-contract-testing
+composer require --dev studio-design/gesso
 composer install
 composer test
 ```

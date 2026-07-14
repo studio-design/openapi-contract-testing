@@ -35,7 +35,7 @@ Only **conformance-passing** responses are recorded. A response that fails the e
 
 ```xml
 <extensions>
-    <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+    <bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
         <parameter name="spec_base_path" value="openapi/bundled"/>
         <parameter name="specs" value="front,admin"/>
         <parameter name="strict_required" value="warn"/>
@@ -136,7 +136,7 @@ The default `strict_required` mode aggregates observations and reports drift onl
 
 ```xml
 <extensions>
-    <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+    <bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
         <parameter name="spec_base_path" value="openapi/bundled"/>
         <parameter name="specs" value="front,admin"/>
         <parameter name="strict_required"          value="fail"/>  <!-- run-level safe gate  -->

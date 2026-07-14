@@ -3,8 +3,8 @@
 
 declare(strict_types=1);
 
-use Studio\OpenApiContractTesting\Cli\DoctorCommand;
-use Studio\OpenApiContractTesting\Coverage\CoverageMergeCommand;
+use Studio\Gesso\Cli\DoctorCommand;
+use Studio\Gesso\Coverage\CoverageMergeCommand;
 
 $autoloadCandidates = [
     __DIR__ . '/../vendor/autoload.php',

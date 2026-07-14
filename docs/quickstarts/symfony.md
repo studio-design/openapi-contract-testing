@@ -1,10 +1,10 @@
 # Symfony quickstart
 
 ```bash
-composer require --dev studio-design/openapi-contract-testing symfony/http-foundation symfony/http-kernel
+composer require --dev studio-design/gesso symfony/http-foundation symfony/http-kernel
 ```
 
-Mix `Studio\OpenApiContractTesting\Symfony\OpenApiAssertions` into a PHPUnit or `WebTestCase` class:
+Mix `Studio\Gesso\Symfony\OpenApiAssertions` into a PHPUnit or `WebTestCase` class:
 
 ```php
 $request = Request::create('/pets', 'GET');
