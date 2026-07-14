@@ -203,6 +203,41 @@ defines a fixed value as the equivalent of a single-value enum, so changing the
 documented tool name is an incompatible value constraint even though no member
 is added or removed.
 
+### Resolver provenance extension transition policy
+
+V1's eager `$ref` resolver attaches
+`x-studio-openapi-contract-testing-implicit-schema-name` to a directly
+referenced `oneOf` or `anyOf` alternative. This preserves the component name
+needed to implement an implicit discriminator mapping after the Reference
+Object has been replaced by its target. Although the marker can appear in the
+array returned by the public spec loader, it is resolver-owned provenance: a
+same-named field authored in an OpenAPI Description is removed and is never
+accepted as mapping authority.
+
+Gesso v2 renames the generated marker to
+`x-studio-gesso-implicit-schema-name`. It removes both the legacy and Gesso
+keys from input before resolving a node, and only writes the Gesso key after it
+has successfully resolved a direct local component-schema reference. The v2
+schema converter consumes and strips only resolver-generated Gesso provenance.
+The discriminator behavior and the resulting validation schema otherwise stay
+unchanged.
+
+There is no dual-read period for this marker. A legacy field supplied as input
+cannot be distinguished from a spoofed user-authored extension, so trusting it
+would undo the resolver's existing integrity boundary. Consumers migrate the
+original OpenAPI Description, not a persisted post-resolution array. V1.10
+continues emitting its existing marker; v2 emits only the Gesso marker and does
+not expose a user configuration switch for either name.
+
+[OpenAPI Specification Extensions](https://spec.openapis.org/oas/v3.2.0.html#specification-extensions)
+allow implementation-specific `x-` fields and reserve `x-oai-` and `x-oas-`
+for the OpenAPI Initiative. The Gesso marker keeps an implementation-specific
+prefix, while the additional `studio-gesso` namespace limits collisions and
+makes its ownership explicit. V2 regression tests must prove that both authored
+names are removed, only a real direct component `$ref` can create the new
+marker, and implicit discriminator behavior remains equivalent to the v1
+baseline.
+
 ### Runtime and test-runner support policy
 
 Gesso v2 requires PHP `^8.3` and supports PHPUnit `^12.0 || ^13.0`. The v2 CI
