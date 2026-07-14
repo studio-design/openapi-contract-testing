@@ -41,7 +41,9 @@ final class OpenApiRefResolver
      * `oneOf` / `anyOf`. Eager reference resolution otherwise erases the
      * component name needed for OpenAPI discriminator implicit mappings.
      */
-    public const IMPLICIT_SCHEMA_NAME_EXTENSION = 'x-studio-openapi-contract-testing-implicit-schema-name';
+    public const IMPLICIT_SCHEMA_NAME_EXTENSION = 'x-studio-gesso-implicit-schema-name';
+
+    private const LEGACY_IMPLICIT_SCHEMA_NAME_EXTENSION = 'x-studio-openapi-contract-testing-implicit-schema-name';
 
     /**
      * Keys whose value is opaque user data per OpenAPI 3.x and JSON Schema —
@@ -231,10 +233,16 @@ final class OpenApiRefResolver
         array &$documentCache,
         bool $captureImplicitSchemaName = false,
     ): void {
-        // Reserve the provenance key for resolver-generated data. Removing a
-        // user-authored value before descent prevents an inline schema from
-        // spoofing an implicit discriminator mapping.
-        unset($node[self::IMPLICIT_SCHEMA_NAME_EXTENSION]);
+        // Reserve both provenance fields for resolver-generated data. Keys at
+        // the current level of a user-named map are property/component names,
+        // not Schema Object fields, so preserve them and scrub the provenance
+        // only after descending into each named child.
+        if (!$insideUserNamedMap) {
+            unset(
+                $node[self::LEGACY_IMPLICIT_SCHEMA_NAME_EXTENSION],
+                $node[self::IMPLICIT_SCHEMA_NAME_EXTENSION],
+            );
+        }
 
         if (!$insideUserNamedMap && array_key_exists('$ref', $node)) {
             $ref = self::assertStringRef($node['$ref']);
