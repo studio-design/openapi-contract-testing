@@ -5,6 +5,11 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Tests\Helpers;
 
 use const DIRECTORY_SEPARATOR;
+use const T_COMMENT;
+use const T_DOC_COMMENT;
+use const T_FUNCTION;
+use const T_STRING;
+use const T_WHITESPACE;
 
 use BackedEnum;
 use RecursiveDirectoryIterator;
@@ -23,12 +28,15 @@ use function array_diff;
 use function array_map;
 use function array_values;
 use function class_exists;
+use function count;
 use function enum_exists;
+use function file_get_contents;
 use function interface_exists;
 use function is_array;
 use function is_object;
 use function is_scalar;
 use function ksort;
+use function ltrim;
 use function method_exists;
 use function realpath;
 use function sort;
@@ -37,6 +45,7 @@ use function str_ends_with;
 use function str_replace;
 use function strlen;
 use function substr;
+use function token_get_all;
 use function trait_exists;
 use function usort;
 
@@ -208,10 +217,120 @@ final class PublicApiInventory
             'final' => $method->isFinal(),
             'abstract' => $method->isAbstract(),
             'returns_reference' => $method->returnsReference(),
-            'return_type' => $method->hasReturnType() ? (string) $method->getReturnType() : null,
+            'return_type' => self::describeReturnType($method),
             'attributes' => self::describeAttributes($method->getAttributes()),
             'parameters' => array_map(self::describeParameter(...), $method->getParameters()),
         ];
+    }
+
+    private static function describeReturnType(ReflectionMethod $method): ?string
+    {
+        if (!$method->hasReturnType()) {
+            return null;
+        }
+
+        $returnType = (string) $method->getReturnType();
+        $declaringClass = $method->getDeclaringClass()->getName();
+        if (ltrim($returnType, '?') !== $declaringClass) {
+            return $returnType;
+        }
+
+        $sourceReturnType = self::sourceReturnType($method);
+
+        return $sourceReturnType === 'self' || $sourceReturnType === '?self'
+            ? $sourceReturnType
+            : $returnType;
+    }
+
+    /**
+     * PHP 8.5 resolves `self` to the declaring class name in Reflection's
+     * string representation. Read the declared spelling only for that
+     * ambiguous case so a real `self` -> FQCN source change remains visible.
+     */
+    private static function sourceReturnType(ReflectionMethod $method): ?string
+    {
+        $file = $method->getFileName();
+        if ($file === false) {
+            return null;
+        }
+
+        $source = file_get_contents($file);
+        if ($source === false) {
+            return null;
+        }
+
+        $tokens = token_get_all($source);
+        $tokenCount = count($tokens);
+        for ($index = 0; $index < $tokenCount; $index++) {
+            $token = $tokens[$index];
+            if (!is_array($token) || $token[0] !== T_FUNCTION) {
+                continue;
+            }
+
+            $nameIndex = $index + 1;
+            while ($nameIndex < $tokenCount) {
+                $nameToken = $tokens[$nameIndex];
+                if ($nameToken === '(') {
+                    break;
+                }
+                if (is_array($nameToken) && $nameToken[0] === T_STRING) {
+                    break;
+                }
+                $nameIndex++;
+            }
+
+            if ($nameIndex >= $tokenCount || !is_array($tokens[$nameIndex]) ||
+                $tokens[$nameIndex][1] !== $method->getName()) {
+                continue;
+            }
+
+            $parameterIndex = $nameIndex + 1;
+            while ($parameterIndex < $tokenCount && $tokens[$parameterIndex] !== '(') {
+                $parameterIndex++;
+            }
+            if ($parameterIndex >= $tokenCount) {
+                return null;
+            }
+
+            $depth = 1;
+            for (++$parameterIndex; $parameterIndex < $tokenCount && $depth > 0; $parameterIndex++) {
+                if ($tokens[$parameterIndex] === '(') {
+                    $depth++;
+                } elseif ($tokens[$parameterIndex] === ')') {
+                    $depth--;
+                }
+            }
+
+            while ($parameterIndex < $tokenCount && self::isIgnorableToken($tokens[$parameterIndex])) {
+                $parameterIndex++;
+            }
+            if ($parameterIndex >= $tokenCount || $tokens[$parameterIndex] !== ':') {
+                return null;
+            }
+
+            $declaredType = '';
+            for (++$parameterIndex; $parameterIndex < $tokenCount; $parameterIndex++) {
+                $typeToken = $tokens[$parameterIndex];
+                if ($typeToken === '{' || $typeToken === ';') {
+                    break;
+                }
+                if (self::isIgnorableToken($typeToken)) {
+                    continue;
+                }
+
+                $declaredType .= is_array($typeToken) ? $typeToken[1] : $typeToken;
+            }
+
+            return $declaredType === '' ? null : $declaredType;
+        }
+
+        return null;
+    }
+
+    /** @param array{int, string, int}|string $token */
+    private static function isIgnorableToken(array|string $token): bool
+    {
+        return is_array($token) && ($token[0] === T_WHITESPACE || $token[0] === T_COMMENT || $token[0] === T_DOC_COMMENT);
     }
 
     /** @return array<string, mixed> */
