@@ -1,0 +1,1 @@
+[OpenAPI Coverage] FATAL: --spec-base-path is required
