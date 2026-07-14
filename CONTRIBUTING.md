@@ -30,8 +30,10 @@ PHPUnit 11/12/13.
 1. Open an issue describing the problem before starting non-trivial work.
    For bug fixes that come with a failing test, jumping straight to a PR
    is fine.
-2. Fork, branch from `main`, name the branch with the convention
-   `feat/<topic>`, `fix/<topic>`, `docs/<topic>`, etc.
+2. Fork and choose the correct base branch: use `main` for normal work; after
+   the `1.x` maintenance branch exists, use `1.x` for a v1-only fix. Name the
+   branch with the convention `feat/<topic>`, `fix/<topic>`, `docs/<topic>`,
+   etc.
 3. Write tests first when the change is observable behaviour. The test
    suite uses snake_case method names and PHPUnit `#[Test]` attributes.
 4. Run `composer ci` locally before pushing.
