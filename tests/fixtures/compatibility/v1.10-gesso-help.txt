@@ -1,0 +1,10 @@
+Gesso — OpenAPI contract testing for PHP.
+
+Usage:
+  gesso <command> [options]
+
+Commands:
+  doctor           Check whether Gesso can load and enforce a contract.
+  coverage:merge   Combine parallel-worker coverage sidecars.
+
+Run `gesso <command> --help` for command-specific options.

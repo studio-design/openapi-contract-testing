@@ -52,7 +52,7 @@ members marked `@internal` are excluded.
 | Package | `studio-design/openapi-contract-testing` | Explicit root requirement migration to `studio-design/gesso` |
 | PSR-4 | `Studio\OpenApiContractTesting\` → `src/` | Map `Studio\Gesso\` and verify optimized autoloading |
 | Autoload file | `src/Pest/Autoload.php` | Rename imports and preserve no-Pest guard behavior |
-| Binaries | `bin/openapi-contract`, `bin/openapi-coverage-merge` | Replace with the ADR-approved `gesso` command surface |
+| Binaries | `bin/openapi-contract`, `bin/openapi-coverage-merge`; v1.10 adds `bin/gesso` | Remove the legacy binaries and retain the unified `gesso` command surface |
 | Laravel discovery | `Studio\OpenApiContractTesting\Laravel\OpenApiContractTestingServiceProvider` | Point discovery to the Gesso provider |
 | PHP requirement | `^8.2` | Decide from the v2 GA date, not from the rename alone |
 | PHPUnit requirement | `^11.0 || ^12.0 || ^13.0` | Update only with an explicit support decision |
@@ -282,6 +282,11 @@ semantically because Laravel owns its cross-version console table rendering.
 
 ## CLI contracts
 
+V1.10 adds the forward-compatible `gesso` entry point. It dispatches
+`gesso doctor` and `gesso coverage:merge` to the same implementations while
+rendering the new invocation names in help and usage output. The legacy
+binaries remain the v1.9-compatible paths until the v1 line reaches EOL.
+
 ### Doctor
 
 Executable and command: `openapi-contract doctor`.
@@ -389,7 +394,7 @@ must be decided explicitly.
 | Laravel | published old config/provider | Gesso config/provider | both configs present with conflicting values |
 | Pest | old trait wiring | Gesso trait wiring | Pest absent and partially available |
 | PSR-7/Symfony | old imports | Gesso imports | equivalent exchange produces equivalent result/coverage |
-| CLI | old commands and golden output | Gesso commands | flags, exit codes, stdout/stderr parity |
+| CLI | old commands plus v1.10 `gesso` aliases and golden output | `gesso` only | flags, exit codes, stdout/stderr parity; legacy binaries absent |
 | Coverage | v1 JSON and sidecar | v2 output | v1 worker payload merged by v2 reader |
 | Doctor/routes | schema v1 consumers | v2 identity | incompatible field change requires version bump |
 

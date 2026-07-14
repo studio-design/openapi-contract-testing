@@ -72,9 +72,10 @@ use function unlink;
  * }
  *
  * @internal Not part of the package's public API. Do not use from user code.
- *           The CLI surface of `bin/openapi-coverage-merge` is the documented
- *           invocation path; this class's constructor / methods may change in
- *           any release without a SemVer bump.
+ *           The `openapi-coverage-merge` and `gesso coverage:merge` CLI
+ *           surfaces are the documented invocation paths; this class's
+ *           constructor / methods may change in any release without a SemVer
+ *           bump.
  */
 final class CoverageMergeCommand
 {
@@ -84,6 +85,7 @@ final class CoverageMergeCommand
     public function __construct(
         private mixed $stderrWriter = null,
         private mixed $stdoutWriter = null,
+        private readonly string $invocation = 'openapi-coverage-merge',
     ) {}
 
     /**
@@ -155,13 +157,13 @@ final class CoverageMergeCommand
         return $opts;
     }
 
-    public static function usage(): string
+    public static function usage(string $invocation = 'openapi-coverage-merge'): string
     {
         return <<<USAGE
-            openapi-coverage-merge — combine paratest worker sidecars into one coverage report.
+            {$invocation} — combine paratest worker sidecars into one coverage report.
 
             Usage:
-              openapi-coverage-merge --spec-base-path=<path> [options]
+              {$invocation} --spec-base-path=<path> [options]
 
             Options:
               --spec-base-path=<path>       Path to bundled spec directory (required).
@@ -201,7 +203,7 @@ final class CoverageMergeCommand
     public function run(array $options): int
     {
         if (($options['help'] ?? false) === true) {
-            $this->writeStdout(self::usage());
+            $this->writeStdout(self::usage($this->invocation));
 
             return 0;
         }
