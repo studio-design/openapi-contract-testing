@@ -83,10 +83,12 @@ this section covers the mechanical flow.
 
 How it works:
 
-1. Every push to `main` runs the `release-please` workflow.
-2. The bot scans the Conventional Commits since the last release tag and
-   either opens or updates a "release PR" titled `chore(main): release X.Y.Z`.
-   The PR diff bumps `CHANGELOG.md` and `.release-please-manifest.json`.
+1. Every push to a configured target branch runs the `release-please` workflow.
+   This is `main` for v2 and, after v1.10.0, `1.x` for v1 maintenance.
+2. For the branch that triggered the workflow, the bot scans the Conventional
+   Commits since that line's last release and either opens or updates a release
+   PR titled `chore(<branch>): release X.Y.Z`. The PR diff bumps that branch's
+   `CHANGELOG.md` and `.release-please-manifest.json`.
 3. The proposed version is derived from the commit prefixes:
    - `fix:` → patch bump (`X.Y.Z` → `X.Y.(Z+1)`)
    - `feat:` → minor bump (`X.Y.Z` → `X.(Y+1).0`)
@@ -95,14 +97,16 @@ How it works:
 4. When a maintainer merges the release PR, the bot creates the git tag and
    publishes the GitHub Release with notes generated from the changelog
    entry. Packagist syncs automatically from the tag webhook.
-5. The release PR is **kept fresh by the bot** — every push to `main` after
-   the initial release PR opens rebases its branch and rewrites the
-   CHANGELOG diff in place. There is never more than one open release PR.
+5. Each release PR is **kept fresh by the bot** — every push to its target
+   branch after the initial release PR opens rebases the bot-managed PR branch
+   and rewrites the CHANGELOG diff in place. There is at most one open release
+   PR per target branch, so `main` and `1.x` may have two release PRs open at
+   the same time.
 
 The manifest file `.release-please-manifest.json` records the last released
-version per package path; this repo is single-package so it stays
-`{ ".": "X.Y.Z" }`. The `.` key is the bot's package-root identifier; do
-not rename or duplicate it.
+version per package path on each target branch; this repo is single-package so
+it stays `{ ".": "X.Y.Z" }`. The value may differ between `main` and `1.x`.
+The `.` key is the bot's package-root identifier; do not rename or duplicate it.
 
 ### Maintenance branches and backports
 
@@ -165,7 +169,7 @@ than a body footer.
 
 If a `fix:`-only batch should ship as a minor release (e.g., the fix is
 behaviourally significant), use a `Release-As: X.Y.Z` footer in a commit
-message body on `main`:
+message body on the branch being released:
 
 ```
 fix(validator): rewire something important
@@ -179,16 +183,16 @@ must live in a **commit message body** for the same reason as
 
 ### Recovery scenarios
 
-- **Bad release published.** Revert the release commit on `main` via a
-  fresh `revert:` PR. The released tag and Packagist version cannot be
-  unpublished; treat the next release as a bugfix. If the next release PR
-  proposes a version that you want to skip, add `Release-As: X.Y.Z` to
-  the next non-revert commit on `main` to force the bot's hand.
+- **Bad release published.** Revert the release commit via a fresh `revert:` PR
+  targeting the target branch that produced it. The released tag and Packagist
+  version cannot be unpublished; treat the next release on that line as a
+  bugfix. If its next release PR proposes a version that you want to skip, add
+  `Release-As: X.Y.Z` to the next non-revert commit on the same target branch.
 - **Manifest drift suspected** (e.g., someone bypassed `tag-guard` with
   admin rights and pushed a manual tag). Edit `.release-please-manifest.json`
-  via a `chore:` PR to set the `"."` value to the actual latest released
-  version, then merge. The next release PR will re-derive the proposed
-  version from that point.
+  on the affected target branch via a `chore:` PR to set the `"."` value to
+  that line's actual latest released version, then merge. The next release PR
+  for that branch will re-derive the proposed version from that point.
 - **Bot-authored commits do not trigger downstream Actions** by default
   (GitHub's loop-prevention). The current pipeline is fine because tag
   publication and Packagist sync are both handled by the bot's own action

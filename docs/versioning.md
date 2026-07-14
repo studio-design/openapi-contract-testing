@@ -82,9 +82,11 @@ Bug fixes and security updates land on the latest minor of v1.x. There is no LTS
 
 v1.10.0 is the final planned feature minor of the original
 `studio-design/openapi-contract-testing` package. It may add backward-compatible
-migration aids and deprecations for Gesso 2.0; SemVer requires deprecations to
-ship in a minor release before removal in a major release. After v1.10.0, the
-v1 line receives patches from the `1.x` maintenance branch:
+migration aids and deprecations for Gesso 2.0. SemVer requires a minor bump when
+public API is deprecated and a major bump for its incompatible removal. This
+project additionally requires migration deprecations to ship in v1.10.0 before
+removal in v2. After v1.10.0, the v1 line receives patches from the `1.x`
+maintenance branch:
 
 | Period | Dates | Accepted changes |
 | --- | --- | --- |
