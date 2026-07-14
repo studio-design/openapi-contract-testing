@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Studio\OpenApiContractTesting\Coverage\ConsoleCoverageRenderer;
 use Studio\OpenApiContractTesting\Coverage\HtmlCoverageRenderer;
 use Studio\OpenApiContractTesting\Tests\Helpers\PublicApiInventory;
+use Studio\OpenApiContractTesting\Tests\Unit\Compatibility\Fixture\PublicApiReturnTypeFixture;
 
 use function dirname;
 use function file_get_contents;
@@ -18,6 +19,22 @@ use function json_decode;
 
 final class PublicApiBaselineTest extends TestCase
 {
+    #[Test]
+    public function inventory_normalises_self_without_hiding_explicit_class_names(): void
+    {
+        $inventory = PublicApiInventory::capture(
+            __DIR__ . '/Fixture',
+            'Studio\\OpenApiContractTesting\\Tests\\Unit\\Compatibility\\Fixture\\',
+        );
+        $methods = $inventory[PublicApiReturnTypeFixture::class]['methods'];
+
+        $this->assertSame('self', $methods['declaredAsSelf']['return_type']);
+        $this->assertSame(
+            PublicApiReturnTypeFixture::class,
+            $methods['declaredAsClassName']['return_type'],
+        );
+    }
+
     #[Test]
     public function inventory_records_constructor_availability_and_visibility(): void
     {
