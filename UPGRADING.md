@@ -22,6 +22,12 @@ v2 discovers `Studio\Gesso\Laravel\GessoServiceProvider`, publishes with the
 guessing precedence. Rebuild the configuration cache only after the application
 boots successfully on v2.
 
+Coverage JSON consumers must accept `schema_version: 2` and the fixed
+`tool.name` value `studio-design/gesso`. The remaining coverage fields retain
+their v1 meanings. Doctor JSON, Laravel route parity JSON, sidecar envelopes,
+and tracker-state versions are unchanged; see the
+[v2 migration guide](docs/migration/v2.md#update-coverage-json-consumers).
+
 ## Within v1.x
 
 The v1.x line is covered end-to-end by SemVer (see "v0.x → v1.0.0"

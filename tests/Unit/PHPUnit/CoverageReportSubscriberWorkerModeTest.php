@@ -322,7 +322,7 @@ class CoverageReportSubscriberWorkerModeTest extends TestCase
         $this->assertFileExists($jsonPath, 'sequential mode must write json_output when configured');
         $decoded = json_decode((string) file_get_contents($jsonPath), true);
         $this->assertIsArray($decoded);
-        $this->assertSame(1, $decoded['schema_version']);
+        $this->assertSame(2, $decoded['schema_version']);
         $this->assertArrayHasKey('petstore-3.0', $decoded['specs']);
     }
 

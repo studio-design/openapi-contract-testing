@@ -911,7 +911,7 @@
         "backing_type": null,
         "cases": [],
         "constants": {
-            "SCHEMA_VERSION": 1
+            "SCHEMA_VERSION": 2
         },
         "properties": [],
         "methods": {

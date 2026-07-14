@@ -12,9 +12,9 @@ A sample document is committed at [`samples/coverage.json`](samples/coverage.jso
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `schema_version` | `integer` | Bumped on incompatible structural changes. The current version is `1`. Consumers SHOULD reject unknown values. |
+| `schema_version` | `integer` | Bumped on incompatible contract changes. The current version is `2`. Consumers SHOULD reject unknown values. |
 | `generated_at` | `string` | ISO-8601 timestamp (`DateTimeImmutable::ATOM`) for when the document was rendered. |
-| `tool` | `object` | `{ "name": "studio-design/openapi-contract-testing", "version": "<composer version or 'unknown'>" }`. Useful for downstream consumers diagnosing format drift. `"unknown"` is emitted when Composer's `InstalledVersions` metadata is unavailable (e.g. running from a vendored checkout without `composer install`, or `replace`d in a parent project); the field is always a string so downstream JSON schema validators do not need a nullable type. |
+| `tool` | `object` | `{ "name": "studio-design/gesso", "version": "<composer version or 'unknown'>" }`. Useful for downstream consumers diagnosing format drift. `"unknown"` is emitted when Composer's `InstalledVersions` metadata is unavailable (e.g. running from a vendored checkout without `composer install`, or `replace`d in a parent project); the field is always a string so downstream JSON schema validators do not need a nullable type. |
 | `aggregate` | `object` | Rollup across every spec in the document. Lets consumers read one "total" without re-summing. See [aggregate fields](#aggregate-fields). |
 | `specs` | `object` | Keyed by spec name. Each value is `{ "aggregates": …, "endpoints": [...] }`. |
 
@@ -72,8 +72,11 @@ Each entry in `specs.<name>.endpoints` has this shape:
 
 ## Compatibility policy
 
-- Additive changes (new fields, new enum values for `endpoint_state` / `response_state`) keep `schema_version` at `1`.
+- Additive changes (new fields, new enum values for `endpoint_state` / `response_state`) keep `schema_version` at `2`.
 - Removals, renames, or shape changes bump `schema_version`.
+- Schema version 2 retains the fields, types, and meanings from version 1. It
+  advances the contract because the fixed `tool.name` value changed from
+  `studio-design/openapi-contract-testing` to `studio-design/gesso`.
 - The wire format used by paratest worker sidecars is **separate** from this schema (it lives at `Coverage/OpenApiCoverageTracker::exportState()` and is versioned independently via `STATE_FORMAT_VERSION`). Do not consume sidecar payloads as if they were `json_output`; they have a different shape (no `operation_id`, no derived states, no `unexpected_observations`).
 
 ## Generating the file

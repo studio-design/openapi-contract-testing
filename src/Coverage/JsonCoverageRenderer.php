@@ -83,12 +83,9 @@ use function sprintf;
  */
 final class JsonCoverageRenderer
 {
-    public const SCHEMA_VERSION = 1;
-
-    // Schema v1 retains its fixed tool identity until the coverage-format
-    // migration; version lookup must still follow the installed v2 package.
+    public const SCHEMA_VERSION = 2;
     private const COMPOSER_PACKAGE_NAME = 'studio-design/gesso';
-    private const TOOL_NAME = 'studio-design/openapi-contract-testing';
+    private const TOOL_NAME = 'studio-design/gesso';
 
     /**
      * @param array<string, CoverageResult> $results
