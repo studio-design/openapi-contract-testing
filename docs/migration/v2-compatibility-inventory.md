@@ -350,6 +350,11 @@ upgrade text describes the sidecar shape as non-frozen. The safe migration
 assumption is that the PHP import/export methods are internal but the released
 CLI must continue reading supported versioned v1 payloads.
 
+Migration status: the exact v1.9 coverage JSON report and sidecar envelope are
+captured under `tests/fixtures/compatibility/`. The sidecar fixture pins coverage
+tracker state v1 and strict-required tracker state v2, and consumer-style tests
+verify both the envelope reader and the legacy bare-coverage reader path.
+
 ## Diagnostic categories and embedded identifiers
 
 The v1 policy explicitly protects these `E_USER_WARNING` category families:
