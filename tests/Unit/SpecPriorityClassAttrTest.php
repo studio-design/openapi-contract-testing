@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\Gesso\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
-use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
+use Studio\Gesso\Attribute\OpenApiSpec;
+use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
 
 require_once __DIR__ . '/../Helpers/LaravelConfigMock.php';
 

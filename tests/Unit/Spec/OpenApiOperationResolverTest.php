@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Spec;
+namespace Studio\Gesso\Tests\Unit\Spec;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
+use Studio\Gesso\Spec\OpenApiOperationResolver;
 
 use function array_column;
 

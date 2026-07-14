@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Fuzz;
+namespace Studio\Gesso\Fuzz;
 
 use InvalidArgumentException;
 use RuntimeException;
-use Studio\OpenApiContractTesting\HttpMethod;
-use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
+use Studio\Gesso\HttpMethod;
+use Studio\Gesso\Spec\OpenApiOperationResolver;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Support\MalformedSpecNode;
 use Throwable;
 
 use function array_filter;

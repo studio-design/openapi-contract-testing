@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Response;
+namespace Studio\Gesso\Validation\Response;
 
-use Studio\OpenApiContractTesting\OpenApiVersion;
-use Studio\OpenApiContractTesting\SchemaContext;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
-use Studio\OpenApiContractTesting\Validation\Support\HeaderNormalizer;
-use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
-use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
-use Studio\OpenApiContractTesting\Validation\Support\TypeCoercer;
+use Studio\Gesso\OpenApiVersion;
+use Studio\Gesso\SchemaContext;
+use Studio\Gesso\Spec\OpenApiSchemaConverter;
+use Studio\Gesso\Validation\Support\HeaderNormalizer;
+use Studio\Gesso\Validation\Support\ObjectConverter;
+use Studio\Gesso\Validation\Support\SchemaValidatorRunner;
+use Studio\Gesso\Validation\Support\TypeCoercer;
 
 use function array_key_first;
 use function count;

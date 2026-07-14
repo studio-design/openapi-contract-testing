@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Laravel;
+namespace Studio\Gesso\Laravel;
 
 use const E_USER_DEPRECATED;
 use const FILTER_NULL_ON_FAILURE;
@@ -16,21 +16,21 @@ use JsonException;
 use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\AssertionFailedError;
 use RuntimeException;
-use Studio\OpenApiContractTesting\Attribute\SkipOpenApi;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\DecodedBody;
-use Studio\OpenApiContractTesting\HttpMethod;
-use Studio\OpenApiContractTesting\Internal\StackTraceFilter;
-use Studio\OpenApiContractTesting\OpenApiRequestValidator;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Studio\OpenApiContractTesting\SkipOpenApiResolver;
-use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
-use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Request\SecuritySchemeIntrospector;
-use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorEnforcement;
-use Studio\OpenApiContractTesting\Validation\Support\HeaderNormalizer;
+use Studio\Gesso\Attribute\SkipOpenApi;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\DecodedBody;
+use Studio\Gesso\HttpMethod;
+use Studio\Gesso\Internal\StackTraceFilter;
+use Studio\Gesso\OpenApiRequestValidator;
+use Studio\Gesso\OpenApiResponseValidator;
+use Studio\Gesso\SkipOpenApiResolver;
+use Studio\Gesso\Spec\OpenApiOperationResolver;
+use Studio\Gesso\Spec\OpenApiPathMatcher;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Request\SecuritySchemeIntrospector;
+use Studio\Gesso\Validation\Support\ContentTypeMatcher;
+use Studio\Gesso\Validation\Support\DiscriminatorEnforcement;
+use Studio\Gesso\Validation\Support\HeaderNormalizer;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use WeakMap;

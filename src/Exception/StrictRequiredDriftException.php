@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Exception;
+namespace Studio\Gesso\Exception;
 
 use InvalidArgumentException;
 use RuntimeException;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredMode;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredReport;
+use Studio\Gesso\Validation\Strict\StrictRequiredMode;
+use Studio\Gesso\Validation\Strict\StrictRequiredReport;
 
 /**
  * Thrown when one or more endpoints' response bodies consistently contain

@@ -6,8 +6,8 @@ namespace Examples\Core\Tests;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\OpenApiResponseValidator;
 
 final class PetContractTest extends TestCase
 {

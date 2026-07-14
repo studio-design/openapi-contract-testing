@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Fuzz;
+namespace Studio\Gesso\Tests\Unit\Fuzz;
 
 use const E_USER_WARNING;
 
@@ -11,13 +11,13 @@ use Opis\JsonSchema\Validator;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
-use Studio\OpenApiContractTesting\Fuzz\SchemaDataGenerator;
-use Studio\OpenApiContractTesting\Fuzz\SchemaMutationGenerator;
-use Studio\OpenApiContractTesting\Fuzz\SchemaValueValidator;
-use Studio\OpenApiContractTesting\OpenApiVersion;
-use Studio\OpenApiContractTesting\SchemaContext;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
+use Studio\Gesso\Fuzz\SchemaDataGenerator;
+use Studio\Gesso\Fuzz\SchemaMutationGenerator;
+use Studio\Gesso\Fuzz\SchemaValueValidator;
+use Studio\Gesso\OpenApiVersion;
+use Studio\Gesso\SchemaContext;
+use Studio\Gesso\Spec\OpenApiSchemaConverter;
+use Studio\Gesso\Validation\Support\DiscriminatorContext;
 
 use function array_filter;
 use function array_map;

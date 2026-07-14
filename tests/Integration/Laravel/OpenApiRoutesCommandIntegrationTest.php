@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Integration\Laravel;
+namespace Studio\Gesso\Tests\Integration\Laravel;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 use Orchestra\Testbench\TestCase;
 use PHPUnit\Framework\Attributes\Test;
-use Studio\OpenApiContractTesting\Laravel\OpenApiContractTestingServiceProvider;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Laravel\OpenApiContractTestingServiceProvider;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 use function array_map;
 use function count;

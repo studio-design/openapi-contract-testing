@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Support;
+namespace Studio\Gesso\Validation\Support;
 
 use const E_USER_WARNING;
 

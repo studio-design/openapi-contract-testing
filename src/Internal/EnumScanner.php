@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Internal;
+namespace Studio\Gesso\Internal;
 
 use Composer\Autoload\ClassLoader;
 use FilesystemIterator;
@@ -11,9 +11,9 @@ use RecursiveIteratorIterator;
 use ReflectionEnum;
 use ReflectionException;
 use SplFileInfo;
-use Studio\OpenApiContractTesting\Attribute\BoundToOpenApiEnum;
-use Studio\OpenApiContractTesting\Exception\EnumBindingException;
-use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
+use Studio\Gesso\Attribute\BoundToOpenApiEnum;
+use Studio\Gesso\Exception\EnumBindingException;
+use Studio\Gesso\Exception\EnumBindingReason;
 
 use function array_keys;
 use function array_unique;

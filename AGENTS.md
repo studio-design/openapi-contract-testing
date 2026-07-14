@@ -6,7 +6,7 @@ that agent's local configuration instead.
 
 ## Project scope
 
-`studio-design/openapi-contract-testing` is a PHP 8.3+ test-time library for
+`studio-design/gesso` is a PHP 8.3+ test-time library for
 validating requests and responses against OpenAPI 3.0, 3.1, and 3.2. Its core is
 framework-agnostic; adapters support PHPUnit, Laravel, Symfony, and Pest. It also
 provides endpoint/response coverage, schema-driven exploration, enum-drift and
@@ -105,7 +105,7 @@ normal dependency set.
 
 ## Implementation conventions
 
-- Follow PSR-4 under `Studio\OpenApiContractTesting\` and start PHP files with
+- Follow PSR-4 under `Studio\Gesso\` and start PHP files with
   `declare(strict_types=1);`.
 - Keep code compatible with the PHP 8.3 floor.
 - PHP-CS-Fixer is authoritative: PER-CS2.0, strict comparisons, explicit global

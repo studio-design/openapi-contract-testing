@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\Gesso\Tests\Unit;
 
 use const JSON_THROW_ON_ERROR;
 
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Attribute\SkipOpenApi;
-use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\HttpMethod;
-use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Attribute\SkipOpenApi;
+use Studio\Gesso\Coverage\EndpointCoverageState;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\HttpMethod;
+use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 use Symfony\Component\HttpFoundation\Request;
 
 use function json_encode;

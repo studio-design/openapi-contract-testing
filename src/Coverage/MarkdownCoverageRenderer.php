@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Coverage;
+namespace Studio\Gesso\Coverage;
 
 use function implode;
 use function round;

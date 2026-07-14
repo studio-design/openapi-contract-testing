@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\Gesso\Tests\Unit;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\OpenApiValidationOutcome;
-use Studio\OpenApiContractTesting\OpenApiValidationResult;
+use Studio\Gesso\OpenApiValidationOutcome;
+use Studio\Gesso\OpenApiValidationResult;
 
 class OpenApiValidationResultTest extends TestCase
 {

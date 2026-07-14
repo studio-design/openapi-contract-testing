@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\PHPUnit;
+namespace Studio\Gesso\Tests\Unit\PHPUnit;
 
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Exception\EnumBindingException;
-use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
-use Studio\OpenApiContractTesting\PHPUnit\AssertsNoEnumDrift;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\IntegerBackedEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\MatchingEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\NotAnEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\PhpExtraEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture\SpecExtraEnum;
+use Studio\Gesso\Exception\EnumBindingException;
+use Studio\Gesso\Exception\EnumBindingReason;
+use Studio\Gesso\PHPUnit\AssertsNoEnumDrift;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\IntegerBackedEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\MatchingEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\NotAnEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\PhpExtraEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\SpecExtraEnum;
 
 use function array_column;
 use function str_contains;

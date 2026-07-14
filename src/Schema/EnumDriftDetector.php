@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Schema;
+namespace Studio\Gesso\Schema;
 
 use function array_filter;
 use function array_values;

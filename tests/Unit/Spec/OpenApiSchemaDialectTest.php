@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Spec;
+namespace Studio\Gesso\Tests\Unit\Spec;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
-use Studio\OpenApiContractTesting\OpenApiVersion;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaDialect;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
+use Studio\Gesso\OpenApiVersion;
+use Studio\Gesso\Spec\OpenApiSchemaDialect;
 
 final class OpenApiSchemaDialectTest extends TestCase
 {

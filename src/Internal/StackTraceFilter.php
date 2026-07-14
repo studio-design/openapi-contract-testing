@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Internal;
+namespace Studio\Gesso\Internal;
 
 use Error;
 use Exception;
@@ -49,12 +49,12 @@ final class StackTraceFilter
      * @var list<string>
      */
     private const DROP_PATTERNS = [
-        '/studio-design/openapi-contract-testing/src/',
-        '/openapi-contract-testing/src/Laravel/',
-        '/openapi-contract-testing/src/Psr7/',
-        '/openapi-contract-testing/src/Symfony/',
-        '/openapi-contract-testing/src/Internal/',
-        '/openapi-contract-testing/src/PHPUnit/',
+        '/studio-design/gesso/src/',
+        '/gesso/src/Laravel/',
+        '/gesso/src/Psr7/',
+        '/gesso/src/Symfony/',
+        '/gesso/src/Internal/',
+        '/gesso/src/PHPUnit/',
         '/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php',
         '/Illuminate/Testing/TestResponse.php',
     ];

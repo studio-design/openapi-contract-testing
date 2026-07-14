@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Testing\TestResponse;
 use PHPUnit\Framework\AssertionFailedError;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
 use Symfony\Component\HttpFoundation\Request;
 
 /*

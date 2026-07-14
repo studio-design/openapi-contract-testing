@@ -18,16 +18,16 @@ declare(strict_types=1);
 // of this file.
 //
 // This is a fixture, not autoloaded code. Composer's PSR-4 mapping for
-// `tests/` would resolve to `Studio\OpenApiContractTesting\Tests\...`,
+// `tests/` would resolve to `Studio\Gesso\Tests\...`,
 // which would defeat the boundary-crossing premise; the
 // `Acme\PhpstanProbe` namespace keeps the file scannable by PHPStan
 // while invisible to autoloaders.
 
 namespace Acme\PhpstanProbe;
 
-use Studio\OpenApiContractTesting\Coverage\CoverageMergeCommand;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
-use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
+use Studio\Gesso\Coverage\CoverageMergeCommand;
+use Studio\Gesso\Spec\OpenApiSchemaConverter;
+use Studio\Gesso\Validation\Support\ContentTypeMatcher;
 
 final class InternalEnforcementProbe
 {

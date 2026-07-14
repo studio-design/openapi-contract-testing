@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Integration\Schema\Fixture\AutoDiscovery\Issue170;
+namespace Studio\Gesso\Tests\Integration\Schema\Fixture\AutoDiscovery\Issue170;
 
-use Studio\OpenApiContractTesting\Attribute\BoundToOpenApiEnum;
+use Studio\Gesso\Attribute\BoundToOpenApiEnum;
 
 /**
  * Auto-discovery + enum_spec_base_path round-trip fixture (issue #170).

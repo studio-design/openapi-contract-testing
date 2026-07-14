@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Request;
+namespace Studio\Gesso\Validation\Request;
 
 /**
  * Immutable result of classifying a security scheme definition.

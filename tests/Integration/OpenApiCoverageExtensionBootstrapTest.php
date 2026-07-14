@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Integration;
+namespace Studio\Gesso\Tests\Integration;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -86,6 +86,22 @@ class OpenApiCoverageExtensionBootstrapTest extends TestCase
     }
 
     #[Test]
+    public function phpunit_rejects_the_legacy_extension_namespace(): void
+    {
+        [$exit, $output] = $this->runPhpunit(
+            'composition',
+            '--filter=DoesNotMatchAnyTest',
+            'Studio\\OpenApiContractTesting\\PHPUnit\\OpenApiCoverageExtension',
+        );
+
+        $this->assertNotSame(0, $exit, $output);
+        $this->assertStringContainsString(
+            'Studio\\OpenApiContractTesting\\PHPUnit\\OpenApiCoverageExtension',
+            $output,
+        );
+    }
+
+    #[Test]
     public function default_testsuite_as_full_warns_when_no_default_configured(): void
     {
         // Issue #236: opting in without declaring `defaultTestSuite` makes
@@ -162,13 +178,16 @@ class OpenApiCoverageExtensionBootstrapTest extends TestCase
     /**
      * @return array{0: int, 1: string} [exit code, combined stderr]
      */
-    private function runPhpunit(string $specsParam, string $filterArg): array
-    {
+    private function runPhpunit(
+        string $specsParam,
+        string $filterArg,
+        string $extensionClass = 'Studio\\Gesso\\PHPUnit\\OpenApiCoverageExtension',
+    ): array {
         $xml = sprintf(
             '<?xml version="1.0" encoding="UTF-8"?>'
             . '<phpunit bootstrap="%s/vendor/autoload.php" cacheDirectory="%s/.phpunit.cache" colors="false">'
             . '<testsuites><testsuite name="Unit"><directory>%s/tests/Unit</directory></testsuite></testsuites>'
-            . '<extensions><bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">'
+            . '<extensions><bootstrap class="%s">'
             . '<parameter name="spec_base_path" value="%s/tests/fixtures/specs"/>'
             . '<parameter name="specs" value="%s"/>'
             . '</bootstrap></extensions>'
@@ -176,6 +195,7 @@ class OpenApiCoverageExtensionBootstrapTest extends TestCase
             $this->repoRoot,
             $this->repoRoot,
             $this->repoRoot,
+            $extensionClass,
             $this->repoRoot,
             $specsParam,
         );
@@ -247,7 +267,7 @@ class OpenApiCoverageExtensionBootstrapTest extends TestCase
             . '<phpunit bootstrap="%s/vendor/autoload.php" cacheDirectory="%s/.phpunit.cache" '
             . 'colors="false" failOnEmptyTestSuite="false"%s>'
             . '<testsuites><testsuite name="Unit"><file>%s/tests/Unit/Internal/PartialRunDecisionTest.php</file></testsuite></testsuites>'
-            . '<extensions><bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">'
+            . '<extensions><bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">'
             . '<parameter name="spec_base_path" value="%s/tests/fixtures/specs"/>'
             . '<parameter name="specs" value="composition"/>'
             . '%s%s'

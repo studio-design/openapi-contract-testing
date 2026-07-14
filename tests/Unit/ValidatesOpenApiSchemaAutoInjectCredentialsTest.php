@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\Gesso\Tests\Unit;
 
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\HttpMethod;
-use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Request\SecurityValidator;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\HttpMethod;
+use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Request\SecurityValidator;
 use Symfony\Component\HttpFoundation\Request;
 
 require_once __DIR__ . '/../Helpers/LaravelConfigMock.php';

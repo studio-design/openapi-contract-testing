@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Psr7;
+namespace Studio\Gesso\Psr7;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -12,12 +12,12 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Message\StreamInterface;
 use RuntimeException;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\DecodedBody;
-use Studio\OpenApiContractTesting\OpenApiRequestValidator;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Studio\OpenApiContractTesting\OpenApiValidationResult;
-use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\DecodedBody;
+use Studio\Gesso\OpenApiRequestValidator;
+use Studio\Gesso\OpenApiResponseValidator;
+use Studio\Gesso\OpenApiValidationResult;
+use Studio\Gesso\Validation\Support\ContentTypeMatcher;
 
 use function array_key_exists;
 use function array_merge;

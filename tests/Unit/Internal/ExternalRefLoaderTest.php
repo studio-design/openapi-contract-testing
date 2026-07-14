@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Internal;
+namespace Studio\Gesso\Tests\Unit\Internal;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
-use Studio\OpenApiContractTesting\Internal\ExternalRefLoader;
-use Studio\OpenApiContractTesting\Internal\YamlAvailability;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
+use Studio\Gesso\Internal\ExternalRefLoader;
+use Studio\Gesso\Internal\YamlAvailability;
 
 use function chmod;
 use function file_put_contents;

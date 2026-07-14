@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Internal;
+namespace Studio\Gesso\Internal;
 
 /**
  * Result of loading an external `$ref` target — either from the

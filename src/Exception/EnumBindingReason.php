@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Exception;
+namespace Studio\Gesso\Exception;
 
 /**
  * Categorical reasons a `#[BoundToOpenApiEnum]` binding cannot be resolved

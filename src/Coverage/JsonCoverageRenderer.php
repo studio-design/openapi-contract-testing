@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Coverage;
+namespace Studio\Gesso\Coverage;
 
 use const JSON_PRETTY_PRINT;
 use const JSON_UNESCAPED_SLASHES;
@@ -84,6 +84,10 @@ use function sprintf;
 final class JsonCoverageRenderer
 {
     public const SCHEMA_VERSION = 1;
+
+    // Schema v1 retains its fixed tool identity until the coverage-format
+    // migration; version lookup must still follow the installed v2 package.
+    private const COMPOSER_PACKAGE_NAME = 'studio-design/gesso';
     private const TOOL_NAME = 'studio-design/openapi-contract-testing';
 
     /**
@@ -256,7 +260,7 @@ final class JsonCoverageRenderer
     private static function resolveToolVersion(): string
     {
         try {
-            $version = InstalledVersions::getVersion(self::TOOL_NAME);
+            $version = InstalledVersions::getVersion(self::COMPOSER_PACKAGE_NAME);
         } catch (Throwable) {
             return 'unknown';
         }

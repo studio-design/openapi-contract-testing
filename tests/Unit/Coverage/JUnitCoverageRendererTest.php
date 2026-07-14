@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
+namespace Studio\Gesso\Tests\Unit\Coverage;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use SimpleXMLElement;
-use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
-use Studio\OpenApiContractTesting\Coverage\JUnitCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
+use Studio\Gesso\Coverage\EndpointCoverageState;
+use Studio\Gesso\Coverage\JUnitCoverageRenderer;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Coverage\ResponseCoverageState;
 
 use function explode;
 use function simplexml_load_string;

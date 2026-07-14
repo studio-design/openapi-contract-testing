@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Fuzz;
+namespace Studio\Gesso\Fuzz;
 
 /** @internal */
 final readonly class SchemaMutation

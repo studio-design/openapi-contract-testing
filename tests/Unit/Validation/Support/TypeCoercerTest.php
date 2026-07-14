@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Support;
+namespace Studio\Gesso\Tests\Unit\Validation\Support;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Validation\Support\TypeCoercer;
+use Studio\Gesso\Validation\Support\TypeCoercer;
 
 class TypeCoercerTest extends TestCase
 {

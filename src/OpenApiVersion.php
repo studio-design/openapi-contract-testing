@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting;
+namespace Studio\Gesso;
 
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 
 use function array_key_exists;
 use function get_debug_type;

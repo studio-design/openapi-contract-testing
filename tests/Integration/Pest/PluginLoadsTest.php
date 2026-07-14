@@ -20,7 +20,7 @@ declare(strict_types=1);
 |
 | Asserting on the input-validation throws — "requires a TestResponse" /
 | "requires a Symfony Request" — pins the dispatch to the actual
-| Studio\OpenApiContractTesting\Pest\Expectations class. A wrong
+| Studio\Gesso\Pest\Expectations class. A wrong
 | expectation name would surface as a different exception type
 | (BadMethodCallException) and fail the test.
 |

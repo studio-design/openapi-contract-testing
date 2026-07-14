@@ -1,7 +1,7 @@
 # Symfony quickstart
 
 ```bash
-composer require --dev studio-design/openapi-contract-testing symfony/http-foundation symfony/http-kernel
+composer require --dev studio-design/gesso symfony/http-foundation symfony/http-kernel
 composer install
 composer test
 ```

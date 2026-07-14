@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
 
 it('lists pets matching the documented response shape', function (): void {
     $response = $this->getJson('/v1/pets');

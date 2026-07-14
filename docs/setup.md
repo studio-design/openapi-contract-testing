@@ -38,7 +38,7 @@ Add the coverage extension to your `phpunit.xml`:
 
 ```xml
 <extensions>
-    <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+    <bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
         <parameter name="spec_base_path" value="openapi/bundled"/>
         <parameter name="strip_prefixes" value="/api"/>
         <parameter name="specs" value="front,admin"/>
@@ -114,7 +114,7 @@ validation compare the same paths. See [Laravel route parity](laravel-route-pari
 for filters, JSON output, and CI exit codes.
 
 ```php
-use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
+use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
 
 class GetPetsTest extends TestCase
 {
@@ -132,8 +132,8 @@ class GetPetsTest extends TestCase
 To use a different spec for a specific test class, add the `#[OpenApiSpec]` attribute:
 
 ```php
-use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
-use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
+use Studio\Gesso\Attribute\OpenApiSpec;
+use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
 
 #[OpenApiSpec('admin')]
 class AdminGetUsersTest extends TestCase
@@ -177,7 +177,7 @@ Resolution priority (highest to lowest) — the first match wins:
 Concrete example where all four layers are populated (class name differs from the earlier `MixedApiTest` example so both snippets can coexist in one project):
 
 ```php
-use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
+use Studio\Gesso\Attribute\OpenApiSpec;
 
 // config/openapi-contract-testing.php → ['default_spec' => 'front']   (layer 4)
 
@@ -221,8 +221,8 @@ For Symfony projects, mix the `OpenApiAssertions` trait into a `WebTestCase` (or
 
 ```php
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
-use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
-use Studio\OpenApiContractTesting\Symfony\OpenApiAssertions;
+use Studio\Gesso\Attribute\OpenApiSpec;
+use Studio\Gesso\Symfony\OpenApiAssertions;
 
 #[OpenApiSpec('front')]
 final class PetsTest extends WebTestCase
@@ -259,9 +259,9 @@ Spec resolution uses the same `#[OpenApiSpec]` attribute / `openApiSpec()` chain
 You can use the `#[OpenApiSpec]` attribute with the `OpenApiSpecResolver` trait in any PHPUnit test:
 
 ```php
-use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
+use Studio\Gesso\Attribute\OpenApiSpec;
+use Studio\Gesso\Spec\OpenApiSpecResolver;
+use Studio\Gesso\OpenApiResponseValidator;
 
 #[OpenApiSpec('front')]
 class GetPetsTest extends TestCase
@@ -289,8 +289,8 @@ class GetPetsTest extends TestCase
 Or without the attribute, pass the spec name directly:
 
 ```php
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\OpenApiResponseValidator;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 // Configure once (e.g., in bootstrap)
 OpenApiSpecLoader::configure(__DIR__ . '/openapi/bundled', ['/api']);
@@ -373,7 +373,7 @@ return [
 ```
 
 ```php
-use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
+use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
 
 class GetPetsTest extends TestCase
 {
@@ -401,7 +401,7 @@ Notes:
 Some tests intentionally return responses that violate the spec (error-injection tests, experimental endpoints with a not-yet-finalized contract, etc.). For these, use the `#[SkipOpenApi]` attribute to opt out of auto-assert without turning the feature off globally:
 
 ```php
-use Studio\OpenApiContractTesting\Attribute\SkipOpenApi;
+use Studio\Gesso\Attribute\SkipOpenApi;
 
 class ExperimentalApiTest extends TestCase
 {
@@ -579,7 +579,7 @@ composer require --dev guzzlehttp/guzzle
 ```php
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\HttpFactory;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 OpenApiSpecLoader::configure(
     basePath: 'openapi/',

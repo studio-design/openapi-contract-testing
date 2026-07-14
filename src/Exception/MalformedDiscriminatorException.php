@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Exception;
+namespace Studio\Gesso\Exception;
 
 use RuntimeException;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
-use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
+use Studio\Gesso\Spec\OpenApiSchemaConverter;
+use Studio\Gesso\Validation\Support\MalformedSpecNode;
 use Throwable;
 
 /**

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Spec;
+namespace Studio\Gesso\Spec;
 
-use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
+use Studio\Gesso\Validation\Support\MalformedSpecNode;
 
 use function array_key_exists;
 use function in_array;

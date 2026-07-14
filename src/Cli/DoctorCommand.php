@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Cli;
+namespace Studio\Gesso\Cli;
 
 use const E_USER_WARNING;
 use const ENT_QUOTES;
@@ -20,16 +20,16 @@ use GuzzleHttp\Psr7\HttpFactory;
 use InvalidArgumentException;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Exception\MalformedDiscriminatorException;
-use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
-use Studio\OpenApiContractTesting\OpenApiVersion;
-use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaDialect;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
-use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Exception\MalformedDiscriminatorException;
+use Studio\Gesso\Exception\SpecFileNotFoundException;
+use Studio\Gesso\OpenApiVersion;
+use Studio\Gesso\Spec\OpenApiOperationResolver;
+use Studio\Gesso\Spec\OpenApiSchemaConverter;
+use Studio\Gesso\Spec\OpenApiSchemaDialect;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Support\DiscriminatorContext;
+use Studio\Gesso\Validation\Support\MalformedSpecNode;
 use Symfony\Component\HttpClient\Psr18Client;
 use Throwable;
 
@@ -662,7 +662,7 @@ final class DoctorCommand
 
         return <<<XML
             <extensions>
-                <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+                <bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
                     <parameter name="spec_base_path" value="{$basePath}"/>
                     <parameter name="specs" value="{$names}"/>{$prefixLine}
                 </bootstrap>

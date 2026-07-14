@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Support;
+namespace Studio\Gesso\Tests\Unit\Validation\Support;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
+use Studio\Gesso\Validation\Support\MalformedSpecNode;
 
 class MalformedSpecNodeTest extends TestCase
 {

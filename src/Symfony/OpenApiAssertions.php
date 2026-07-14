@@ -2,22 +2,22 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Symfony;
+namespace Studio\Gesso\Symfony;
 
 use const JSON_THROW_ON_ERROR;
 
 use JsonException;
 use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\AssertionFailedError;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\DecodedBody;
-use Studio\OpenApiContractTesting\HttpMethod;
-use Studio\OpenApiContractTesting\Internal\StackTraceFilter;
-use Studio\OpenApiContractTesting\OpenApiRequestValidator;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver;
-use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\DecodedBody;
+use Studio\Gesso\HttpMethod;
+use Studio\Gesso\Internal\StackTraceFilter;
+use Studio\Gesso\OpenApiRequestValidator;
+use Studio\Gesso\OpenApiResponseValidator;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Spec\OpenApiSpecResolver;
+use Studio\Gesso\Validation\Support\ContentTypeMatcher;
 use Symfony\Component\BrowserKit\Exception\BadMethodCallException;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -54,8 +54,8 @@ use function var_export;
  *
  * ```php
  * use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
- * use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
- * use Studio\OpenApiContractTesting\Symfony\OpenApiAssertions;
+ * use Studio\Gesso\Attribute\OpenApiSpec;
+ * use Studio\Gesso\Symfony\OpenApiAssertions;
  *
  * #[OpenApiSpec('front')]
  * final class PetsTest extends WebTestCase

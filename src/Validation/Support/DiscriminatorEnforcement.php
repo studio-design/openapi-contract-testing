@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Support;
+namespace Studio\Gesso\Validation\Support;
 
-use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
+use Studio\Gesso\PHPUnit\OpenApiCoverageExtension;
+use Studio\Gesso\Spec\OpenApiSchemaConverter;
 
 /**
  * Process-global gate for `discriminator.mapping` enforcement (Issue #262).

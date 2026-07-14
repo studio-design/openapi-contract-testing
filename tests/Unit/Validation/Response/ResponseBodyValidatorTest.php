@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Response;
+namespace Studio\Gesso\Tests\Unit\Validation\Response;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\DecodedBody;
-use Studio\OpenApiContractTesting\OpenApiVersion;
-use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidationResult;
-use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
-use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
+use Studio\Gesso\DecodedBody;
+use Studio\Gesso\OpenApiVersion;
+use Studio\Gesso\Validation\Response\ResponseBodyValidationResult;
+use Studio\Gesso\Validation\Response\ResponseBodyValidator;
+use Studio\Gesso\Validation\Support\SchemaValidatorRunner;
 
 class ResponseBodyValidatorTest extends TestCase
 {

@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Laravel;
+namespace Studio\Gesso\Tests\Unit\Laravel;
 
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
-use Studio\OpenApiContractTesting\Fuzz\ExplorationCaseKind;
-use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
-use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
-use Studio\OpenApiContractTesting\Fuzz\OpenApiSpecExploration;
-use Studio\OpenApiContractTesting\HttpMethod;
-use Studio\OpenApiContractTesting\Laravel\ExploresOpenApiEndpoint;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Attribute\OpenApiSpec;
+use Studio\Gesso\Fuzz\ExplorationCaseKind;
+use Studio\Gesso\Fuzz\ExplorationCases;
+use Studio\Gesso\Fuzz\ExploredCase;
+use Studio\Gesso\Fuzz\OpenApiSpecExploration;
+use Studio\Gesso\HttpMethod;
+use Studio\Gesso\Laravel\ExploresOpenApiEndpoint;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 // Re-use the namespace-level config() mock so config()-based fallback works.
 require_once __DIR__ . '/../../Helpers/LaravelConfigMock.php';

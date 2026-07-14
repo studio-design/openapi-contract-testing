@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Support;
+namespace Studio\Gesso\Tests\Unit\Validation\Support;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -10,7 +10,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
-use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
+use Studio\Gesso\Validation\Support\ObjectConverter;
 
 use function json_encode;
 

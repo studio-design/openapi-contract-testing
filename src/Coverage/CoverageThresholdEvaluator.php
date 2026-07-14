@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Coverage;
+namespace Studio\Gesso\Coverage;
 
-use Studio\OpenApiContractTesting\PHPUnit\CoverageReportSubscriber;
+use Studio\Gesso\PHPUnit\CoverageReportSubscriber;
 
 use function implode;
 use function round;

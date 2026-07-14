@@ -7,9 +7,9 @@ contract; this package does not claim feature parity.
 
 ```php
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Laravel\ExploresOpenApiEndpoint;
-use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
-use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
+use Studio\Gesso\Laravel\ExploresOpenApiEndpoint;
+use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
+use Studio\Gesso\Attribute\OpenApiSpec;
 
 #[OpenApiSpec('front')]
 class CreatePetTest extends TestCase
@@ -26,7 +26,7 @@ class CreatePetTest extends TestCase
 }
 ```
 
-What you get per case (`Studio\OpenApiContractTesting\Fuzz\ExploredCase`):
+What you get per case (`Studio\Gesso\Fuzz\ExploredCase`):
 
 | Property | Description |
 |--------|-------------|
@@ -50,11 +50,11 @@ resolution as response validation (`#[OpenApiSpec]`, `openApiSpec()`, then
 `default_spec`). The two traits are designed to be composed:
 
 ```php
-use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
-use Studio\OpenApiContractTesting\Fuzz\ExploredOperation;
-use Studio\OpenApiContractTesting\HttpMethod;
-use Studio\OpenApiContractTesting\Laravel\ExploresOpenApiEndpoint;
-use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
+use Studio\Gesso\Fuzz\ExploredCase;
+use Studio\Gesso\Fuzz\ExploredOperation;
+use Studio\Gesso\HttpMethod;
+use Studio\Gesso\Laravel\ExploresOpenApiEndpoint;
+use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
 
 class ApiContractTest extends TestCase
 {

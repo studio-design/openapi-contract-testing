@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
+namespace Studio\Gesso\Tests\Unit\Coverage;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Coverage\CoverageSidecarEnvelope;
+use Studio\Gesso\Coverage\CoverageSidecarEnvelope;
 
 /**
  * Pins the v2 sidecar envelope wire format and the v1 ↔ v2 compatibility

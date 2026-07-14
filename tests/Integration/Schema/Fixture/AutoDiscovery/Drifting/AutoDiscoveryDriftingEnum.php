@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Integration\Schema\Fixture\AutoDiscovery\Drifting;
+namespace Studio\Gesso\Tests\Integration\Schema\Fixture\AutoDiscovery\Drifting;
 
-use Studio\OpenApiContractTesting\Attribute\BoundToOpenApiEnum;
+use Studio\Gesso\Attribute\BoundToOpenApiEnum;
 
 #[BoundToOpenApiEnum('enum-drift/_shared/components/schemas/enums/NotificationCodeEnum.json')]
 enum AutoDiscoveryDriftingEnum: string

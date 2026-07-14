@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Support;
+namespace Studio\Gesso\Tests\Unit\Validation\Support;
 
 use AssertionError;
 use InvalidArgumentException;
@@ -11,7 +11,7 @@ use Opis\JsonSchema\Exceptions\ParseException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
-use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
+use Studio\Gesso\Validation\Support\ValidatorErrorBoundary;
 use TypeError;
 
 class ValidatorErrorBoundaryTest extends TestCase

@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Internal;
+namespace Studio\Gesso\Internal;
 
 use const JSON_ERROR_DEPTH;
 use const JSON_THROW_ON_ERROR;
 
 use JsonException;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 use Throwable;

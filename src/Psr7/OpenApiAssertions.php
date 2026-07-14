@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Psr7;
+namespace Studio\Gesso\Psr7;
 
 use PHPUnit\Framework\Assert;
 use PHPUnit\Framework\AssertionFailedError;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
-use Studio\OpenApiContractTesting\Internal\StackTraceFilter;
-use Studio\OpenApiContractTesting\OpenApiRequestValidator;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Studio\OpenApiContractTesting\OpenApiValidationResult;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver;
+use Studio\Gesso\Internal\StackTraceFilter;
+use Studio\Gesso\OpenApiRequestValidator;
+use Studio\Gesso\OpenApiResponseValidator;
+use Studio\Gesso\OpenApiValidationResult;
+use Studio\Gesso\Spec\OpenApiSpecResolver;
 
 use function sprintf;
 

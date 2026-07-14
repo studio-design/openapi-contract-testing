@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Fuzz;
+namespace Studio\Gesso\Tests\Unit\Fuzz;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
-use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
-use Studio\OpenApiContractTesting\HttpMethod;
+use Studio\Gesso\Fuzz\ExplorationCases;
+use Studio\Gesso\Fuzz\ExploredCase;
+use Studio\Gesso\HttpMethod;
 
 use function iterator_to_array;
 

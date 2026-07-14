@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Internal;
+namespace Studio\Gesso\Tests\Unit\Internal;
 
 use GuzzleHttp\Psr7\HttpFactory;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
-use Studio\OpenApiContractTesting\Internal\HttpRefLoader;
-use Studio\OpenApiContractTesting\Tests\Helpers\FakeHttpClient;
-use Studio\OpenApiContractTesting\Tests\Helpers\FakeHttpClientUnexpectedRequest;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
+use Studio\Gesso\Internal\HttpRefLoader;
+use Studio\Gesso\Tests\Helpers\FakeHttpClient;
+use Studio\Gesso\Tests\Helpers\FakeHttpClientUnexpectedRequest;
 
 class HttpRefLoaderTest extends TestCase
 {

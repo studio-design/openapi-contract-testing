@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Laravel;
+namespace Studio\Gesso\Laravel;
 
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver;
+use Studio\Gesso\Spec\OpenApiSpecResolver;
 
 use function is_string;
 

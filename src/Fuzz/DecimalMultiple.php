@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Fuzz;
+namespace Studio\Gesso\Fuzz;
 
 use const JSON_PRESERVE_ZERO_FRACTION;
 use const PHP_INT_MAX;

@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
+namespace Studio\Gesso\Tests\Unit\Coverage;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Coverage\ConsoleCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
-use Studio\OpenApiContractTesting\Coverage\HtmlCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\JsonCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\JUnitCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\MarkdownCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Coverage\ConsoleCoverageRenderer;
+use Studio\Gesso\Coverage\EndpointCoverageState;
+use Studio\Gesso\Coverage\HtmlCoverageRenderer;
+use Studio\Gesso\Coverage\JsonCoverageRenderer;
+use Studio\Gesso\Coverage\JUnitCoverageRenderer;
+use Studio\Gesso\Coverage\MarkdownCoverageRenderer;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Coverage\ResponseCoverageState;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 use function array_column;
 use function implode;

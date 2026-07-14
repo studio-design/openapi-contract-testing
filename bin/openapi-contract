@@ -3,7 +3,7 @@
 
 declare(strict_types=1);
 
-use Studio\OpenApiContractTesting\Cli\DoctorCommand;
+use Studio\Gesso\Cli\DoctorCommand;
 
 $autoloadCandidates = [
     __DIR__ . '/../vendor/autoload.php',

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Coverage;
+namespace Studio\Gesso\Coverage;
 
 use RuntimeException;
-use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
+use Studio\Gesso\PHPUnit\OpenApiCoverageExtension;
 use Throwable;
 
 /**

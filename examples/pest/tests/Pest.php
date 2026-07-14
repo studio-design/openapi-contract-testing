@@ -16,7 +16,7 @@ use Examples\Pest\Tests\TestCase;
 | In a real Laravel project this typically looks like:
 |
 |     use Tests\TestCase;
-|     use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
+|     use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
 |
 |     uses(TestCase::class, ValidatesOpenApiSchema::class)->in('Feature');
 |

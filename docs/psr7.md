@@ -14,8 +14,8 @@ implementations of `psr/http-message` use the same API.
 Configure the spec loader once, then construct an adapter for a spec:
 
 ```php
-use Studio\OpenApiContractTesting\Psr7\OpenApiPsr7Validator;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Psr7\OpenApiPsr7Validator;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 OpenApiSpecLoader::configure(__DIR__ . '/openapi', ['/api']);
 
@@ -61,8 +61,8 @@ attribute or the `openApiSpec()` hook:
 
 ```php
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
-use Studio\OpenApiContractTesting\Psr7\OpenApiAssertions;
+use Studio\Gesso\Attribute\OpenApiSpec;
+use Studio\Gesso\Psr7\OpenApiAssertions;
 
 #[OpenApiSpec('front')]
 final class CreatePetTest extends TestCase

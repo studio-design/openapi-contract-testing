@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting;
+namespace Studio\Gesso;
 
 /**
  * Envelope for a request / response body after JSON decoding, carrying the

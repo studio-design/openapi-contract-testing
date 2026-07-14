@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Symfony;
+namespace Studio\Gesso\Tests\Unit\Symfony;
 
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Symfony\OpenApiAssertions;
+use Studio\Gesso\Attribute\OpenApiSpec;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Symfony\OpenApiAssertions;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;

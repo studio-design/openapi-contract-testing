@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Laravel\Commands;
+namespace Studio\Gesso\Laravel\Commands;
 
 use const JSON_PRETTY_PRINT;
 use const JSON_THROW_ON_ERROR;
@@ -13,9 +13,9 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Routing\Router;
 use InvalidArgumentException;
 use JsonException;
-use Studio\OpenApiContractTesting\Laravel\RouteParity\LaravelRouteParityAnalyzer;
-use Studio\OpenApiContractTesting\Laravel\RouteParity\RouteParityResult;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Laravel\RouteParity\LaravelRouteParityAnalyzer;
+use Studio\Gesso\Laravel\RouteParity\RouteParityResult;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 use Throwable;
 
 use function array_filter;

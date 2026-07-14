@@ -11,7 +11,7 @@
     </testsuites>
 
     <extensions>
-        <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+        <bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
             <parameter name="spec_base_path" value="openapi"/>
             <parameter name="specs" value="petstore"/>
         </bootstrap>

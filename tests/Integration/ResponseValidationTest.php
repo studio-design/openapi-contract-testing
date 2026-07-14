@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Integration;
+namespace Studio\Gesso\Tests\Integration;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
-use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Studio\OpenApiContractTesting\OpenApiValidationResult;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Coverage\EndpointCoverageState;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Coverage\ResponseCoverageState;
+use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
+use Studio\Gesso\OpenApiResponseValidator;
+use Studio\Gesso\OpenApiValidationResult;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 class ResponseValidationTest extends TestCase
 {

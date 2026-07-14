@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Exception;
+namespace Studio\Gesso\Exception;
 
 use InvalidArgumentException;
 use RuntimeException;
-use Studio\OpenApiContractTesting\Schema\EnumDriftReport;
+use Studio\Gesso\Schema\EnumDriftReport;
 
 /**
  * Thrown when one or more `(PHP enum, OpenAPI enum file)` pairs disagree on

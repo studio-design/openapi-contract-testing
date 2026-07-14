@@ -6,8 +6,8 @@ namespace Examples\Symfony\Tests;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
-use Studio\OpenApiContractTesting\Symfony\OpenApiAssertions;
+use Studio\Gesso\Attribute\OpenApiSpec;
+use Studio\Gesso\Symfony\OpenApiAssertions;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 

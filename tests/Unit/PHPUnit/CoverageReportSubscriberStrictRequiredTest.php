@@ -2,21 +2,21 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\PHPUnit;
+namespace Studio\Gesso\Tests\Unit\PHPUnit;
 
 use PHPUnit\Event\TestRunner\ExecutionFinished;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
-use Studio\OpenApiContractTesting\Coverage\CoverageSidecarEnvelope;
-use Studio\OpenApiContractTesting\Coverage\CoverageSidecarReader;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\Internal\PartialRunDecision;
-use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
-use Studio\OpenApiContractTesting\PHPUnit\CoverageReportSubscriber;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredMode;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
+use Studio\Gesso\Coverage\CoverageSidecarEnvelope;
+use Studio\Gesso\Coverage\CoverageSidecarReader;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Internal\PartialRunDecision;
+use Studio\Gesso\PHPUnit\ConsoleOutput;
+use Studio\Gesso\PHPUnit\CoverageReportSubscriber;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Strict\StrictRequiredMode;
+use Studio\Gesso\Validation\Strict\StrictRequiredTracker;
 
 use function getenv;
 use function glob;

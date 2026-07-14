@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\PHPUnit;
+namespace Studio\Gesso\Tests\Unit\PHPUnit;
 
 use PHPUnit\Event\TestRunner\ExecutionFinished;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
-use Studio\OpenApiContractTesting\PHPUnit\CoverageReportSubscriber;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\PHPUnit\ConsoleOutput;
+use Studio\Gesso\PHPUnit\CoverageReportSubscriber;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 use function getenv;
 use function glob;

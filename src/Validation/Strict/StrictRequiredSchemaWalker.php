@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Strict;
+namespace Studio\Gesso\Validation\Strict;
 
 use function array_unique;
 use function array_values;

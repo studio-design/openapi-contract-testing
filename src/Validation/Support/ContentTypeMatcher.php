@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Support;
+namespace Studio\Gesso\Validation\Support;
 
 use function count;
 use function explode;

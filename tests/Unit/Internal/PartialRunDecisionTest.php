@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Internal;
+namespace Studio\Gesso\Tests\Unit\Internal;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Internal\PartialRunDecision;
+use Studio\Gesso\Internal\PartialRunDecision;
 
 final class PartialRunDecisionTest extends TestCase
 {

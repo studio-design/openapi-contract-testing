@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Schema\Fixture;
+namespace Studio\Gesso\Tests\Unit\Schema\Fixture;
 
-use Studio\OpenApiContractTesting\Attribute\BoundToOpenApiEnum;
+use Studio\Gesso\Attribute\BoundToOpenApiEnum;
 
 #[BoundToOpenApiEnum('enum-drift/matching.json')]
 enum MatchingEnum: string

@@ -1,7 +1,7 @@
 # Core / PHPUnit quickstart
 
 ```bash
-composer require --dev studio-design/openapi-contract-testing
+composer require --dev studio-design/gesso
 ```
 
 Copy the minimal [`examples/core`](https://github.com/studio-design/gesso/tree/main/examples/core) project. Its test validates a JSON response without a framework adapter:

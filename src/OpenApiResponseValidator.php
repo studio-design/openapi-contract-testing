@@ -2,29 +2,29 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting;
+namespace Studio\Gesso;
 
 use InvalidArgumentException;
 use RuntimeException;
-use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
-use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
-use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaDialect;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidationResult;
-use Studio\OpenApiContractTesting\Validation\Response\ResponseBodyValidator;
-use Studio\OpenApiContractTesting\Validation\Response\ResponseHeaderValidator;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredBodyWalker;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallChecker;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorEnforcement;
-use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
-use Studio\OpenApiContractTesting\Validation\Support\PathDiagnosticsFormatter;
-use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
-use Studio\OpenApiContractTesting\Validation\Support\SpecResponseKeyResolver;
-use Studio\OpenApiContractTesting\Validation\Support\StatusCodePatternSet;
-use Studio\OpenApiContractTesting\Validation\Support\ValidatorErrorBoundary;
+use Studio\Gesso\PHPUnit\OpenApiCoverageExtension;
+use Studio\Gesso\Spec\OpenApiOperationResolver;
+use Studio\Gesso\Spec\OpenApiPathMatcher;
+use Studio\Gesso\Spec\OpenApiSchemaDialect;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Response\ResponseBodyValidationResult;
+use Studio\Gesso\Validation\Response\ResponseBodyValidator;
+use Studio\Gesso\Validation\Response\ResponseHeaderValidator;
+use Studio\Gesso\Validation\Strict\StrictRequiredBodyWalker;
+use Studio\Gesso\Validation\Strict\StrictRequiredPerCallChecker;
+use Studio\Gesso\Validation\Strict\StrictRequiredTracker;
+use Studio\Gesso\Validation\Support\DiscriminatorContext;
+use Studio\Gesso\Validation\Support\DiscriminatorEnforcement;
+use Studio\Gesso\Validation\Support\MalformedSpecNode;
+use Studio\Gesso\Validation\Support\PathDiagnosticsFormatter;
+use Studio\Gesso\Validation\Support\SchemaValidatorRunner;
+use Studio\Gesso\Validation\Support\SpecResponseKeyResolver;
+use Studio\Gesso\Validation\Support\StatusCodePatternSet;
+use Studio\Gesso\Validation\Support\ValidatorErrorBoundary;
 
 use function array_key_exists;
 use function array_keys;

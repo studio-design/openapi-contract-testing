@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Strict;
+namespace Studio\Gesso\Tests\Unit\Validation\Strict;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use stdClass;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredBodyWalker;
+use Studio\Gesso\Validation\Strict\StrictRequiredBodyWalker;
 
 final class StrictRequiredBodyWalkerTest extends TestCase
 {

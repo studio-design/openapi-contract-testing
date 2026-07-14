@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Fuzz;
+namespace Studio\Gesso\Tests\Unit\Fuzz;
 
 use InvalidArgumentException;
 use Opis\JsonSchema\Validator;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Fuzz\ExplorationCaseKind;
-use Studio\OpenApiContractTesting\Fuzz\ExplorationCases;
-use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
-use Studio\OpenApiContractTesting\Fuzz\OpenApiEndpointExplorer;
-use Studio\OpenApiContractTesting\HttpMethod;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Fuzz\ExplorationCaseKind;
+use Studio\Gesso\Fuzz\ExplorationCases;
+use Studio\Gesso\Fuzz\ExploredCase;
+use Studio\Gesso\Fuzz\OpenApiEndpointExplorer;
+use Studio\Gesso\HttpMethod;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 use function json_decode;
 use function json_encode;

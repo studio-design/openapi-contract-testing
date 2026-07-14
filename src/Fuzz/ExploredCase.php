@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Fuzz;
+namespace Studio\Gesso\Fuzz;
 
 use InvalidArgumentException;
-use Studio\OpenApiContractTesting\HttpMethod;
+use Studio\Gesso\HttpMethod;
 
 use function base64_encode;
 use function escapeshellarg;

@@ -8,10 +8,10 @@ use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
-use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
-use Studio\OpenApiContractTesting\Fuzz\OpenApiSpecExplorer;
-use Studio\OpenApiContractTesting\Psr7\OpenApiAssertions;
+use Studio\Gesso\Attribute\OpenApiSpec;
+use Studio\Gesso\Fuzz\ExploredCase;
+use Studio\Gesso\Fuzz\OpenApiSpecExplorer;
+use Studio\Gesso\Psr7\OpenApiAssertions;
 
 use function json_encode;
 

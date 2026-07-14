@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Pest;
+namespace Studio\Gesso\Pest;
 
 use Illuminate\Testing\TestResponse;
 use Pest\PendingCalls\TestCall;
 use Pest\Support\HigherOrderTapProxy;
 use RuntimeException;
-use Studio\OpenApiContractTesting\HttpMethod;
+use Studio\Gesso\HttpMethod;
 use Symfony\Component\HttpFoundation\Request;
 
 use function function_exists;
@@ -25,7 +25,7 @@ use function strtoupper;
  * the validator orchestration.
  *
  * The dispatch contract: the running Pest test class must use the
- * `Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema` trait
+ * `Studio\Gesso\Laravel\ValidatesOpenApiSchema` trait
  * (typically by extending a base `TestCase` that already does, then
  * registering it via `uses(...)->in(...)` in `tests/Pest.php`). Without
  * the trait the bridge methods don't exist and these helpers raise a
@@ -147,11 +147,11 @@ final class Expectations
         if (!method_exists($testCase, $bridge)) {
             throw new RuntimeException(sprintf(
                 '%s() requires the test class (%s) to use the %s trait. '
-                . 'Add `uses(\Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema::class)->in(...)` '
+                . 'Add `uses(\Studio\Gesso\Laravel\ValidatesOpenApiSchema::class)->in(...)` '
                 . 'to tests/Pest.php, or extend a base TestCase that already uses the trait.',
                 $expectationName,
                 $testCase::class,
-                'Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema',
+                'Studio\Gesso\Laravel\ValidatesOpenApiSchema',
             ));
         }
 

@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Spec;
+namespace Studio\Gesso\Spec;
 
 use const E_USER_WARNING;
 
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
-use Studio\OpenApiContractTesting\Exception\MalformedDiscriminatorException;
-use Studio\OpenApiContractTesting\OpenApiVersion;
-use Studio\OpenApiContractTesting\SchemaContext;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
-use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
+use Studio\Gesso\Exception\MalformedDiscriminatorException;
+use Studio\Gesso\OpenApiVersion;
+use Studio\Gesso\SchemaContext;
+use Studio\Gesso\Validation\Support\DiscriminatorContext;
+use Studio\Gesso\Validation\Support\MalformedSpecNode;
 
 use function array_is_list;
 use function array_key_exists;

@@ -119,7 +119,7 @@ Default is **warn-only**: a miss prints `[OpenAPI Coverage] WARN: …` to stderr
 
 ```xml
 <extensions>
-    <bootstrap class="Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension">
+    <bootstrap class="Studio\Gesso\PHPUnit\OpenApiCoverageExtension">
         <parameter name="spec_base_path" value="openapi/bundled"/>
         <parameter name="specs" value="front,admin"/>
         <parameter name="min_endpoint_coverage" value="80"/>   <!-- percent, optional -->

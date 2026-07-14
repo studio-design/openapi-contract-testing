@@ -2,18 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Integration;
+namespace Studio\Gesso\Tests\Integration;
 
 use const E_USER_WARNING;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\OpenApiRequestValidator;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorEnforcement;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\OpenApiRequestValidator;
+use Studio\Gesso\OpenApiResponseValidator;
+use Studio\Gesso\Spec\OpenApiSchemaConverter;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Support\DiscriminatorEnforcement;
 
 use function implode;
 use function restore_error_handler;

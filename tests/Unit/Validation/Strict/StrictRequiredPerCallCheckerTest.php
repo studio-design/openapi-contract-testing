@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Strict;
+namespace Studio\Gesso\Tests\Unit\Validation\Strict;
 
 use const E_USER_WARNING;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallChecker;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallMode;
+use Studio\Gesso\PHPUnit\OpenApiCoverageExtension;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Strict\StrictRequiredPerCallChecker;
+use Studio\Gesso\Validation\Strict\StrictRequiredPerCallMode;
 
 use function fopen;
 use function restore_error_handler;

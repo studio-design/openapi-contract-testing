@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Support;
+namespace Studio\Gesso\Tests\Unit\Validation\Support;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Validation\Support\StatusCodePatternSet;
+use Studio\Gesso\Validation\Support\StatusCodePatternSet;
 
 class StatusCodePatternSetTest extends TestCase
 {

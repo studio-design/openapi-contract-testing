@@ -42,7 +42,7 @@ body:
     id: version
     attributes:
       label: Library version
-      description: Output of `composer show studio-design/openapi-contract-testing | grep versions`
+      description: Output of `composer show studio-design/gesso | grep versions`
       placeholder: e.g. v1.0.0
     validations:
       required: true

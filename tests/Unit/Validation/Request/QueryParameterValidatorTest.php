@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Validation\Request;
+namespace Studio\Gesso\Tests\Unit\Validation\Request;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\OpenApiVersion;
-use Studio\OpenApiContractTesting\Validation\Request\QueryParameterValidator;
-use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
+use Studio\Gesso\OpenApiVersion;
+use Studio\Gesso\Validation\Request\QueryParameterValidator;
+use Studio\Gesso\Validation\Support\SchemaValidatorRunner;
 
 use function restore_error_handler;
 use function set_error_handler;

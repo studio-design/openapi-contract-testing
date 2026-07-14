@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Compatibility\Fixture;
+namespace Studio\Gesso\Tests\Unit\Compatibility\Fixture;
 
-use Studio\OpenApiContractTesting\Tests\Unit\Compatibility\Fixture\PublicApiReturnTypeFixture as ExplicitReturnType;
+use Studio\Gesso\Tests\Unit\Compatibility\Fixture\PublicApiReturnTypeFixture as ExplicitReturnType;
 
 final class PublicApiReturnTypeFixture
 {

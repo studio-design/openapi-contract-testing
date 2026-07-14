@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Internal;
+namespace Studio\Gesso\Tests\Unit\Internal;
 
 use Exception;
 use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
-use Studio\OpenApiContractTesting\Internal\StackTraceFilter;
+use Studio\Gesso\Internal\StackTraceFilter;
 
 use function array_column;
 use function array_keys;
@@ -34,7 +34,7 @@ class StackTraceFilterTest extends TestCase
     public function drops_frames_inside_studio_design_library_path(): void
     {
         $trace = [
-            ['file' => '/app/vendor/studio-design/openapi-contract-testing/src/Laravel/ValidatesOpenApiSchema.php', 'line' => 500, 'function' => 'assertResponseMatchesOpenApiSchema'],
+            ['file' => '/app/vendor/studio-design/gesso/src/Laravel/ValidatesOpenApiSchema.php', 'line' => 500, 'function' => 'assertResponseMatchesOpenApiSchema'],
             ['file' => '/app/tests/Feature/PetTest.php', 'line' => 47, 'function' => 'test_index'],
         ];
 
@@ -48,9 +48,9 @@ class StackTraceFilterTest extends TestCase
     public function drops_frames_inside_local_path_repo_install(): void
     {
         $trace = [
-            ['file' => '/repos/openapi-contract-testing/src/Laravel/ValidatesOpenApiSchema.php', 'line' => 500],
-            ['file' => '/repos/openapi-contract-testing/src/Internal/SpecDocumentDecoder.php', 'line' => 12],
-            ['file' => '/repos/openapi-contract-testing/src/PHPUnit/Subscriber.php', 'line' => 33],
+            ['file' => '/repos/gesso/src/Laravel/ValidatesOpenApiSchema.php', 'line' => 500],
+            ['file' => '/repos/gesso/src/Internal/SpecDocumentDecoder.php', 'line' => 12],
+            ['file' => '/repos/gesso/src/PHPUnit/Subscriber.php', 'line' => 33],
             ['file' => '/repos/myapp/tests/Feature/PetTest.php', 'line' => 47],
         ];
 
@@ -106,7 +106,7 @@ class StackTraceFilterTest extends TestCase
     public function preserves_order_of_remaining_frames(): void
     {
         $trace = [
-            ['file' => '/app/vendor/studio-design/openapi-contract-testing/src/Laravel/ValidatesOpenApiSchema.php', 'line' => 500],
+            ['file' => '/app/vendor/studio-design/gesso/src/Laravel/ValidatesOpenApiSchema.php', 'line' => 500],
             ['file' => '/app/tests/Feature/A.php', 'line' => 1],
             ['file' => '/app/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php', 'line' => 617],
             ['file' => '/app/tests/Feature/B.php', 'line' => 2],
@@ -137,7 +137,7 @@ class StackTraceFilterTest extends TestCase
     {
         $trace = [
             ['function' => '{closure}'],
-            ['file' => '/app/vendor/studio-design/openapi-contract-testing/src/Laravel/ValidatesOpenApiSchema.php', 'line' => 500],
+            ['file' => '/app/vendor/studio-design/gesso/src/Laravel/ValidatesOpenApiSchema.php', 'line' => 500],
             ['file' => '/app/tests/Feature/PetTest.php', 'line' => 47],
         ];
 
@@ -152,7 +152,7 @@ class StackTraceFilterTest extends TestCase
     public function normalizes_windows_style_backslash_paths(): void
     {
         $trace = [
-            ['file' => 'C:\\app\\vendor\\studio-design\\openapi-contract-testing\\src\\Laravel\\ValidatesOpenApiSchema.php', 'line' => 500],
+            ['file' => 'C:\\app\\vendor\\studio-design\\gesso\\src\\Laravel\\ValidatesOpenApiSchema.php', 'line' => 500],
             ['file' => 'C:\\app\\tests\\Feature\\PetTest.php', 'line' => 47],
         ];
 
@@ -169,7 +169,7 @@ class StackTraceFilterTest extends TestCase
 
         $traceProp = new ReflectionProperty(Exception::class, 'trace');
         $traceProp->setValue($exception, [
-            ['file' => '/app/vendor/studio-design/openapi-contract-testing/src/Laravel/ValidatesOpenApiSchema.php', 'line' => 500],
+            ['file' => '/app/vendor/studio-design/gesso/src/Laravel/ValidatesOpenApiSchema.php', 'line' => 500],
             ['file' => '/app/tests/Feature/PetTest.php', 'line' => 47],
         ]);
 
@@ -189,7 +189,7 @@ class StackTraceFilterTest extends TestCase
         $exception = new AssertionFailedError('boom');
 
         $originalTrace = [
-            ['file' => '/app/vendor/studio-design/openapi-contract-testing/src/Laravel/ValidatesOpenApiSchema.php', 'line' => 500],
+            ['file' => '/app/vendor/studio-design/gesso/src/Laravel/ValidatesOpenApiSchema.php', 'line' => 500],
             ['file' => '/app/vendor/laravel/framework/src/Illuminate/Foundation/Testing/Concerns/MakesHttpRequests.php', 'line' => 617],
         ];
 

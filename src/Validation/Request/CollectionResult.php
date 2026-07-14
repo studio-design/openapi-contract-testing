@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Request;
+namespace Studio\Gesso\Validation\Request;
 
 /**
  * Outcome of merging path-level and operation-level `parameters` entries.

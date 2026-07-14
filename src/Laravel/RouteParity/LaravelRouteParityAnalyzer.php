@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Laravel\RouteParity;
+namespace Studio\Gesso\Laravel\RouteParity;
 
 use Illuminate\Routing\Route;
 use Illuminate\Support\Str;
-use Studio\OpenApiContractTesting\Spec\OpenApiOperationResolver;
-use Studio\OpenApiContractTesting\Spec\OpenApiPathMatcher;
-use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
+use Studio\Gesso\Spec\OpenApiOperationResolver;
+use Studio\Gesso\Spec\OpenApiPathMatcher;
+use Studio\Gesso\Validation\Support\MalformedSpecNode;
 
 use function array_keys;
 use function array_map;

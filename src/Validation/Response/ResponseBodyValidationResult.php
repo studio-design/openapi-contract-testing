@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Response;
+namespace Studio\Gesso\Validation\Response;
 
 use InvalidArgumentException;
-use Studio\OpenApiContractTesting\OpenApiValidationResult;
+use Studio\Gesso\OpenApiValidationResult;
 
 /**
  * Outcome of {@see ResponseBodyValidator::validate()}.

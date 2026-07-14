@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit;
+namespace Studio\Gesso\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\DecodedBody;
+use Studio\Gesso\DecodedBody;
 
 class DecodedBodyTest extends TestCase
 {

@@ -19,7 +19,7 @@ declare(strict_types=1);
  */
 
 use Pest\Expectation;
-use Studio\OpenApiContractTesting\Pest\Expectations as PestExpectations;
+use Studio\Gesso\Pest\Expectations as PestExpectations;
 
 // Two-symbol guard. We need both the class (used in the closure return
 // type) and the global function (called on the next line). Checking only

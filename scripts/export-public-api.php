@@ -3,7 +3,7 @@
 
 declare(strict_types=1);
 
-use Studio\OpenApiContractTesting\Tests\Helpers\PublicApiInventory;
+use Studio\Gesso\Tests\Helpers\PublicApiInventory;
 
 $root = dirname(__DIR__);
 require $root . '/vendor/autoload.php';
@@ -18,12 +18,12 @@ if ($arguments !== [] && !in_array('--write', $arguments, true)) {
 
 $inventory = PublicApiInventory::capture(
     $root . '/src',
-    'Studio\\OpenApiContractTesting\\',
+    'Studio\\Gesso\\',
 );
 $json = json_encode($inventory, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
 
 if (in_array('--write', $arguments, true)) {
-    $path = $root . '/tests/fixtures/compatibility/v1.9-public-api.json';
+    $path = $root . '/tests/fixtures/compatibility/v2-public-api.json';
     if (file_put_contents($path, $json) === false) {
         fwrite(STDERR, "Failed to write {$path}\n");
         exit(1);

@@ -22,7 +22,7 @@ Mix `ValidatesOpenApiSchema` into the Pest test suite via `uses(...)->in(...)` i
 
 ```php
 // tests/Pest.php
-use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
+use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
 use Tests\TestCase;
 
 uses(TestCase::class, ValidatesOpenApiSchema::class)->in('Feature');

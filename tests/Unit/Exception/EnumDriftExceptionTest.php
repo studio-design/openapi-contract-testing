@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Exception;
+namespace Studio\Gesso\Tests\Unit\Exception;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Exception\EnumDriftException;
-use Studio\OpenApiContractTesting\Schema\EnumDriftReport;
+use Studio\Gesso\Exception\EnumDriftException;
+use Studio\Gesso\Schema\EnumDriftReport;
 
 class EnumDriftExceptionTest extends TestCase
 {

@@ -2,23 +2,23 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Internal;
+namespace Studio\Gesso\Tests\Unit\Internal;
 
 use Composer\Autoload\ClassLoader;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Exception\EnumBindingException;
-use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
-use Studio\OpenApiContractTesting\Internal\EnumScanner;
-use Studio\OpenApiContractTesting\Tests\Unit\Internal\Fixture\EnumScanner\AnotherBoundEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Internal\Fixture\EnumScanner\CleanBoundEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Internal\Fixture\EnumScanner\PlainClass;
-use Studio\OpenApiContractTesting\Tests\Unit\Internal\Fixture\EnumScanner\PureUnattributedEnum;
-use Studio\OpenApiContractTesting\Tests\Unit\Internal\Fixture\EnumScanner\UnattributedEnum;
+use Studio\Gesso\Exception\EnumBindingException;
+use Studio\Gesso\Exception\EnumBindingReason;
+use Studio\Gesso\Internal\EnumScanner;
+use Studio\Gesso\Tests\Unit\Internal\Fixture\EnumScanner\AnotherBoundEnum;
+use Studio\Gesso\Tests\Unit\Internal\Fixture\EnumScanner\CleanBoundEnum;
+use Studio\Gesso\Tests\Unit\Internal\Fixture\EnumScanner\PlainClass;
+use Studio\Gesso\Tests\Unit\Internal\Fixture\EnumScanner\PureUnattributedEnum;
+use Studio\Gesso\Tests\Unit\Internal\Fixture\EnumScanner\UnattributedEnum;
 
 final class EnumScannerTest extends TestCase
 {
-    private const FIXTURE_NS = 'Studio\\OpenApiContractTesting\\Tests\\Unit\\Internal\\Fixture\\EnumScanner\\';
+    private const FIXTURE_NS = 'Studio\\Gesso\\Tests\\Unit\\Internal\\Fixture\\EnumScanner\\';
     private const FIXTURE_DIR = __DIR__ . '/Fixture/EnumScanner';
 
     protected function setUp(): void
@@ -159,7 +159,7 @@ final class EnumScannerTest extends TestCase
     {
         $loader = new ClassLoader();
         $loader->setPsr4(
-            'Studio\\OpenApiContractTesting\\Tests\\Unit\\Internal\\Fixture\\',
+            'Studio\\Gesso\\Tests\\Unit\\Internal\\Fixture\\',
             [__DIR__ . '/Fixture'],
         );
         EnumScanner::overrideClassLoaderForTesting($loader);

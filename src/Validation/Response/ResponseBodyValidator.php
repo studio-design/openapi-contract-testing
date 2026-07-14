@@ -2,20 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Validation\Response;
+namespace Studio\Gesso\Validation\Response;
 
 use stdClass;
-use Studio\OpenApiContractTesting\DecodedBody;
-use Studio\OpenApiContractTesting\OpenApiResponseValidator;
-use Studio\OpenApiContractTesting\OpenApiValidationResult;
-use Studio\OpenApiContractTesting\OpenApiVersion;
-use Studio\OpenApiContractTesting\SchemaContext;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
-use Studio\OpenApiContractTesting\Validation\Support\ContentTypeMatcher;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorContext;
-use Studio\OpenApiContractTesting\Validation\Support\MalformedSpecNode;
-use Studio\OpenApiContractTesting\Validation\Support\ObjectConverter;
-use Studio\OpenApiContractTesting\Validation\Support\SchemaValidatorRunner;
+use Studio\Gesso\DecodedBody;
+use Studio\Gesso\OpenApiResponseValidator;
+use Studio\Gesso\OpenApiValidationResult;
+use Studio\Gesso\OpenApiVersion;
+use Studio\Gesso\SchemaContext;
+use Studio\Gesso\Spec\OpenApiSchemaConverter;
+use Studio\Gesso\Validation\Support\ContentTypeMatcher;
+use Studio\Gesso\Validation\Support\DiscriminatorContext;
+use Studio\Gesso\Validation\Support\MalformedSpecNode;
+use Studio\Gesso\Validation\Support\ObjectConverter;
+use Studio\Gesso\Validation\Support\SchemaValidatorRunner;
 
 use function array_key_exists;
 use function array_keys;

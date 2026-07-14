@@ -6,10 +6,10 @@ namespace Examples\Pest\Tests;
 
 use Illuminate\Support\Facades\Route;
 use Orchestra\Testbench\TestCase as TestbenchTestCase;
-use Studio\OpenApiContractTesting\Coverage\OpenApiCoverageTracker;
-use Studio\OpenApiContractTesting\Laravel\OpenApiContractTestingServiceProvider;
-use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Coverage\OpenApiCoverageTracker;
+use Studio\Gesso\Laravel\OpenApiContractTestingServiceProvider;
+use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 use function dirname;
 

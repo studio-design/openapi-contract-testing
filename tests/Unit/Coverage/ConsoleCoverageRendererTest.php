@@ -2,14 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Coverage;
+namespace Studio\Gesso\Tests\Unit\Coverage;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use Studio\OpenApiContractTesting\Coverage\ConsoleCoverageRenderer;
-use Studio\OpenApiContractTesting\Coverage\EndpointCoverageState;
-use Studio\OpenApiContractTesting\Coverage\ResponseCoverageState;
-use Studio\OpenApiContractTesting\PHPUnit\ConsoleOutput;
+use Studio\Gesso\Coverage\ConsoleCoverageRenderer;
+use Studio\Gesso\Coverage\EndpointCoverageState;
+use Studio\Gesso\Coverage\ResponseCoverageState;
+use Studio\Gesso\PHPUnit\ConsoleOutput;
 
 use function explode;
 

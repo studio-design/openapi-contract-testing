@@ -2,29 +2,29 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\PHPUnit;
+namespace Studio\Gesso\Tests\Unit\PHPUnit;
 
 use const E_USER_WARNING;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Runner\Extension\ParameterCollection;
-use Studio\OpenApiContractTesting\Coverage\InvalidCoverageOutputPathException;
-use Studio\OpenApiContractTesting\Coverage\InvalidThresholdConfigurationException;
-use Studio\OpenApiContractTesting\Exception\EnumBindingException;
-use Studio\OpenApiContractTesting\Exception\EnumBindingReason;
-use Studio\OpenApiContractTesting\Exception\EnumDriftException;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecException;
-use Studio\OpenApiContractTesting\Exception\InvalidOpenApiSpecReason;
-use Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException;
-use Studio\OpenApiContractTesting\Internal\EnumScanner;
-use Studio\OpenApiContractTesting\PHPUnit\InvalidStrictRequiredConfigurationException;
-use Studio\OpenApiContractTesting\PHPUnit\OpenApiCoverageExtension;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallChecker;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredPerCallMode;
-use Studio\OpenApiContractTesting\Validation\Strict\StrictRequiredTracker;
-use Studio\OpenApiContractTesting\Validation\Support\DiscriminatorEnforcement;
+use Studio\Gesso\Coverage\InvalidCoverageOutputPathException;
+use Studio\Gesso\Coverage\InvalidThresholdConfigurationException;
+use Studio\Gesso\Exception\EnumBindingException;
+use Studio\Gesso\Exception\EnumBindingReason;
+use Studio\Gesso\Exception\EnumDriftException;
+use Studio\Gesso\Exception\InvalidOpenApiSpecException;
+use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
+use Studio\Gesso\Exception\SpecFileNotFoundException;
+use Studio\Gesso\Internal\EnumScanner;
+use Studio\Gesso\PHPUnit\InvalidStrictRequiredConfigurationException;
+use Studio\Gesso\PHPUnit\OpenApiCoverageExtension;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Strict\StrictRequiredPerCallChecker;
+use Studio\Gesso\Validation\Strict\StrictRequiredPerCallMode;
+use Studio\Gesso\Validation\Strict\StrictRequiredTracker;
+use Studio\Gesso\Validation\Support\DiscriminatorEnforcement;
 
 use function fclose;
 use function file_get_contents;
@@ -604,7 +604,7 @@ class OpenApiCoverageExtensionTest extends TestCase
             'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'enum_drift_enabled' => 'true',
-            'enum_drift_scan_namespaces' => 'Studio\\OpenApiContractTesting\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Drifting\\',
+            'enum_drift_scan_namespaces' => 'Studio\\Gesso\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Drifting\\',
         ]);
 
         try {
@@ -627,7 +627,7 @@ class OpenApiCoverageExtensionTest extends TestCase
             'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'enum_drift_enabled' => 'true',
-            'enum_drift_scan_namespaces' => 'Studio\\OpenApiContractTesting\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Drifting\\',
+            'enum_drift_scan_namespaces' => 'Studio\\Gesso\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Drifting\\',
             'enum_drift_fail_on_drift' => 'false',
         ]);
 
@@ -660,7 +660,7 @@ class OpenApiCoverageExtensionTest extends TestCase
             'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'enum_drift_enabled' => 'true',
-            'enum_drift_scan_namespaces' => 'Studio\\OpenApiContractTesting\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Clean\\',
+            'enum_drift_scan_namespaces' => 'Studio\\Gesso\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Clean\\',
         ]);
 
         $extension->setupExtension(null, $parameters, null);
@@ -676,7 +676,7 @@ class OpenApiCoverageExtensionTest extends TestCase
             'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'enum_drift_enabled' => 'true',
-            'enum_drift_scan_namespaces' => 'Studio\\OpenApiContractTesting\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Misconfigured\\',
+            'enum_drift_scan_namespaces' => 'Studio\\Gesso\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Misconfigured\\',
             'enum_drift_fail_on_drift' => 'false',
         ]);
 
@@ -718,9 +718,9 @@ class OpenApiCoverageExtensionTest extends TestCase
             'specs' => 'refs-valid',
             'enum_drift_enabled' => 'true',
             'enum_drift_scan_namespaces' =>
-                ' Studio\\OpenApiContractTesting\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Clean\\ '
+                ' Studio\\Gesso\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Clean\\ '
                 . ', '
-                . ' Studio\\OpenApiContractTesting\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Clean\\ ',
+                . ' Studio\\Gesso\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Clean\\ ',
         ]);
 
         $extension->setupExtension(null, $parameters, null);
@@ -742,7 +742,7 @@ class OpenApiCoverageExtensionTest extends TestCase
             'enum_drift_enabled' => 'true',
             // Resolvable PSR-4 root that contains zero attributed enums.
             'enum_drift_scan_namespaces' =>
-                'Studio\\OpenApiContractTesting\\Tests\\Unit\\Internal\\Fixture\\NotAnEnumNs\\',
+                'Studio\\Gesso\\Tests\\Unit\\Internal\\Fixture\\NotAnEnumNs\\',
         ]);
 
         // Resolvable but empty PSR-4 root — use a sub-namespace under tests/
@@ -779,7 +779,7 @@ class OpenApiCoverageExtensionTest extends TestCase
             'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'enum_drift_enabled' => 'true',
-            'enum_drift_scan_namespaces' => 'Studio\\OpenApiContractTesting\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Drifting\\',
+            'enum_drift_scan_namespaces' => 'Studio\\Gesso\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Drifting\\',
         ]);
 
         try {
@@ -809,7 +809,7 @@ class OpenApiCoverageExtensionTest extends TestCase
             'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'enum_drift_enabled' => 'true',
-            'enum_drift_scan_namespaces' => 'Studio\\OpenApiContractTesting\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Drifting\\',
+            'enum_drift_scan_namespaces' => 'Studio\\Gesso\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Drifting\\',
             'enum_drift_fail_on_drift' => 'false',
         ]);
 
@@ -861,7 +861,7 @@ class OpenApiCoverageExtensionTest extends TestCase
             'specs' => 'refs-valid',
             'enum_drift_enabled' => 'true',
             'enum_drift_scan_namespaces' =>
-                'Studio\\OpenApiContractTesting\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Clean\\',
+                'Studio\\Gesso\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Clean\\',
         ]);
 
         try {
@@ -883,7 +883,7 @@ class OpenApiCoverageExtensionTest extends TestCase
             'spec_base_path' => __DIR__ . '/../../fixtures/specs',
             'specs' => 'refs-valid',
             'enum_drift_enabled' => 'true',
-            'enum_drift_scan_namespaces' => 'Studio\\OpenApiContractTesting\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Drifting\\',
+            'enum_drift_scan_namespaces' => 'Studio\\Gesso\\Tests\\Unit\\PHPUnit\\Fixture\\EnumDrift\\Drifting\\',
             // enum_drift_fail_on_drift intentionally omitted
         ]);
 

@@ -6,8 +6,8 @@ namespace Examples\Laravel\Tests;
 
 use Illuminate\Support\Facades\Route;
 use Orchestra\Testbench\TestCase;
-use Studio\OpenApiContractTesting\Laravel\OpenApiContractTestingServiceProvider;
-use Studio\OpenApiContractTesting\Laravel\ValidatesOpenApiSchema;
+use Studio\Gesso\Laravel\OpenApiContractTestingServiceProvider;
+use Studio\Gesso\Laravel\ValidatesOpenApiSchema;
 
 final class PetContractTest extends TestCase
 {

@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Tests\Unit\Fuzz;
+namespace Studio\Gesso\Tests\Unit\Fuzz;
 
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
-use Studio\OpenApiContractTesting\Fuzz\ExplorationCaseKind;
-use Studio\OpenApiContractTesting\Fuzz\ExplorationSkip;
-use Studio\OpenApiContractTesting\Fuzz\ExploredCase;
-use Studio\OpenApiContractTesting\Fuzz\ExploredOperation;
-use Studio\OpenApiContractTesting\Fuzz\FuzzGenerationException;
-use Studio\OpenApiContractTesting\Fuzz\OpenApiSpecExplorer;
-use Studio\OpenApiContractTesting\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Fuzz\ExplorationCaseKind;
+use Studio\Gesso\Fuzz\ExplorationSkip;
+use Studio\Gesso\Fuzz\ExploredCase;
+use Studio\Gesso\Fuzz\ExploredOperation;
+use Studio\Gesso\Fuzz\FuzzGenerationException;
+use Studio\Gesso\Fuzz\OpenApiSpecExplorer;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 
 use function array_filter;
 use function array_map;

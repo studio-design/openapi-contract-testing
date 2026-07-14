@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Schema;
+namespace Studio\Gesso\Schema;
 
 /**
  * Result of a single (PHP enum, OpenAPI enum file) drift comparison.

@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Spec;
+namespace Studio\Gesso\Spec;
 
 use ReflectionClass;
 use ReflectionMethod;
-use Studio\OpenApiContractTesting\Attribute\OpenApiSpec;
+use Studio\Gesso\Attribute\OpenApiSpec;
 
 /**
  * Resolves which OpenAPI spec name a test case should validate against.

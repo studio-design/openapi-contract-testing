@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Studio\OpenApiContractTesting\Fuzz;
+namespace Studio\Gesso\Fuzz;
 
 use const E_USER_WARNING;
 use const PHP_FLOAT_EPSILON;
@@ -11,7 +11,7 @@ use Faker\Factory;
 use Faker\Generator;
 use InvalidArgumentException;
 use stdClass;
-use Studio\OpenApiContractTesting\Spec\OpenApiSchemaConverter;
+use Studio\Gesso\Spec\OpenApiSchemaConverter;
 
 use function array_filter;
 use function array_key_exists;
