@@ -10,6 +10,14 @@ the README for the full surface contract.
 
 ## Unreleased
 
+## [1.10.0](https://github.com/studio-design/gesso/compare/v1.9.0...v1.10.0) (2026-07-14)
+
+
+### Features
+
+* **cli:** add gesso command entry point ([#330](https://github.com/studio-design/gesso/issues/330)) ([5556e05](https://github.com/studio-design/gesso/commit/5556e0585ccc08a2861e487189cf1625c0159530))
+* **compatibility:** add gesso namespace aliases ([#328](https://github.com/studio-design/gesso/issues/328)) ([3e3d66c](https://github.com/studio-design/gesso/commit/3e3d66ca7a3f9e45bd6ef033efc4608b00663902))
+
 ## [1.9.0](https://github.com/studio-design/gesso/compare/v1.8.0...v1.9.0) (2026-07-13)
 
 
