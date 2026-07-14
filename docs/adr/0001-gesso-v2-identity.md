@@ -260,10 +260,12 @@ the legacy spelling; v2 changes both occurrences together and does not emit
 duplicate legacy-prefixed messages. Consumers that route either channel by its
 prefix must update that rule during the package switch.
 
-The v1.9 prefix inventory is pinned by a compatibility fixture so a new branded
-occurrence cannot be added without an explicit migration decision. V2 tests
-must prove that no `[openapi-contract-testing]` diagnostic remains in `src/`,
-that both branded channels use `[Gesso]`, and that the identity-neutral
+The v1.9 prefix inventory pins every protected category and its emitted-string
+occurrence count per source file. A compatibility test tokenizes PHP string
+literals so comments cannot substitute for a removed runtime diagnostic, and a
+new branded occurrence cannot be added without an explicit migration decision.
+V2 tests must prove that no `[openapi-contract-testing]` diagnostic remains in
+`src/`, that both branded channels use `[Gesso]`, and that the identity-neutral
 categories retain parity.
 
 ### Runtime and test-runner support policy

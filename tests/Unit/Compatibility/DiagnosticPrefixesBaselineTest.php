@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Studio\OpenApiContractTesting\Tests\Unit\Compatibility;
 
 use const JSON_THROW_ON_ERROR;
+use const T_CONSTANT_ENCAPSED_STRING;
+use const T_ENCAPSED_AND_WHITESPACE;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -12,60 +14,68 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
 
+use function array_fill_keys;
+use function array_keys;
 use function dirname;
 use function file_get_contents;
+use function in_array;
+use function is_array;
 use function json_decode;
-use function sort;
-use function str_contains;
+use function ksort;
+use function str_replace;
+use function substr_count;
+use function token_get_all;
 
 final class DiagnosticPrefixesBaselineTest extends TestCase
 {
     #[Test]
     public function diagnostic_prefixes_match_the_v1_9_inventory(): void
     {
-        /** @var array{
-         *     identity_neutral_prefixes: list<string>,
-         *     legacy_branded_prefix_occurrences: array<string, list<string>>
-         * } $fixture
-         */
+        /** @var array<string, array<string, positive-int>> $fixture */
         $fixture = json_decode(
             $this->fixture(),
             true,
             flags: JSON_THROW_ON_ERROR,
         );
-        $sources = $this->sourceFiles();
+        /** @var array<string, array<string, positive-int>> $actual */
+        $actual = array_fill_keys(array_keys($fixture), []);
 
-        foreach ($fixture['identity_neutral_prefixes'] as $prefix) {
-            $this->assertTrue(
-                $this->sourceContains($sources, $prefix),
-                "Expected the v1 diagnostic prefix {$prefix} to remain present.",
-            );
-        }
+        foreach ($this->sourceFiles() as $file => $contents) {
+            foreach (token_get_all($contents) as $token) {
+                if (!is_array($token) || !in_array(
+                    $token[0],
+                    [T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE],
+                    true,
+                )) {
+                    continue;
+                }
 
-        foreach ($fixture['legacy_branded_prefix_occurrences'] as $prefix => $expectedFiles) {
-            $actualFiles = [];
-            foreach ($sources as $file => $contents) {
-                if (str_contains($contents, $prefix)) {
-                    $actualFiles[] = $file;
+                // PHP token text retains the escape in a double-quoted
+                // `\$self`; normalize it to the emitted diagnostic prefix.
+                $literal = str_replace('\\$', '$', $token[1]);
+                foreach (array_keys($fixture) as $prefix) {
+                    $count = substr_count($literal, $prefix);
+                    if ($count === 0) {
+                        continue;
+                    }
+
+                    $actual[$prefix][$file] = ($actual[$prefix][$file] ?? 0) + $count;
                 }
             }
-
-            sort($actualFiles);
-            sort($expectedFiles);
-            $this->assertSame($expectedFiles, $actualFiles);
-        }
-    }
-
-    /** @param array<string, string> $sources */
-    private function sourceContains(array $sources, string $prefix): bool
-    {
-        foreach ($sources as $contents) {
-            if (str_contains($contents, $prefix)) {
-                return true;
-            }
         }
 
-        return false;
+        ksort($fixture);
+        ksort($actual);
+        foreach ($fixture as &$files) {
+            ksort($files);
+        }
+        unset($files);
+        foreach ($actual as &$files) {
+            ksort($files);
+        }
+        unset($files);
+
+        $this->assertSame($fixture, $actual);
     }
 
     /** @return array<string, string> */

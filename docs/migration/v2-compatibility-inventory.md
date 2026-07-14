@@ -416,9 +416,11 @@ Other stable operational prefixes that require rename or parity tests include:
 - `[openapi-contract-testing]` for the missing-optional-Faker warning and the
   Laravel deprecation stderr channel
 
-Migration status: the operational prefix set and both source locations of the
-legacy branded prefix are captured in
-`tests/fixtures/compatibility/v1.9-diagnostic-prefixes.json`.
+Migration status: every protected category and its emitted-string occurrence
+count per source file are captured in
+`tests/fixtures/compatibility/v1.9-diagnostic-prefixes.json`. The test tokenizes
+PHP string literals rather than counting comments, so a removed runtime
+category cannot be replaced by documentary text.
 
 V2 decision: feature-oriented prefixes remain unchanged because they are
 identity-neutral log-routing categories. Both `[openapi-contract-testing]`
