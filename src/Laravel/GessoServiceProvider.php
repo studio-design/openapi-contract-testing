@@ -12,7 +12,6 @@ use Studio\Gesso\Laravel\Commands\OpenApiRoutesCommand;
 class GessoServiceProvider extends ServiceProvider
 {
     private const CONFIG_KEY = 'gesso';
-
     private const LEGACY_CONFIG_KEY = 'openapi-contract-testing';
 
     public function register(): void
