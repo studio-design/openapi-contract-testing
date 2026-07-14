@@ -55,9 +55,9 @@ members marked `@internal` are excluded.
 | Binaries | `bin/openapi-contract`, `bin/openapi-coverage-merge`; v1.10 adds `bin/gesso` | Remove the legacy binaries and retain the unified `gesso` command surface |
 | Laravel discovery | `Studio\OpenApiContractTesting\Laravel\OpenApiContractTestingServiceProvider` | Point discovery to the Gesso provider |
 | PHP requirement | `^8.2` | Raise to `^8.3`; PHP 8.2 reaches security EOL at the end of 2026 |
-| PHPUnit requirement | `^11.0 || ^12.0 || ^13.0` | Support `^12.0 || ^13.0`; drop PHPUnit 11 after its bug-fix support ended |
+| PHPUnit requirement | `^11.0 \|\| ^12.0 \|\| ^13.0` | Support `^12.0 \|\| ^13.0`; drop PHPUnit 11 after its bug-fix support ended |
 | Opis requirement | `opis/json-schema:^2.6` | Keep independent from the identity migration |
-| PSR requirements | `psr/http-client:^1.0`, `psr/http-factory:^1.0`, `psr/http-message:^1.0 || ^2.0` | Preserve unless separately justified |
+| PSR requirements | `psr/http-client:^1.0`, `psr/http-factory:^1.0`, `psr/http-message:^1.0 \|\| ^2.0` | Preserve unless separately justified |
 
 Packagist migration must be tested with a clean project. The new package must
 declare `"conflict": {"studio-design/openapi-contract-testing": "*"}` and must
@@ -397,10 +397,12 @@ import/export methods are internal, but versioned payloads accepted by the
 released merge CLI are compatibility inputs. A newer reader preserves the
 documented older inputs, while unknown or lossy formats fail loudly.
 
-Migration status: the exact v1.9 coverage JSON report and sidecar envelope are
-captured under `tests/fixtures/compatibility/`. The sidecar fixture pins coverage
-tracker state v1 and strict-required tracker state v2, and consumer-style tests
-verify both the envelope reader and the legacy bare-coverage reader path.
+Migration status: the exact v1.9 coverage JSON report and sidecar envelope, plus
+the v2 coverage JSON report, are captured under
+`tests/fixtures/compatibility/`. The v2 report pins schema 2 and the Gesso tool
+identity. The sidecar fixture pins coverage tracker state v1 and strict-required
+tracker state v2, and consumer-style tests verify both the envelope reader and
+the legacy bare-coverage reader path.
 
 V2 decision: only coverage JSON advances its schema version. Its documented
 `tool.name` behaves as a fixed value, so changing it to `studio-design/gesso` is

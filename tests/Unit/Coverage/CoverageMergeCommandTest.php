@@ -363,8 +363,8 @@ class CoverageMergeCommandTest extends TestCase
 
         $decoded = json_decode((string) file_get_contents($jsonPath), true);
         $this->assertIsArray($decoded);
-        $this->assertSame(1, $decoded['schema_version']);
-        $this->assertSame('studio-design/openapi-contract-testing', $decoded['tool']['name']);
+        $this->assertSame(2, $decoded['schema_version']);
+        $this->assertSame('studio-design/gesso', $decoded['tool']['name']);
         $this->assertArrayHasKey('petstore-3.0', $decoded['specs']);
 
         @unlink($jsonPath);

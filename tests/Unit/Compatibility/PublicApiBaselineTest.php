@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\Gesso\Coverage\ConsoleCoverageRenderer;
 use Studio\Gesso\Coverage\HtmlCoverageRenderer;
+use Studio\Gesso\Coverage\JsonCoverageRenderer;
 use Studio\Gesso\Tests\Helpers\PublicApiInventory;
 use Studio\Gesso\Tests\Unit\Compatibility\Fixture\PublicApiReturnTypeFixture;
 
@@ -83,7 +84,7 @@ final class PublicApiBaselineTest extends TestCase
     }
 
     #[Test]
-    public function v2_public_api_matches_the_documented_identity_renames(): void
+    public function v2_public_api_matches_the_documented_contract_changes(): void
     {
         $root = dirname(__DIR__, 3);
         $v1Json = file_get_contents($root . '/tests/fixtures/compatibility/v1.9-public-api.json');
@@ -104,6 +105,12 @@ final class PublicApiBaselineTest extends TestCase
             $v1Json,
         );
 
-        $this->assertJsonStringEqualsJsonString($mappedV1Json, $v2Json);
+        /** @var array<string, array<string, mixed>> $expected */
+        $expected = json_decode($mappedV1Json, true, flags: JSON_THROW_ON_ERROR);
+        $expected[JsonCoverageRenderer::class]['constants']['SCHEMA_VERSION'] = 2;
+        /** @var array<string, array<string, mixed>> $actual */
+        $actual = json_decode($v2Json, true, flags: JSON_THROW_ON_ERROR);
+
+        $this->assertSame($expected, $actual);
     }
 }

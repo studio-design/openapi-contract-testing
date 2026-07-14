@@ -36,7 +36,7 @@ class JsonCoverageRendererTest extends TestCase
     {
         $payload = $this->decode($this->renderOneValidated());
 
-        $this->assertSame(1, $payload['schema_version']);
+        $this->assertSame(2, $payload['schema_version']);
         $this->assertSame(self::FIXED_TIMESTAMP, $payload['generated_at']);
     }
 
@@ -46,7 +46,7 @@ class JsonCoverageRendererTest extends TestCase
         $payload = $this->decode($this->renderOneValidated());
 
         $this->assertArrayHasKey('tool', $payload);
-        $this->assertSame('studio-design/openapi-contract-testing', $payload['tool']['name']);
+        $this->assertSame('studio-design/gesso', $payload['tool']['name']);
         $this->assertIsString($payload['tool']['version']);
         $this->assertNotSame('', $payload['tool']['version']);
         $this->assertNotSame('unknown', $payload['tool']['version']);
