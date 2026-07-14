@@ -1,0 +1,17 @@
+{
+    "name": "gesso-fixture/transitive-legacy",
+    "type": "project",
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "../repository"
+        },
+        {
+            "packagist.org": false
+        }
+    ],
+    "require": {
+        "gesso-fixture/legacy-consumer": "^1.0",
+        "studio-design/gesso": "^2.0"
+    }
+}

@@ -54,10 +54,13 @@ The migration will follow these rules:
 2. Treat Composer package migration separately from source migration. Do not
    present `composer update` as sufficient when the root requirement must
    change.
-3. Do not use an unconstrained Composer `replace` entry for the old package.
-   It could incorrectly satisfy dependencies that require an incompatible v1
-   release. The exact `conflict` or constrained `replace` policy must be proven
-   with dependency-resolution fixtures before publication.
+3. Do not declare Composer `replace` for the old package. Gesso v2 does not
+   ship the v1 namespace or API, so claiming that it satisfies an old-package
+   requirement would let incompatible dependents resolve. Instead, v2 declares
+   `"conflict": {"studio-design/openapi-contract-testing": "*"}`. Offline
+   dependency-resolution fixtures prove that a clean Gesso install succeeds
+   while direct dual installation and a transitive old `^1.10` requirement
+   fail resolution.
 4. Register `studio-design/gesso` as a new Packagist package. Mark the old
    package abandoned with `studio-design/gesso` as its replacement only after
    the v2 stable package is installable and verified.
@@ -323,7 +326,7 @@ Gesso 2.0 is not ready for stable release until all of the following pass:
 - [Pest support policy](https://pestphp.com/docs/support-policy)
 - [Pest 4 upgrade guide](https://pestphp.com/docs/upgrade-guide)
 - [JSON Schema 2020-12 validation keyword: `const`](https://json-schema.org/draft/2020-12/json-schema-validation#section-6.1.3)
-- [Composer package links and `replace`](https://getcomposer.org/doc/04-schema.md#package-links)
+- [Composer `conflict` and `replace` package links](https://getcomposer.org/doc/04-schema.md#package-links)
 - [Composer repositories and package renaming](https://getcomposer.org/doc/05-repositories.md)
 - [Packagist package naming](https://packagist.org/about)
 - [PSR-4 autoloading](https://www.php-fig.org/psr/psr-4/)

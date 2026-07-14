@@ -60,8 +60,13 @@ members marked `@internal` are excluded.
 | PSR requirements | `psr/http-client:^1.0`, `psr/http-factory:^1.0`, `psr/http-message:^1.0 || ^2.0` | Preserve unless separately justified |
 
 Packagist migration must be tested with a clean project. The new package must
-not declare an unconstrained replacement that silently satisfies a dependency
-requiring the old package's `^1` API.
+declare `"conflict": {"studio-design/openapi-contract-testing": "*"}` and must
+not declare `replace`. Gesso v2 does not provide the v1 namespace, so it cannot
+safely satisfy a dependency that still requires the old package. The offline
+fixtures under `tests/fixtures/composer-migration/` prove that a Gesso-only
+project resolves and that both direct dual installation and a transitive old
+`^1.10` requirement fail dependency resolution. The conflict is added to the
+root `composer.json` only when `main` becomes the v2 development line.
 
 ## PHP public types
 

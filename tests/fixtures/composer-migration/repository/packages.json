@@ -1,0 +1,31 @@
+{
+    "packages": {
+        "studio-design/openapi-contract-testing": {
+            "1.10.0": {
+                "name": "studio-design/openapi-contract-testing",
+                "version": "1.10.0",
+                "type": "metapackage"
+            }
+        },
+        "studio-design/gesso": {
+            "2.0.0": {
+                "name": "studio-design/gesso",
+                "version": "2.0.0",
+                "type": "metapackage",
+                "conflict": {
+                    "studio-design/openapi-contract-testing": "*"
+                }
+            }
+        },
+        "gesso-fixture/legacy-consumer": {
+            "1.0.0": {
+                "name": "gesso-fixture/legacy-consumer",
+                "version": "1.0.0",
+                "type": "metapackage",
+                "require": {
+                    "studio-design/openapi-contract-testing": "^1.10"
+                }
+            }
+        }
+    }
+}
