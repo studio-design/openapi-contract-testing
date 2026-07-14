@@ -280,6 +280,15 @@ JSON are captured under `tests/fixtures/compatibility/` and exercised through
 Laravel consumer-level integration tests. Text output remains covered
 semantically because Laravel owns its cross-version console table rendering.
 
+V1.10 intentionally does not register a `gesso` configuration alias. At the v2
+package boundary, consumers rename the published file and direct configuration
+lookups. The v2 provider owns only `gesso`; it rejects either a legacy-only
+`openapi-contract-testing` key or a dual-key configuration with an actionable
+exception instead of selecting precedence. The implementation gate includes
+provider tests for the new defaults, overrides, publish target, both rejection
+paths, and stale cached legacy configuration. See the
+[Laravel configuration transition policy](../adr/0001-gesso-v2-identity.md#laravel-configuration-transition-policy).
+
 ## CLI contracts
 
 V1.10 adds the forward-compatible `gesso` entry point. It dispatches

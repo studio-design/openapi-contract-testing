@@ -100,6 +100,38 @@ identity that the major release exists to remove. Command options, exit codes,
 and command-specific output remain compatible unless a separately documented
 v2 change requires otherwise.
 
+### Laravel configuration transition policy
+
+V1.10 continues to own only the `openapi-contract-testing` configuration key,
+publish tag, and `config/openapi-contract-testing.php` destination. It does not
+also register `gesso` as an alias. Claiming a second top-level configuration key
+in a minor release could collide with an application's existing configuration,
+and keeping two mutable copies synchronized would make runtime precedence
+ambiguous.
+
+Before installing v2, Laravel consumers rename the published file to
+`config/gesso.php` and update direct `config('openapi-contract-testing...')`
+lookups to `config('gesso...')`. They must clear any Laravel configuration cache
+before changing the Composer package, then rebuild it after the v2 application
+boots successfully.
+
+The v2 `GessoServiceProvider` merges defaults only under `gesso` and publishes
+only the `gesso` tag to `config/gesso.php`. If the legacy
+`openapi-contract-testing` top-level key is present when the provider registers,
+v2 throws an actionable configuration exception. This applies whether or not a
+`gesso` key is also present; v2 does not compare values, choose a winner, or
+silently fall back to the legacy key. A stale configuration cache therefore
+fails visibly instead of running validation with unintended settings.
+
+V2 provider tests must cover defaults with no published file, overrides from a
+`gesso` file, the new publish tag and destination, and rejection of both
+legacy-only and dual-key configurations. This follows Laravel's package
+configuration model: package defaults are merged under one application key and
+published to one application configuration file. Laravel documents that
+`mergeConfigFrom` merges only the first level, so the migration preserves the
+existing file values rather than reconstructing or recursively combining two
+configurations.
+
 ## Scope boundaries
 
 The v2 identity migration does not by itself authorize unrelated redesigns.
@@ -143,7 +175,6 @@ Before the first breaking rename is merged:
 The following require evidence or maintainer approval before this ADR becomes
 Accepted:
 
-- how conflicts between old and new Laravel configuration are reported;
 - which machine-readable formats require a schema-version increment;
 - the PHP minimum version and supported PHPUnit matrix at the planned v2 GA
   date;
@@ -200,5 +231,6 @@ Gesso 2.0 is not ready for stable release until all of the following pass:
 - [PSR-4 autoloading](https://www.php-fig.org/psr/psr-4/)
 - [PHP `class_alias()`](https://www.php.net/class-alias)
 - [Composer autoloader optimization](https://getcomposer.org/doc/articles/autoloader-optimization.md)
+- [Laravel package configuration](https://laravel.com/docs/packages#configuration)
 - [Symfony backward compatibility promise](https://symfony.com/doc/current/contributing/code/bc.html)
 - [Laminas migration tooling](https://docs.laminas.dev/migration/)
