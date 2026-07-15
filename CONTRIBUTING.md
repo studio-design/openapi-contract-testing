@@ -124,37 +124,33 @@ normal stable patch flow from its own release configuration.
 2. Register `studio-design/gesso` on Packagist from this GitHub repository.
    Confirm that its `dev-main` metadata reports the new package name and source
    repository. Do not mark the old package abandoned yet.
-3. Merge the beta-readiness PR with this footer in an actual commit message:
-
-   ```text
-   Release-As: 2.0.0-beta.1
-   ```
-
-   The `main` configuration must use `versioning: prerelease`,
-   `prerelease-type: beta`, and `prerelease: true`. The footer fixes the first
-   release at `2.0.0-beta.1`; later beta fixes increment the prerelease number.
+3. Merge the beta-readiness PR. The `main` configuration must use
+   `versioning: prerelease`, `prerelease-type: beta`, `prerelease: true`, and
+   the temporary `release-as: 2.0.0-beta.1`. The repository discards commit
+   bodies when squash-merging, so a `Release-As` commit footer is not a safe
+   source for the first beta version.
 4. Wait for the bot-managed release PR to refresh. Before merging it, verify
    that it proposes `2.0.0-beta.1`, changes only release-please-owned files,
    and has a green supported matrix.
 5. Merge that release PR. Verify all four records agree: the `v2.0.0-beta.1`
    git tag, the GitHub Release marked **Pre-release**, the manifest value, and
-   the Packagist version/source reference.
+   the Packagist version/source reference. Immediately remove `release-as`
+   from the configuration through a normal PR before merging another
+   releasable change; otherwise release-please will keep forcing the already
+   published beta version.
 6. Test the Packagist artifact in a clean project with
    `composer require --dev "studio-design/gesso:^2.0@beta"`. Run the repository
    examples and at least one representative downstream migration against the
    published package rather than a path repository. Ship any corrections as
    normal PRs and publish another beta through release-please when necessary.
-7. To promote the accepted beta, open a normal PR that changes only
-   `prerelease` to `false` (keep `versioning: prerelease`) and updates the
-   corresponding invariant test. Its actual commit message must contain:
-
-   ```text
-   Release-As: 2.0.0
-   ```
-
-   After merge, verify that the refreshed release PR proposes stable `2.0.0`
-   and repeat the tag, GitHub Release, manifest, Packagist, clean-install, and
-   example checks before announcing general availability.
+7. To promote the accepted beta, open a normal PR that changes `prerelease` to
+   `false`, temporarily sets `release-as: 2.0.0`, and updates the corresponding
+   invariant test. Keep `versioning: prerelease` so release-please promotes the
+   beta line instead of calculating an unrelated bump. After merge, verify that
+   the refreshed release PR proposes stable `2.0.0` and repeat the tag, GitHub
+   Release, manifest, Packagist, clean-install, and example checks before
+   announcing general availability. Remove `release-as` through a normal PR
+   immediately after the stable release is published.
 8. Only after the stable package is installable and verified, mark
    `studio-design/openapi-contract-testing` abandoned on Packagist with
    `studio-design/gesso` as its suggested replacement. Do not delete its tags
