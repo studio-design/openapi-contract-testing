@@ -108,8 +108,34 @@ class ReleasePleaseConfigTest extends TestCase
         $rootPackage = $packages['.'] ?? null;
         $this->assertIsArray($rootPackage);
         $this->assertSame(
-            'openapi-contract-testing',
+            'gesso',
             $rootPackage['package-name'] ?? null,
+        );
+    }
+
+    #[Test]
+    public function main_is_configured_for_the_v2_beta_line(): void
+    {
+        $this->assertSame(
+            'prerelease',
+            $this->config['versioning'] ?? null,
+            'The prerelease versioning strategy is required to produce and later promote v2 beta versions.',
+        );
+        $this->assertSame(
+            'beta',
+            $this->config['prerelease-type'] ?? null,
+            'The v2 prerelease line MUST use the documented beta identifier.',
+        );
+        $this->assertSame(
+            true,
+            $this->config['prerelease'] ?? null,
+            'The v2 beta must be tagged as a GitHub prerelease. Set this to false only in the stable-promotion PR.',
+        );
+        $this->assertSame(
+            '2.0.0-beta.1',
+            $this->config['release-as'] ?? null,
+            'The first beta version MUST be fixed in configuration because squash merge commit bodies are blank. '
+                . 'Remove release-as immediately after v2.0.0-beta.1 is published.',
         );
     }
 
