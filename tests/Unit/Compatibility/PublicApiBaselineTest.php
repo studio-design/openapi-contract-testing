@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use Studio\Gesso\Coverage\ConsoleCoverageRenderer;
 use Studio\Gesso\Coverage\HtmlCoverageRenderer;
 use Studio\Gesso\Coverage\JsonCoverageRenderer;
+use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Studio\Gesso\Fuzz\ExploredCase;
 use Studio\Gesso\OpenApiResponseValidator;
 use Studio\Gesso\Tests\Helpers\PublicApiInventory;
@@ -111,6 +112,10 @@ final class PublicApiBaselineTest extends TestCase
 
         /** @var array<string, array<string, mixed>> $expected */
         $expected = json_decode($mappedV1Json, true, flags: JSON_THROW_ON_ERROR);
+        unset(
+            $expected[InvalidOpenApiSpecReason::class]['cases']['ExternalRef'],
+            $expected[InvalidOpenApiSpecReason::class]['cases']['RemoteRefNotImplemented'],
+        );
         $expected[JsonCoverageRenderer::class]['constants']['SCHEMA_VERSION'] = 2;
         $expected[ExploredCase::class]['methods']['bodyAsArray'] = [
             'static' => false,

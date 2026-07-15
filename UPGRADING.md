@@ -53,6 +53,15 @@ This removes the validator's fallback to the process-global tracker. Named
 `maxErrors` and `skipResponseCodes` arguments remain unchanged after the new
 required first argument.
 
+`InvalidOpenApiSpecReason::ExternalRef` and
+`InvalidOpenApiSpecReason::RemoteRefNotImplemented` have been removed. Neither
+case was emitted by production code by the end of v1. Use the specific resolver
+reason instead: local-reference failures use `LocalRefNotFound`,
+`LocalRefUnreadable`, or `LocalRefRequiresSourceFile`; remote-reference failures
+use `RemoteRefDisallowed`, `HttpClientNotConfigured`, or
+`RemoteRefFetchFailed`; unsupported `file:` references use
+`FileSchemeNotSupported`.
+
 ## Within v1.x
 
 The v1.x line is covered end-to-end by SemVer (see "v0.x → v1.0.0"
