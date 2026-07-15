@@ -131,9 +131,11 @@ final class CoverageSidecarWriter
             throw new RuntimeException(sprintf('failed to create sidecar dir "%s"', $dir));
         }
 
-        $permissions = @fileperms($dir);
-        if ($permissions !== false && ($permissions & 0o022) !== 0) {
-            throw new RuntimeException(sprintf('sidecar dir must not be writable by group or other users: "%s"', $dir));
+        if (DIRECTORY_SEPARATOR !== '\\') {
+            $permissions = @fileperms($dir);
+            if ($permissions !== false && ($permissions & 0o022) !== 0) {
+                throw new RuntimeException(sprintf('sidecar dir must not be writable by group or other users: "%s"', $dir));
+            }
         }
 
         return $dir;
