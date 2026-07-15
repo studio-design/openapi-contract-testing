@@ -66,6 +66,55 @@ class RequestBodyValidatorTest extends TestCase
     }
 
     #[Test]
+    public function validate_flags_missing_required_body_when_content_is_absent(): void
+    {
+        $operation = [
+            'requestBody' => [
+                'required' => true,
+            ],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'POST',
+            '/pets',
+            $operation,
+            DecodedBody::absent(),
+            null,
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString('Request body is empty', $result->errors[0]);
+    }
+
+    #[Test]
+    public function validate_flags_missing_required_body_when_media_type_has_no_schema(): void
+    {
+        $operation = [
+            'requestBody' => [
+                'required' => true,
+                'content' => [
+                    'application/json' => [],
+                ],
+            ],
+        ];
+
+        $result = $this->validator->validate(
+            'spec',
+            'POST',
+            '/pets',
+            $operation,
+            DecodedBody::absent(),
+            'application/json',
+            OpenApiVersion::V3_0,
+        );
+
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString('Request body is empty', $result->errors[0]);
+    }
+
+    #[Test]
     public function validate_flags_present_literal_null_body_against_object_schema_when_optional(): void
     {
         // Issue #246 — the core silent-pass bug. A request body of the literal
