@@ -13,6 +13,8 @@ on:
     tags:
       - 'v*'
 
+permissions: {}
+
 jobs:
   guard:
     name: Reject non-bot v* tag
