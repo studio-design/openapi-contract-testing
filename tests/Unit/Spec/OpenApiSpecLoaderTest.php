@@ -15,6 +15,7 @@ use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Studio\Gesso\Exception\SpecFileNotFoundException;
 use Studio\Gesso\Internal\YamlAvailability;
 use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Request\SecurityValidator;
 use Symfony\Component\Yaml\Yaml;
 
 use function class_exists;
@@ -702,7 +703,8 @@ class OpenApiSpecLoaderTest extends TestCase
                 $scratchDir . '/security-shapes-json.json',
                 '{"openapi":"3.2.0","info":{"title":"Shapes","version":"1.0.0"},'
                 . '"paths":{"/anonymous":{"get":{"security":[{}]}},'
-                . '"/malformed":{"get":{"security":[[]]}}},'
+                . '"/malformed":{"get":{"security":[[]]}},'
+                . '"/malformed-container":{"get":{"security":{}}}},'
                 . '"components":{"schemas":{"Payload":{"type":"object","required":["security"],'
                 . '"properties":{"security":{}}}}}}',
             );
@@ -711,6 +713,7 @@ class OpenApiSpecLoaderTest extends TestCase
                 "openapi: 3.2.0\ninfo:\n  title: Shapes\n  version: 1.0.0\npaths:\n"
                 . "  /anonymous:\n    get:\n      security:\n        - {}\n"
                 . "  /malformed:\n    get:\n      security:\n        - []\n"
+                . "  /malformed-container:\n    get:\n      security: {}\n"
                 . "components:\n  schemas:\n    Payload:\n      type: object\n      required: [security]\n"
                 . "      properties:\n        security: {}\n",
             );
@@ -721,7 +724,20 @@ class OpenApiSpecLoaderTest extends TestCase
 
                 $this->assertInstanceOf(stdClass::class, $spec['paths']['/anonymous']['get']['security'][0]);
                 $this->assertSame([], $spec['paths']['/malformed']['get']['security'][0]);
+                $this->assertInstanceOf(stdClass::class, $spec['paths']['/malformed-container']['get']['security']);
                 $this->assertSame([], $spec['components']['schemas']['Payload']['properties']['security']);
+
+                $errors = (new SecurityValidator())->validate(
+                    'GET',
+                    '/malformed-container',
+                    $spec,
+                    $spec['paths']['/malformed-container']['get'],
+                    [],
+                    [],
+                    [],
+                );
+                $this->assertCount(1, $errors);
+                $this->assertStringContainsString('must be a list of requirement objects', $errors[0]);
             }
         } finally {
             @unlink($scratchDir . '/security-shapes-json.json');

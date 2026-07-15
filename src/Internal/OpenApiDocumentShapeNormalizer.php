@@ -176,6 +176,14 @@ final class OpenApiDocumentShapeNormalizer
 
     private static function normalizeSecurityRequirements(mixed $requirements): mixed
     {
+        // Preserve an empty object at the field boundary. Only an empty object
+        // *inside* a valid security list means anonymous access; `security: {}`
+        // is a malformed container and must reach SecurityValidator as an
+        // object so its list-shape guard can reject it.
+        if (self::isEmptyObject($requirements)) {
+            return $requirements;
+        }
+
         if (!is_array($requirements)) {
             return self::normalizeGeneric($requirements);
         }

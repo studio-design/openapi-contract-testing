@@ -12,6 +12,22 @@ use Studio\Gesso\Internal\OpenApiDocumentShapeNormalizer;
 final class OpenApiDocumentShapeNormalizerTest extends TestCase
 {
     #[Test]
+    public function preserves_empty_object_security_container_for_validation(): void
+    {
+        $document = OpenApiDocumentShapeNormalizer::normalizeResolvedDocument([
+            'security' => new stdClass(),
+            'paths' => [
+                '/pets' => [
+                    'get' => ['security' => new stdClass()],
+                ],
+            ],
+        ]);
+
+        $this->assertInstanceOf(stdClass::class, $document['security']);
+        $this->assertInstanceOf(stdClass::class, $document['paths']['/pets']['get']['security']);
+    }
+
+    #[Test]
     public function preserves_empty_objects_only_in_structural_security_requirement_lists(): void
     {
         $document = OpenApiDocumentShapeNormalizer::normalizeResolvedDocument([

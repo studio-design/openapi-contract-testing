@@ -180,6 +180,17 @@ class SecurityValidatorTest extends TestCase
     }
 
     #[Test]
+    public function validate_rejects_empty_object_security_container(): void
+    {
+        $operation = ['security' => new stdClass()];
+
+        $errors = $this->validator->validate('GET', '/pets', [], $operation, [], [], []);
+
+        $this->assertCount(1, $errors);
+        $this->assertStringContainsString('must be a list of requirement objects', $errors[0]);
+    }
+
+    #[Test]
     public function validate_accepts_empty_requirement_object_for_anonymous_access(): void
     {
         $operation = ['security' => [new stdClass()]];
