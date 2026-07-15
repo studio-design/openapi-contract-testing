@@ -2125,11 +2125,9 @@
         "attributes": [],
         "backing_type": null,
         "cases": {
-            "ExternalRef": null,
             "LocalRefNotFound": null,
             "LocalRefUnreadable": null,
             "LocalRefRequiresSourceFile": null,
-            "RemoteRefNotImplemented": null,
             "RemoteRefDisallowed": null,
             "RemoteRefFetchFailed": null,
             "HttpClientNotConfigured": null,

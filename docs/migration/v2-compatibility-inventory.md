@@ -114,8 +114,12 @@ Studio\OpenApiContractTesting\Exception\SpecFileNotFoundException
 Studio\OpenApiContractTesting\Exception\StrictRequiredDriftException
 ```
 
-The cases of `EnumBindingReason` and `InvalidOpenApiSpecReason`, including
-deprecated cases, must be included in the PHP API snapshot.
+The v1 PHP API snapshot includes every case of `EnumBindingReason` and
+`InvalidOpenApiSpecReason`, including deprecated cases. V2 removes the
+production-unused `InvalidOpenApiSpecReason::ExternalRef` and
+`InvalidOpenApiSpecReason::RemoteRefNotImplemented` cases. Consumers must use
+the specific local, remote, HTTP-client, fetch, or file-scheme reason described
+in the repository's `UPGRADING.md`.
 
 ### Spec loading
 
