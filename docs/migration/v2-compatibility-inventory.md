@@ -312,18 +312,26 @@ same string.
 | `skip_request_validation_response_codes` | `['422', '400']` |
 
 The `openapi:routes` command accepts `--spec`, `--prefix`, `--middleware`,
-`--domain`, `--exclude-route`, `--exclude-operation`,
-`--exclude-openapi-path`, `--format=text|json`,
+`--domain`, `--exclude-route`, `--format=text|json`,
 `--fail-on-undocumented`, and `--fail-on-unimplemented`. It uses Laravel's
 standard success (`0`), failure (`1`), and invalid usage (`2`) exit codes.
 
-Migration status: implemented on the v2 development line. The complete v1.9
-configuration defaults remain unchanged, while `GessoServiceProvider` owns only
-the `gesso` key, publish tag, and `config/gesso.php` destination. Consumer-level
-tests cover defaults, application overrides, discovery metadata, publishing,
-and rejection of legacy-only and dual-key configurations. Versioned route-parity
-JSON remains unchanged. Text output remains covered semantically because Laravel
-owns its cross-version console table rendering.
+Migration status: implemented on the v2 development line.
+`GessoServiceProvider` owns only the `gesso` key, publish tag, and
+`config/gesso.php` destination. V2 adds the empty-by-default
+`route_parity.external_operation_ids` and
+`route_parity.external_openapi_paths` configuration lists, plus the matching
+`--exclude-operation` and `--exclude-openapi-path` repeatable command flags.
+These wildcard-aware exclusions classify unmatched documented operations as
+external instead of removing them from the report. They are omitted from the
+`--fail-on-unimplemented` gate.
+
+Route-parity JSON advances from `schema_version: 1` to `schema_version: 2` and
+adds `external_operations` to both the summary and top-level result arrays.
+Consumer-level tests and v2 golden fixtures cover the new defaults, application
+overrides, discovery metadata, publishing, exclusion sources, JSON shape, and
+rejection of malformed or legacy configuration. Text output remains covered
+semantically because Laravel owns its cross-version console table rendering.
 
 V1.10 intentionally does not register a `gesso` configuration alias. At the v2
 package boundary, consumers rename the published file and direct configuration
@@ -406,8 +414,9 @@ Coverage JSON v1 documents `generated_at`, `tool`, `aggregate`, and `specs`.
 The per-spec contract includes aggregate counts and endpoint rows with response
 states and unexpected observations. Laravel route parity JSON includes `specs`,
 `summary`, `matched`, `documented_but_not_registered`,
-`external_operations`, `registered_but_undocumented`, `ambiguous`, and
-`unsupported`.
+`registered_but_undocumented`, `ambiguous`, and `unsupported` in schema version
+1. Schema version 2 additionally includes `external_operations` in the summary
+and top-level result arrays.
 
 The sidecar compatibility boundary is now explicit in the
 [versioning policy](../versioning.md#versioned-sidecar-compatibility): the PHP
@@ -415,12 +424,13 @@ import/export methods are internal, but versioned payloads accepted by the
 released merge CLI are compatibility inputs. A newer reader preserves the
 documented older inputs, while unknown or lossy formats fail loudly.
 
-Migration status: the exact v1.9 coverage JSON report and sidecar envelope, plus
-the v2 coverage JSON report, are captured under
-`tests/fixtures/compatibility/`. The v2 report pins schema 2 and the Gesso tool
-identity. The sidecar fixture pins coverage tracker state v1 and strict-required
-tracker state v2, and consumer-style tests verify both the envelope reader and
-the legacy bare-coverage reader path.
+Migration status: the exact v1.9 coverage JSON report, route-parity JSON, and
+sidecar envelope, plus the v2 coverage and route-parity JSON reports, are
+captured under `tests/fixtures/compatibility/`. The v2 coverage report pins
+schema 2 and the Gesso tool identity; the v2 route-parity report pins schema 2
+and the external-operation category. The sidecar fixture pins coverage tracker
+state v1 and strict-required tracker state v2, and consumer-style tests verify
+both the envelope reader and the legacy bare-coverage reader path.
 
 V2 decision: coverage JSON advances because its documented `tool.name` changes
 to `studio-design/gesso`. Route parity JSON advances independently because its
