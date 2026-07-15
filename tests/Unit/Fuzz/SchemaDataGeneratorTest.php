@@ -523,6 +523,28 @@ class SchemaDataGeneratorTest extends TestCase
     }
 
     #[Test]
+    public function varies_single_character_patterns_after_the_boundary_case(): void
+    {
+        $fixedValues = SchemaDataGenerator::generate(
+            ['type' => 'string', 'pattern' => '^[ab]{1}$'],
+            3,
+            seed: 3,
+        );
+        $plusValues = SchemaDataGenerator::generate(
+            ['type' => 'string', 'pattern' => '^[ab]+$', 'maxLength' => 1],
+            3,
+            seed: 3,
+        );
+
+        foreach ([$fixedValues, $plusValues] as $values) {
+            $this->assertSame('a', $values[0]);
+            $this->assertNotSame($values[0], $values[1]);
+            $this->assertNotSame($values[0], $values[2]);
+            $this->assertCount(2, array_unique($values));
+        }
+    }
+
+    #[Test]
     public function generates_common_hostname_patterns_with_a_fixed_domain_suffix(): void
     {
         $schema = [

@@ -1050,6 +1050,11 @@ final class SchemaDataGenerator
             $index = $faker !== null
                 ? $faker->numberBetween(0, count($characters) - 1)
                 : ($iteration + $position) % count($characters);
+            // Reserve the first candidate for iteration zero so even a
+            // one-character value differs after the boundary case.
+            if ($position === 0 && $index === 0) {
+                $index = 1 + (($iteration - 1) % (count($characters) - 1));
+            }
             $sampled[] = $characters[$index];
         }
 
