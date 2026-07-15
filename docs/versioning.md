@@ -13,6 +13,8 @@ This library follows [Semantic Versioning 2.0](https://semver.org/). v1.0.0 is t
 - Public class names and namespaces (anything not marked `@internal`)
 - Public method signatures (parameters, return types, visibility)
 - Public constants and their values
+- Every non-`@internal` member composed by a public trait, including protected
+  and private methods, properties, and constants
 - Enum cases (additions are minor; removals or renames are major)
 - The `OpenApiValidationResult` shape (`outcome()`, `errors()`, `matchedPath()`, `skipReason()`, `isValid()`, `isSkipped()`)
 - CLI surfaces by major (commands, flags, exit codes, and versioned inputs and

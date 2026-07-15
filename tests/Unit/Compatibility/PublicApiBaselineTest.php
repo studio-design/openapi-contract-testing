@@ -32,8 +32,11 @@ use Studio\Gesso\Tests\Helpers\PublicApiInventory;
 use Studio\Gesso\Tests\Unit\Compatibility\Fixture\PublicApiImplicitConstructorFixture;
 use Studio\Gesso\Tests\Unit\Compatibility\Fixture\PublicApiPrivateConstructorFixture;
 use Studio\Gesso\Tests\Unit\Compatibility\Fixture\PublicApiReturnTypeFixture;
+use Studio\Gesso\Tests\Unit\Compatibility\Fixture\PublicApiTraitSurfaceConsumerFixture;
+use Studio\Gesso\Tests\Unit\Compatibility\Fixture\PublicApiTraitSurfaceFixture;
 use Studio\Gesso\Validation\Strict\StrictRequiredTracker;
 
+use function array_keys;
 use function dirname;
 use function file_get_contents;
 use function json_decode;
@@ -77,6 +80,43 @@ final class PublicApiBaselineTest extends TestCase
         $this->assertFalse($privateConstructor['instantiable']);
         $this->assertSame('declared', $privateConstructor['constructor']['kind']);
         $this->assertSame('private', $privateConstructor['constructor']['visibility']);
+    }
+
+    #[Test]
+    public function inventory_records_the_complete_trait_composition_surface(): void
+    {
+        $consumer = new PublicApiTraitSurfaceConsumerFixture();
+        $this->assertSame('public', $consumer->publicProperty);
+
+        $inventory = PublicApiInventory::capture(
+            __DIR__ . '/Fixture',
+            'Studio\\Gesso\\Tests\\Unit\\Compatibility\\Fixture\\',
+        );
+        $surface = $inventory[PublicApiTraitSurfaceFixture::class]['trait_composition'];
+
+        $this->assertSame(
+            ['PRIVATE_CONSTANT', 'PROTECTED_CONSTANT', 'PUBLIC_CONSTANT'],
+            array_keys($surface['constants']),
+        );
+        $this->assertSame('private', $surface['constants']['PRIVATE_CONSTANT']['visibility']);
+        $this->assertSame('protected', $surface['constants']['PROTECTED_CONSTANT']['visibility']);
+        $this->assertSame('public', $surface['constants']['PUBLIC_CONSTANT']['visibility']);
+
+        $this->assertSame(
+            ['privateProperty', 'protectedProperty', 'publicProperty'],
+            array_keys($surface['properties']),
+        );
+        $this->assertSame('private', $surface['properties']['privateProperty']['visibility']);
+        $this->assertSame('protected', $surface['properties']['protectedProperty']['visibility']);
+        $this->assertSame('public', $surface['properties']['publicProperty']['visibility']);
+
+        $this->assertSame(
+            ['privateMethod', 'protectedMethod', 'publicMethod'],
+            array_keys($surface['methods']),
+        );
+        $this->assertSame('private', $surface['methods']['privateMethod']['visibility']);
+        $this->assertSame('protected', $surface['methods']['protectedMethod']['visibility']);
+        $this->assertSame('public', $surface['methods']['publicMethod']['visibility']);
     }
 
     #[Test]
@@ -201,6 +241,11 @@ final class PublicApiBaselineTest extends TestCase
 
         /** @var array<string, array<string, mixed>> $actual */
         $actual = json_decode($v2Json, true, flags: JSON_THROW_ON_ERROR);
+
+        foreach ($actual as &$type) {
+            unset($type['trait_composition']);
+        }
+        unset($type);
 
         $this->assertSame($expected, $actual);
     }

@@ -43,7 +43,11 @@ php scripts/export-public-api.php --write
 The snapshot includes type kind/modifiers, parent and directly introduced
 interfaces/traits, attributes, enum backing types and cases, public constants,
 public properties, and declared public method signatures. Declarations or
-members marked `@internal` are excluded.
+members marked `@internal` are excluded. The v2 snapshot additionally records
+the complete composition surface of each public trait: methods, properties,
+and constants of every visibility. The historical v1.9 fixture predates that
+inventory capability, so the v1-to-v2 parity assertion projects this additional
+metadata out while the v2 baseline protects it directly.
 
 ## Composer and autoload identity
 
@@ -221,9 +225,11 @@ Studio\OpenApiContractTesting\Psr7\OpenApiPsr7Validator
 Studio\OpenApiContractTesting\Symfony\OpenApiAssertions
 ```
 
-Trait methods, explicit-spec precedence, validation defaults, assertion
-behavior, PSR-7 stream handling, and automatic coverage recording require
-consumer-level fixtures rather than namespace-only checks.
+Trait composition members, explicit-spec precedence, validation defaults,
+assertion behavior, PSR-7 stream handling, and automatic coverage recording
+require consumer-level fixtures rather than namespace-only checks. The PHP API
+snapshot also protects non-`@internal` protected/private trait members because
+they are copied into the consuming class and can conflict with consumer code.
 
 Migration status: implemented on the v2 development line. A fixture captured
 from v1.9.0 pins a representative PSR-7 exchange and Symfony request/response
