@@ -114,31 +114,30 @@ final class SpecDocumentDecoder
     }
 
     /**
-     * Convert parsed object maps back to the array representation used by the
-     * validator while retaining an empty object directly inside a `security`
-     * list. PHP associative decoding otherwise collapses both `{}` and `[]` to
-     * `[]`, making the OpenAPI anonymous-access requirement indistinguishable
-     * from a malformed empty list.
+     * Convert non-empty parsed object maps back to the array representation
+     * used by the validator, while temporarily retaining every nested empty
+     * object. PHP associative decoding otherwise collapses both `{}` and `[]`
+     * to `[]` before the document structure is known.
      *
      * @internal Shared with the root spec loader so root and external `$ref`
      *           documents retain identical collection-shape semantics.
      */
     public static function normalizeObjectMaps(mixed $decoded): mixed
     {
-        return self::normalizeValue($decoded, false);
+        return self::normalizeValue($decoded, true);
     }
 
-    private static function normalizeValue(mixed $value, bool $insideSecurityList): mixed
+    private static function normalizeValue(mixed $value, bool $isRoot): mixed
     {
         if ($value instanceof stdClass) {
             $properties = get_object_vars($value);
-            if ($insideSecurityList && $properties === []) {
+            if (!$isRoot && $properties === []) {
                 return $value;
             }
 
             $normalized = [];
             foreach ($properties as $key => $child) {
-                $normalized[$key] = self::normalizeValue($child, $key === 'security');
+                $normalized[$key] = self::normalizeValue($child, false);
             }
 
             return $normalized;
@@ -150,7 +149,7 @@ final class SpecDocumentDecoder
 
         $normalized = [];
         foreach ($value as $key => $child) {
-            $normalized[$key] = self::normalizeValue($child, $insideSecurityList);
+            $normalized[$key] = self::normalizeValue($child, false);
         }
 
         return $normalized;

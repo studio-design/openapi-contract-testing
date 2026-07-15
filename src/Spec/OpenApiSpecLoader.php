@@ -14,6 +14,7 @@ use Psr\Http\Message\RequestFactoryInterface;
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Studio\Gesso\Exception\SpecFileNotFoundException;
+use Studio\Gesso\Internal\OpenApiDocumentShapeNormalizer;
 use Studio\Gesso\Internal\SpecDocumentDecoder;
 use Studio\Gesso\Internal\YamlAvailability;
 use Studio\Gesso\OpenApiVersion;
@@ -235,12 +236,14 @@ final class OpenApiSpecLoader
         }
 
         try {
-            $resolved = OpenApiRefResolver::resolve(
-                $decoded,
-                $canonicalPath,
-                self::$httpClient,
-                self::$requestFactory,
-                self::$allowRemoteRefs,
+            $resolved = OpenApiDocumentShapeNormalizer::normalizeResolvedDocument(
+                OpenApiRefResolver::resolve(
+                    $decoded,
+                    $canonicalPath,
+                    self::$httpClient,
+                    self::$requestFactory,
+                    self::$allowRemoteRefs,
+                ),
             );
         } catch (InvalidOpenApiSpecException $e) {
             // The resolver is stateless and therefore cannot know which spec

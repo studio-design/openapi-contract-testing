@@ -129,6 +129,23 @@ class OpenApiEndpointExplorerTest extends TestCase
     }
 
     #[Test]
+    public function generates_required_property_named_security_with_empty_schema(): void
+    {
+        $cases = OpenApiEndpointExplorer::explore(
+            'fuzz-empty-security-property',
+            'POST',
+            '/payload',
+            cases: 1,
+            seed: 1,
+        );
+
+        foreach ($cases as $case) {
+            $this->assertIsArray($case->body);
+            $this->assertArrayHasKey('security', $case->body);
+        }
+    }
+
+    #[Test]
     public function generates_query_parameter_values(): void
     {
         // POST /v1/pets has a `dryRun` boolean query parameter.

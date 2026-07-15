@@ -12,7 +12,7 @@ use Studio\Gesso\Internal\SpecDocumentDecoder;
 final class SpecDocumentDecoderTest extends TestCase
 {
     #[Test]
-    public function json_preserves_empty_object_shape_inside_security_list(): void
+    public function json_temporarily_preserves_nested_empty_object_shapes(): void
     {
         $decoded = SpecDocumentDecoder::decodeJson(
             '{"security":[{},[]],"schema":{}}',
@@ -21,11 +21,11 @@ final class SpecDocumentDecoderTest extends TestCase
 
         $this->assertInstanceOf(stdClass::class, $decoded['security'][0]);
         $this->assertSame([], $decoded['security'][1]);
-        $this->assertSame([], $decoded['schema']);
+        $this->assertInstanceOf(stdClass::class, $decoded['schema']);
     }
 
     #[Test]
-    public function yaml_preserves_empty_object_shape_inside_security_list(): void
+    public function yaml_temporarily_preserves_nested_empty_object_shapes(): void
     {
         $decoded = SpecDocumentDecoder::decodeYaml(
             "security:\n  - {}\n  - []\nschema: {}\n",
@@ -34,6 +34,6 @@ final class SpecDocumentDecoderTest extends TestCase
 
         $this->assertInstanceOf(stdClass::class, $decoded['security'][0]);
         $this->assertSame([], $decoded['security'][1]);
-        $this->assertSame([], $decoded['schema']);
+        $this->assertInstanceOf(stdClass::class, $decoded['schema']);
     }
 }

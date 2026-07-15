@@ -702,13 +702,17 @@ class OpenApiSpecLoaderTest extends TestCase
                 $scratchDir . '/security-shapes-json.json',
                 '{"openapi":"3.2.0","info":{"title":"Shapes","version":"1.0.0"},'
                 . '"paths":{"/anonymous":{"get":{"security":[{}]}},'
-                . '"/malformed":{"get":{"security":[[]]}}}}',
+                . '"/malformed":{"get":{"security":[[]]}}},'
+                . '"components":{"schemas":{"Payload":{"type":"object","required":["security"],'
+                . '"properties":{"security":{}}}}}}',
             );
             file_put_contents(
                 $scratchDir . '/security-shapes-yaml.yaml',
                 "openapi: 3.2.0\ninfo:\n  title: Shapes\n  version: 1.0.0\npaths:\n"
                 . "  /anonymous:\n    get:\n      security:\n        - {}\n"
-                . "  /malformed:\n    get:\n      security:\n        - []\n",
+                . "  /malformed:\n    get:\n      security:\n        - []\n"
+                . "components:\n  schemas:\n    Payload:\n      type: object\n      required: [security]\n"
+                . "      properties:\n        security: {}\n",
             );
 
             OpenApiSpecLoader::configure($scratchDir);
@@ -717,6 +721,7 @@ class OpenApiSpecLoaderTest extends TestCase
 
                 $this->assertInstanceOf(stdClass::class, $spec['paths']['/anonymous']['get']['security'][0]);
                 $this->assertSame([], $spec['paths']['/malformed']['get']['security'][0]);
+                $this->assertSame([], $spec['components']['schemas']['Payload']['properties']['security']);
             }
         } finally {
             @unlink($scratchDir . '/security-shapes-json.json');
