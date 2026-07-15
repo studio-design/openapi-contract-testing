@@ -312,7 +312,8 @@ same string.
 | `skip_request_validation_response_codes` | `['422', '400']` |
 
 The `openapi:routes` command accepts `--spec`, `--prefix`, `--middleware`,
-`--domain`, `--exclude-route`, `--format=text|json`,
+`--domain`, `--exclude-route`, `--exclude-operation`,
+`--exclude-openapi-path`, `--format=text|json`,
 `--fail-on-undocumented`, and `--fail-on-unimplemented`. It uses Laravel's
 standard success (`0`), failure (`1`), and invalid usage (`2`) exit codes.
 
@@ -397,7 +398,7 @@ channel.
 | Coverage tracker state | `version: 1` | V2 retains version 1 and accepts supported v1 payloads |
 | Strict-required tracker state | `version: 2` | V2 retains version 2 and preserves the documented import boundary |
 | Sidecar envelope | `envelopeVersion: 2` | V2 retains version 2 and continues accepting legacy bare coverage v1 payloads |
-| Laravel route parity JSON | `schema_version: 1` | V2 retains version 1 because neither identity nor shape changes |
+| Laravel route parity JSON | `schema_version: 1` | V2 emits schema 2 because `external_operations` is added to the result and summary |
 | Doctor JSON | `schemaVersion: 1` | V2 retains version 1 because neither identity nor shape changes |
 | Sidecar filenames | `part-*.json`, failure marker `failed-*` | Keep reader compatibility during mixed runs |
 
@@ -405,7 +406,8 @@ Coverage JSON v1 documents `generated_at`, `tool`, `aggregate`, and `specs`.
 The per-spec contract includes aggregate counts and endpoint rows with response
 states and unexpected observations. Laravel route parity JSON includes `specs`,
 `summary`, `matched`, `documented_but_not_registered`,
-`registered_but_undocumented`, `ambiguous`, and `unsupported`.
+`external_operations`, `registered_but_undocumented`, `ambiguous`, and
+`unsupported`.
 
 The sidecar compatibility boundary is now explicit in the
 [versioning policy](../versioning.md#versioned-sidecar-compatibility): the PHP
@@ -420,12 +422,12 @@ identity. The sidecar fixture pins coverage tracker state v1 and strict-required
 tracker state v2, and consumer-style tests verify both the envelope reader and
 the legacy bare-coverage reader path.
 
-V2 decision: only coverage JSON advances its schema version. Its documented
-`tool.name` behaves as a fixed value, so changing it to `studio-design/gesso` is
-an incompatible contract change even though the surrounding object shape stays
-the same. Format versions are otherwise independent of the Composer major:
-Doctor JSON, route parity JSON, the sidecar envelope, and both tracker states do
-not carry the legacy identity and therefore retain their existing versions.
+V2 decision: coverage JSON advances because its documented `tool.name` changes
+to `studio-design/gesso`. Route parity JSON advances independently because its
+shape gains the `external_operations` category. Format versions remain
+independent of the Composer major: Doctor JSON, the sidecar envelope, and both
+tracker states retain their existing versions because their contracts do not
+change.
 
 ## Diagnostic categories and embedded identifiers
 
