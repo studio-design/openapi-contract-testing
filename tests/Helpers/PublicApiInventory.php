@@ -132,12 +132,7 @@ final class PublicApiInventory
                 continue;
             }
 
-            $properties[$property->getName()] = [
-                'type' => $property->hasType() ? (string) $property->getType() : null,
-                'static' => $property->isStatic(),
-                'readonly' => $property->isReadOnly(),
-                'default' => $property->hasDefaultValue() ? self::normaliseValue($property->getDefaultValue()) : ['unavailable' => true],
-            ];
+            $properties[$property->getName()] = self::describeProperty($property);
         }
         ksort($properties);
 
@@ -165,7 +160,7 @@ final class PublicApiInventory
             }
         }
 
-        return [
+        $description = [
             'kind' => $reflection->isTrait() ? 'trait' : ($reflection->isInterface() ? 'interface' : ($reflection->isEnum() ? 'enum' : 'class')),
             'final' => $reflection->isFinal(),
             'abstract' => $reflection->isAbstract(),
@@ -178,6 +173,76 @@ final class PublicApiInventory
             'attributes' => self::describeAttributes($reflection->getAttributes()),
             'backing_type' => $backingType,
             'cases' => $cases,
+            'constants' => $constants,
+            'properties' => $properties,
+            'methods' => $methods,
+        ];
+
+        if ($reflection->isTrait()) {
+            $description['trait_composition'] = self::describeTraitComposition($reflection);
+        }
+
+        return $description;
+    }
+
+    /**
+     * Trait members of every visibility are copied into the consuming class.
+     * Their names and declarations can therefore conflict with consumer code
+     * even when they are protected or private.
+     *
+     * @param ReflectionClass<object> $reflection
+     *
+     * @return array<string, array<string, array<string, mixed>>>
+     */
+    private static function describeTraitComposition(ReflectionClass $reflection): array
+    {
+        $methods = [];
+        foreach ($reflection->getMethods() as $method) {
+            if ($method->getDeclaringClass()->getName() !== $reflection->getName() ||
+                self::isInternal($method->getDocComment())) {
+                continue;
+            }
+
+            $methods[$method->getName()] = [
+                'visibility' => self::visibility($method),
+                ...self::describeMethod($method),
+            ];
+        }
+        ksort($methods);
+
+        $properties = [];
+        foreach ($reflection->getProperties() as $property) {
+            if ($property->getDeclaringClass()->getName() !== $reflection->getName() ||
+                self::isInternal($property->getDocComment())) {
+                continue;
+            }
+
+            $properties[$property->getName()] = [
+                'visibility' => self::visibility($property),
+                ...self::describeProperty($property),
+                'attributes' => self::describeAttributes($property->getAttributes()),
+            ];
+        }
+        ksort($properties);
+
+        $constants = [];
+        foreach ($reflection->getReflectionConstants() as $constant) {
+            if ($constant->getDeclaringClass()->getName() !== $reflection->getName() ||
+                $constant->isEnumCase() ||
+                self::isInternal($constant->getDocComment())) {
+                continue;
+            }
+
+            $constants[$constant->getName()] = [
+                'visibility' => self::visibility($constant),
+                'final' => $constant->isFinal(),
+                'value' => self::normaliseValue($constant->getValue()),
+                'attributes' => self::describeAttributes($constant->getAttributes()),
+            ];
+        }
+        ksort($constants);
+
+        return [
             'constants' => $constants,
             'properties' => $properties,
             'methods' => $methods,
@@ -221,6 +286,23 @@ final class PublicApiInventory
             'attributes' => self::describeAttributes($method->getAttributes()),
             'parameters' => array_map(self::describeParameter(...), $method->getParameters()),
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private static function describeProperty(ReflectionProperty $property): array
+    {
+        return [
+            'type' => $property->hasType() ? (string) $property->getType() : null,
+            'static' => $property->isStatic(),
+            'readonly' => $property->isReadOnly(),
+            'default' => $property->hasDefaultValue() ? self::normaliseValue($property->getDefaultValue()) : ['unavailable' => true],
+        ];
+    }
+
+    private static function visibility(
+        ReflectionClassConstant|ReflectionMethod|ReflectionProperty $member,
+    ): string {
+        return $member->isPublic() ? 'public' : ($member->isProtected() ? 'protected' : 'private');
     }
 
     private static function describeReturnType(ReflectionMethod $method): ?string

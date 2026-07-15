@@ -3541,6 +3541,215 @@
                     }
                 ]
             }
+        },
+        "trait_composition": {
+            "constants": [],
+            "properties": {
+                "explicitOpenApiSpec": {
+                    "visibility": "private",
+                    "type": "?string",
+                    "static": false,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                }
+            },
+            "methods": {
+                "exploreEndpoint": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\Fuzz\\ExplorationCases",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "method",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "path",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "cases",
+                            "type": "int",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": 30,
+                            "attributes": []
+                        },
+                        {
+                            "name": "seed",
+                            "type": "?int",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": null,
+                            "attributes": []
+                        }
+                    ]
+                },
+                "exploreInvalidEndpoint": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\Fuzz\\ExplorationCases",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "method",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "path",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "expectedStatusClasses",
+                            "type": "array",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "cases",
+                            "type": "int",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": 30,
+                            "attributes": []
+                        },
+                        {
+                            "name": "seed",
+                            "type": "?int",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": null,
+                            "attributes": []
+                        }
+                    ]
+                },
+                "exploreSpec": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\Fuzz\\OpenApiSpecExploration",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "casesPerOperation",
+                            "type": "int",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": 30,
+                            "attributes": []
+                        },
+                        {
+                            "name": "seed",
+                            "type": "int",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": 1,
+                            "attributes": []
+                        }
+                    ]
+                },
+                "failExplore": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "never",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "message",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "openApiSpec": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "openApiSpecFallback": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "resolveOpenApiSpec": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                }
+            }
         }
     },
     "Studio\\Gesso\\Laravel\\GessoServiceProvider": {
@@ -3648,6 +3857,1025 @@
                 "return_type": "static",
                 "attributes": [],
                 "parameters": []
+            }
+        },
+        "trait_composition": {
+            "constants": {
+                "DUMMY_API_KEY_VALUE": {
+                    "visibility": "private",
+                    "final": false,
+                    "value": "test-api-key",
+                    "attributes": []
+                },
+                "DUMMY_BEARER_TOKEN": {
+                    "visibility": "private",
+                    "final": false,
+                    "value": "test-token",
+                    "attributes": []
+                }
+            },
+            "properties": {
+                "cachedMaxErrors": {
+                    "visibility": "private",
+                    "type": "?int",
+                    "static": true,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                },
+                "cachedRequestMaxErrors": {
+                    "visibility": "private",
+                    "type": "?int",
+                    "static": true,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                },
+                "cachedRequestValidator": {
+                    "visibility": "private",
+                    "type": "?Studio\\Gesso\\OpenApiRequestValidator",
+                    "static": true,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                },
+                "cachedSecuritySchemeIntrospector": {
+                    "visibility": "private",
+                    "type": "?Studio\\Gesso\\Validation\\Request\\SecuritySchemeIntrospector",
+                    "static": true,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                },
+                "cachedSkipRequestValidationResponseCodes": {
+                    "visibility": "private",
+                    "type": "?array",
+                    "static": true,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                },
+                "cachedSkipResponseCodes": {
+                    "visibility": "private",
+                    "type": "?array",
+                    "static": true,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                },
+                "cachedValidator": {
+                    "visibility": "private",
+                    "type": "?Studio\\Gesso\\OpenApiResponseValidator",
+                    "static": true,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                },
+                "explicitOpenApiSpec": {
+                    "visibility": "private",
+                    "type": "?string",
+                    "static": false,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                },
+                "skipNextRequestValidation": {
+                    "visibility": "private",
+                    "type": "bool",
+                    "static": false,
+                    "readonly": false,
+                    "default": false,
+                    "attributes": []
+                },
+                "skipNextResponseCodes": {
+                    "visibility": "private",
+                    "type": "array",
+                    "static": false,
+                    "readonly": false,
+                    "default": [],
+                    "attributes": []
+                },
+                "skipNextResponseValidation": {
+                    "visibility": "private",
+                    "type": "bool",
+                    "static": false,
+                    "readonly": false,
+                    "default": false,
+                    "attributes": []
+                },
+                "skipWarningHandler": {
+                    "visibility": "private",
+                    "type": null,
+                    "static": true,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                },
+                "validatedResponses": {
+                    "visibility": "private",
+                    "type": "?WeakMap",
+                    "static": true,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                }
+            },
+            "methods": {
+                "applyDiscriminatorEnforcementConfig": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "assertOpenApi": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "condition",
+                            "type": "bool",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "message",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "assertResponseMatchesOpenApiSchema": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "response",
+                            "type": "Illuminate\\Testing\\TestResponse",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "method",
+                            "type": "?Studio\\Gesso\\HttpMethod",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": null,
+                            "attributes": []
+                        },
+                        {
+                            "name": "path",
+                            "type": "?string",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": null,
+                            "attributes": []
+                        },
+                        {
+                            "name": "extraSkipResponseCodes",
+                            "type": "array",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": [],
+                            "attributes": []
+                        }
+                    ]
+                },
+                "buildOneOffValidator": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\OpenApiResponseValidator",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "extraSkipResponseCodes",
+                            "type": "array",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "createTestResponse": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Illuminate\\Testing\\TestResponse",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "response",
+                            "type": null,
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "request",
+                            "type": null,
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": null,
+                            "attributes": []
+                        }
+                    ]
+                },
+                "dispatchSkipWarning": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "message",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "emitSkipOpenApiWarning": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "attribute",
+                            "type": "Studio\\Gesso\\Attribute\\SkipOpenApi",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "emitSkipResponseCodeWarning": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "extractJsonBody": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\DecodedBody",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "content",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "contentType",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "extractRequestBody": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\DecodedBody",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "request",
+                            "type": "Symfony\\Component\\HttpFoundation\\Request",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "contentType",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "failOpenApi": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "never",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "message",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "findOperationForRequest": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "?array",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "paths",
+                            "type": "array",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "method",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "path",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "findSkipOpenApiAttribute": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "?Studio\\Gesso\\Attribute\\SkipOpenApi",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "getOrCreateRequestValidator": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\OpenApiRequestValidator",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "getOrCreateValidator": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\OpenApiResponseValidator",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "getSecuritySchemeIntrospector": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\Validation\\Request\\SecuritySchemeIntrospector",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "isAlreadyValidated": {
+                    "visibility": "private",
+                    "static": true,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "bool",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "response",
+                            "type": "Illuminate\\Testing\\TestResponse",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "signature",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "isAutoAssertEnabled": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "bool",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "isAutoInjectDummyBearerEnabled": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "bool",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "isAutoInjectDummyCredentialsEnabled": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "bool",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "isAutoValidateRequestEnabled": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "bool",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "markValidated": {
+                    "visibility": "private",
+                    "static": true,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "response",
+                            "type": "Illuminate\\Testing\\TestResponse",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "signature",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "maybeAutoAssertOpenApiSchema": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "response",
+                            "type": "Illuminate\\Testing\\TestResponse",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "method",
+                            "type": "?Studio\\Gesso\\HttpMethod",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": null,
+                            "attributes": []
+                        },
+                        {
+                            "name": "path",
+                            "type": "?string",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": null,
+                            "attributes": []
+                        }
+                    ]
+                },
+                "maybeAutoValidateOpenApiRequest": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "request",
+                            "type": "?Symfony\\Component\\HttpFoundation\\Request",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "method",
+                            "type": "?Studio\\Gesso\\HttpMethod",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": null,
+                            "attributes": []
+                        },
+                        {
+                            "name": "path",
+                            "type": "?string",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": null,
+                            "attributes": []
+                        },
+                        {
+                            "name": "responseStatusCode",
+                            "type": "?int",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": null,
+                            "attributes": []
+                        }
+                    ]
+                },
+                "normalizeSkipCode": {
+                    "visibility": "private",
+                    "static": true,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "code",
+                            "type": "string|int",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "openApiSpec": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "openApiSpecFallback": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "resolveAutoInjectCredentials": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "array",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "specName",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "method",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "path",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "headers",
+                            "type": "array",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "cookies",
+                            "type": "array",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "queryParams",
+                            "type": "array",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "resolveBoolConfig": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "bool",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "key",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "default",
+                            "type": "bool",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": false,
+                            "attributes": []
+                        }
+                    ]
+                },
+                "resolveMaxErrors": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "int",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "resolveOpenApiSpec": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "resolveSkipRequestValidationResponseCodes": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "array",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "resolveSkipResponseCodes": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "array",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "runRequestAssertion": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "request",
+                            "type": "Symfony\\Component\\HttpFoundation\\Request",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "method",
+                            "type": "Studio\\Gesso\\HttpMethod",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "path",
+                            "type": "?string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "responseStatusCode",
+                            "type": "?int",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "shouldSkipOpenApi": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "bool",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "skipResponseCode": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "static",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "codes",
+                            "type": "array|string|int",
+                            "optional": true,
+                            "variadic": true,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "slotIsAlreadyPopulated": {
+                    "visibility": "private",
+                    "static": true,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "bool",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "value",
+                            "type": "mixed",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "withoutRequestValidation": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "static",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "withoutResponseValidation": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "static",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "withoutValidation": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "static",
+                    "attributes": [],
+                    "parameters": []
+                }
             }
         }
     },
@@ -4437,6 +5665,34 @@
                     }
                 ]
             }
+        },
+        "trait_composition": {
+            "constants": [],
+            "properties": [],
+            "methods": {
+                "assertNoEnumDrift": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "enumFqcns",
+                            "type": "array",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                }
+            }
         }
     },
     "Studio\\Gesso\\PHPUnit\\OpenApiCoverageExtension": {
@@ -4670,6 +5926,336 @@
                         "attributes": []
                     }
                 ]
+            }
+        },
+        "trait_composition": {
+            "constants": [],
+            "properties": {
+                "cachedPsr7SpecName": {
+                    "visibility": "private",
+                    "type": "?string",
+                    "static": false,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                },
+                "cachedPsr7Validator": {
+                    "visibility": "private",
+                    "type": "?Studio\\Gesso\\Psr7\\OpenApiPsr7Validator",
+                    "static": false,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                },
+                "explicitOpenApiSpec": {
+                    "visibility": "private",
+                    "type": "?string",
+                    "static": false,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                }
+            },
+            "methods": {
+                "assertPsr7": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "condition",
+                            "type": "bool",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "message",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "assertPsr7ExchangeMatchesOpenApiSchema": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "request",
+                            "type": "Psr\\Http\\Message\\RequestInterface",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "response",
+                            "type": "Psr\\Http\\Message\\ResponseInterface",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "assertPsr7RequestMatchesOpenApiSchema": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "request",
+                            "type": "Psr\\Http\\Message\\RequestInterface",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "responseStatusCode",
+                            "type": "?int",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": null,
+                            "attributes": []
+                        }
+                    ]
+                },
+                "assertPsr7ResponseForOperationMatchesOpenApiSchema": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "method",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "requestPath",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "response",
+                            "type": "Psr\\Http\\Message\\ResponseInterface",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "assertPsr7ResponseMatchesOpenApiSchema": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "request",
+                            "type": "Psr\\Http\\Message\\RequestInterface",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "response",
+                            "type": "Psr\\Http\\Message\\ResponseInterface",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "assertPsr7Result": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "result",
+                            "type": "Studio\\Gesso\\OpenApiValidationResult",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "prefix",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "failPsr7": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "never",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "message",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "openApiMaxErrors": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "int",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "openApiSkipRequestValidationResponseCodes": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "array",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "openApiSkipResponseCodes": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "array",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "openApiSpec": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "openApiSpecFallback": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "psr7Validator": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\Psr7\\OpenApiPsr7Validator",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "resolveOpenApiSpec": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                }
             }
         }
     },
@@ -5327,7 +6913,42 @@
         "cases": [],
         "constants": [],
         "properties": [],
-        "methods": []
+        "methods": [],
+        "trait_composition": {
+            "constants": [],
+            "properties": {
+                "explicitOpenApiSpec": {
+                    "visibility": "private",
+                    "type": "?string",
+                    "static": false,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                }
+            },
+            "methods": {
+                "openApiSpecFallback": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "resolveOpenApiSpec": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                }
+            }
+        }
     },
     "Studio\\Gesso\\Symfony\\OpenApiAssertions": {
         "kind": "trait",
@@ -5447,6 +7068,332 @@
                         "attributes": []
                     }
                 ]
+            }
+        },
+        "trait_composition": {
+            "constants": [],
+            "properties": {
+                "cachedSymfonyRequestValidator": {
+                    "visibility": "private",
+                    "type": "?Studio\\Gesso\\OpenApiRequestValidator",
+                    "static": false,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                },
+                "cachedSymfonyResponseValidator": {
+                    "visibility": "private",
+                    "type": "?Studio\\Gesso\\OpenApiResponseValidator",
+                    "static": false,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                },
+                "explicitOpenApiSpec": {
+                    "visibility": "private",
+                    "type": "?string",
+                    "static": false,
+                    "readonly": false,
+                    "default": null,
+                    "attributes": []
+                }
+            },
+            "methods": {
+                "assertClientMatchesOpenApiSchema": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "client",
+                            "type": "Symfony\\Component\\HttpKernel\\HttpKernelBrowser",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "extraSkipResponseCodes",
+                            "type": "array",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": [],
+                            "attributes": []
+                        }
+                    ]
+                },
+                "assertOpenApi": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "condition",
+                            "type": "bool",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "message",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "assertRequestMatchesOpenApiSchema": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "request",
+                            "type": "Symfony\\Component\\HttpFoundation\\Request",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "responseStatusCode",
+                            "type": "?int",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": null,
+                            "attributes": []
+                        }
+                    ]
+                },
+                "assertResponseMatchesOpenApiSchema": {
+                    "visibility": "public",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "void",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "request",
+                            "type": "Symfony\\Component\\HttpFoundation\\Request",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "response",
+                            "type": "Symfony\\Component\\HttpFoundation\\Response",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "extraSkipResponseCodes",
+                            "type": "array",
+                            "optional": true,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": [],
+                            "attributes": []
+                        }
+                    ]
+                },
+                "extractSymfonyJsonBody": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\DecodedBody",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "content",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "contentType",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        },
+                        {
+                            "name": "subject",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "failOpenApi": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "never",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "message",
+                            "type": "string",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "openApiMaxErrors": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "int",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "openApiSpec": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "openApiSpecFallback": {
+                    "visibility": "protected",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "resolveOpenApiSpec": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "resolveSymfonyHttpMethod": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\HttpMethod",
+                    "attributes": [],
+                    "parameters": [
+                        {
+                            "name": "request",
+                            "type": "Symfony\\Component\\HttpFoundation\\Request",
+                            "optional": false,
+                            "variadic": false,
+                            "by_reference": false,
+                            "default": {
+                                "unavailable": true
+                            },
+                            "attributes": []
+                        }
+                    ]
+                },
+                "resolveSymfonyOpenApiSpec": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "string",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "symfonyRequestValidator": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\OpenApiRequestValidator",
+                    "attributes": [],
+                    "parameters": []
+                },
+                "symfonyResponseValidator": {
+                    "visibility": "private",
+                    "static": false,
+                    "final": false,
+                    "abstract": false,
+                    "returns_reference": false,
+                    "return_type": "Studio\\Gesso\\OpenApiResponseValidator",
+                    "attributes": [],
+                    "parameters": []
+                }
             }
         }
     },
