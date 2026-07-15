@@ -83,9 +83,10 @@ final class HttpRefLoader
                 InvalidOpenApiSpecReason::RemoteRefFetchFailed,
                 sprintf('HTTP $ref fetch failed: %s (%s)', $safeUrl, $safeTransportMessage),
                 ref: $safeUrl,
-                // Exception stringification includes the entire previous chain.
-                // Do not reattach an exception whose message required redaction.
-                previous: $safeTransportMessage === $e->getMessage() ? $e : null,
+                // Exception stringification includes every nested previous
+                // message. A PSR-18 client may wrap a credential-bearing
+                // exception below a harmless top-level message, so the raw
+                // transport chain cannot be safely reattached here.
             );
         }
 

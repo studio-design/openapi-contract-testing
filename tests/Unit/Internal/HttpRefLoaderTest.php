@@ -9,6 +9,7 @@ use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
+use RuntimeException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Studio\Gesso\Internal\HttpRefLoader;
@@ -173,7 +174,7 @@ class HttpRefLoaderTest extends TestCase
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
             $this->assertStringContainsString('connection refused', $e->getMessage());
-            $this->assertNotNull($e->getPrevious());
+            $this->assertNull($e->getPrevious());
         }
     }
 
@@ -372,6 +373,34 @@ class HttpRefLoaderTest extends TestCase
             $this->assertStringNotContainsString('secret', $e->getMessage());
             $this->assertStringContainsString('https://example.com/private/pet.json?token=[redacted]', $e->getMessage());
             $this->assertSame('https://example.com/private/pet.json?token=[redacted]', $e->ref);
+            $this->assertNull($e->getPrevious());
+        }
+    }
+
+    #[Test]
+    public function does_not_reconnect_a_sensitive_nested_transport_exception(): void
+    {
+        $url = 'https://example.com/pet.json';
+        $client = new FakeHttpClient([
+            $url => static function (): Response {
+                $cause = new RuntimeException(
+                    'request failed for https://alice:secret@example.com/private.json?token=query-secret',
+                );
+
+                throw new FakeHttpClientUnexpectedRequest('transport failed', 0, $cause);
+            },
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $rendered = (string) $e;
+
+            $this->assertStringContainsString('transport failed', $rendered);
+            $this->assertStringNotContainsString('alice', $rendered);
+            $this->assertStringNotContainsString('secret', $rendered);
             $this->assertNull($e->getPrevious());
         }
     }
