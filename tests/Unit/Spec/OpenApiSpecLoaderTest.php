@@ -9,11 +9,13 @@ use GuzzleHttp\Psr7\HttpFactory;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Studio\Gesso\Exception\SpecFileNotFoundException;
 use Studio\Gesso\Internal\YamlAvailability;
 use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Validation\Request\SecurityValidator;
 use Symfony\Component\Yaml\Yaml;
 
 use function class_exists;
@@ -686,6 +688,60 @@ class OpenApiSpecLoaderTest extends TestCase
         } finally {
             @unlink($scratchDir . '/dual.json');
             @unlink($scratchDir . '/dual.yaml');
+            @rmdir($scratchDir);
+        }
+    }
+
+    #[Test]
+    public function load_preserves_security_empty_object_and_list_shapes_for_json_and_yaml(): void
+    {
+        $scratchDir = sys_get_temp_dir() . '/openapi-spec-loader-test-' . uniqid('', true);
+        mkdir($scratchDir);
+
+        try {
+            file_put_contents(
+                $scratchDir . '/security-shapes-json.json',
+                '{"openapi":"3.2.0","info":{"title":"Shapes","version":"1.0.0"},'
+                . '"paths":{"/anonymous":{"get":{"security":[{}]}},'
+                . '"/malformed":{"get":{"security":[[]]}},'
+                . '"/malformed-container":{"get":{"security":{}}}},'
+                . '"components":{"schemas":{"Payload":{"type":"object","required":["security"],'
+                . '"properties":{"security":{}}}}}}',
+            );
+            file_put_contents(
+                $scratchDir . '/security-shapes-yaml.yaml',
+                "openapi: 3.2.0\ninfo:\n  title: Shapes\n  version: 1.0.0\npaths:\n"
+                . "  /anonymous:\n    get:\n      security:\n        - {}\n"
+                . "  /malformed:\n    get:\n      security:\n        - []\n"
+                . "  /malformed-container:\n    get:\n      security: {}\n"
+                . "components:\n  schemas:\n    Payload:\n      type: object\n      required: [security]\n"
+                . "      properties:\n        security: {}\n",
+            );
+
+            OpenApiSpecLoader::configure($scratchDir);
+            foreach (['security-shapes-json', 'security-shapes-yaml'] as $specName) {
+                $spec = OpenApiSpecLoader::load($specName);
+
+                $this->assertInstanceOf(stdClass::class, $spec['paths']['/anonymous']['get']['security'][0]);
+                $this->assertSame([], $spec['paths']['/malformed']['get']['security'][0]);
+                $this->assertInstanceOf(stdClass::class, $spec['paths']['/malformed-container']['get']['security']);
+                $this->assertSame([], $spec['components']['schemas']['Payload']['properties']['security']);
+
+                $errors = (new SecurityValidator())->validate(
+                    'GET',
+                    '/malformed-container',
+                    $spec,
+                    $spec['paths']['/malformed-container']['get'],
+                    [],
+                    [],
+                    [],
+                );
+                $this->assertCount(1, $errors);
+                $this->assertStringContainsString('must be a list of requirement objects', $errors[0]);
+            }
+        } finally {
+            @unlink($scratchDir . '/security-shapes-json.json');
+            @unlink($scratchDir . '/security-shapes-yaml.yaml');
             @rmdir($scratchDir);
         }
     }

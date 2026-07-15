@@ -6,6 +6,7 @@ namespace Studio\Gesso\Spec;
 
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
+use stdClass;
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Studio\Gesso\Internal\ExternalRefLoader;
@@ -16,6 +17,7 @@ use function array_key_exists;
 use function array_pop;
 use function explode;
 use function get_debug_type;
+use function get_object_vars;
 use function implode;
 use function in_array;
 use function is_array;
@@ -633,6 +635,7 @@ final class OpenApiRefResolver
             );
         }
 
+        $target = self::normalizeEmptyObjectRefTarget($target);
         if (!is_array($target)) {
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::NonObjectRefTarget,
@@ -831,6 +834,7 @@ final class OpenApiRefResolver
                 );
             }
 
+            $target = self::normalizeEmptyObjectRefTarget($target);
             if (!is_array($target)) {
                 throw new InvalidOpenApiSpecException(
                     InvalidOpenApiSpecReason::NonObjectRefTarget,
@@ -860,6 +864,15 @@ final class OpenApiRefResolver
         $target = $newRoot;
         self::walk($target, $newRoot, [...$chain, $chainKey], false, $context, $documentCache);
         $node = $target;
+    }
+
+    private static function normalizeEmptyObjectRefTarget(mixed $target): mixed
+    {
+        if ($target instanceof stdClass && get_object_vars($target) === []) {
+            return [];
+        }
+
+        return $target;
     }
 
     /**

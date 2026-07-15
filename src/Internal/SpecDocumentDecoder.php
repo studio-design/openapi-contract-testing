@@ -8,6 +8,7 @@ use const JSON_ERROR_DEPTH;
 use const JSON_THROW_ON_ERROR;
 
 use JsonException;
+use stdClass;
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Symfony\Component\Yaml\Exception\ParseException;
@@ -15,6 +16,7 @@ use Symfony\Component\Yaml\Yaml;
 use Throwable;
 
 use function get_debug_type;
+use function get_object_vars;
 use function is_array;
 use function json_decode;
 use function sprintf;
@@ -43,7 +45,7 @@ final class SpecDocumentDecoder
     public static function decodeJson(string $content, string $context): array
     {
         try {
-            $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
+            $decoded = json_decode($content, false, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException $e) {
             // The depth-limit case has a different ergonomic story than a
             // syntax error — surface it explicitly so the user knows the
@@ -65,7 +67,7 @@ final class SpecDocumentDecoder
             );
         }
 
-        return self::ensureMappingRoot($decoded, $context);
+        return self::ensureMappingRoot(self::normalizeObjectMaps($decoded), $context);
     }
 
     /**
@@ -85,7 +87,7 @@ final class SpecDocumentDecoder
         }
 
         try {
-            $decoded = Yaml::parse($content);
+            $decoded = Yaml::parse($content, Yaml::PARSE_OBJECT_FOR_MAP);
         } catch (ParseException $e) {
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::MalformedYaml,
@@ -108,7 +110,49 @@ final class SpecDocumentDecoder
             );
         }
 
-        return self::ensureMappingRoot($decoded, $context);
+        return self::ensureMappingRoot(self::normalizeObjectMaps($decoded), $context);
+    }
+
+    /**
+     * Convert non-empty parsed object maps back to the array representation
+     * used by the validator, while temporarily retaining every nested empty
+     * object. PHP associative decoding otherwise collapses both `{}` and `[]`
+     * to `[]` before the document structure is known.
+     *
+     * @internal Shared with the root spec loader so root and external `$ref`
+     *           documents retain identical collection-shape semantics.
+     */
+    public static function normalizeObjectMaps(mixed $decoded): mixed
+    {
+        return self::normalizeValue($decoded, true);
+    }
+
+    private static function normalizeValue(mixed $value, bool $isRoot): mixed
+    {
+        if ($value instanceof stdClass) {
+            $properties = get_object_vars($value);
+            if (!$isRoot && $properties === []) {
+                return $value;
+            }
+
+            $normalized = [];
+            foreach ($properties as $key => $child) {
+                $normalized[$key] = self::normalizeValue($child, false);
+            }
+
+            return $normalized;
+        }
+
+        if (!is_array($value)) {
+            return $value;
+        }
+
+        $normalized = [];
+        foreach ($value as $key => $child) {
+            $normalized[$key] = self::normalizeValue($child, false);
+        }
+
+        return $normalized;
     }
 
     /** @return array<string, mixed> */

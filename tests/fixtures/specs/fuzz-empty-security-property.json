@@ -1,0 +1,34 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Fuzz empty security property schema",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/payload": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "security"
+                ],
+                "properties": {
+                  "security": {}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Accepted"
+          }
+        }
+      }
+    }
+  }
+}
