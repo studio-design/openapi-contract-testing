@@ -20,11 +20,13 @@ use Studio\Gesso\HttpMethod;
 use Studio\Gesso\OpenApiRequestValidator;
 use Studio\Gesso\Spec\OpenApiSpecLoader;
 
+use function array_unique;
+use function count;
 use function json_decode;
 use function json_encode;
 use function parse_str;
 use function parse_url;
-use function str_repeat;
+use function str_split;
 
 class OpenApiEndpointExplorerTest extends TestCase
 {
@@ -198,17 +200,52 @@ class OpenApiEndpointExplorerTest extends TestCase
     #[Test]
     public function generates_fixed_quantifier_pattern_for_query_parameter(): void
     {
-        $cases = OpenApiEndpointExplorer::explore(
+        $first = OpenApiEndpointExplorer::explore(
             'fuzz-fixed-quantifier-query',
             'GET',
             '/oauth/callback',
-            cases: 1,
-            seed: 1,
+            cases: 3,
+            seed: 42,
+        );
+        $replayed = OpenApiEndpointExplorer::explore(
+            'fuzz-fixed-quantifier-query',
+            'GET',
+            '/oauth/callback',
+            cases: 3,
+            seed: 42,
         );
 
-        foreach ($cases as $case) {
-            $this->assertSame(str_repeat('a', 64), $case->query['state']);
+        $states = [];
+        $validator = new OpenApiRequestValidator();
+        foreach ($first as $case) {
+            $states[] = $case->query['state'];
+            $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $case->query['state']);
+            $uri = $case->uri();
+            $path = parse_url($uri, PHP_URL_PATH);
+            $queryString = parse_url($uri, PHP_URL_QUERY);
+            $this->assertIsString($path);
+            $this->assertIsString($queryString);
+            $query = [];
+            parse_str($queryString, $query);
+            $result = $validator->validate(
+                'fuzz-fixed-quantifier-query',
+                'GET',
+                $path,
+                $query,
+                [],
+                null,
+            );
+            $this->assertTrue($result->isValid(), $result->errorMessage());
         }
+
+        $replayedStates = [];
+        foreach ($replayed as $case) {
+            $replayedStates[] = $case->query['state'];
+        }
+
+        $this->assertSame($states, $replayedStates);
+        $this->assertCount(3, array_unique($states));
+        $this->assertGreaterThan(1, count(array_unique(str_split($states[1]))));
     }
 
     #[Test]
