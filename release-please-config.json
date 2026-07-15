@@ -6,11 +6,13 @@
   "include-v-in-tag": true,
   "include-component-in-tag": false,
   "draft": false,
-  "prerelease": false,
+  "versioning": "prerelease",
+  "prerelease-type": "beta",
+  "prerelease": true,
   "changelog-path": "CHANGELOG.md",
   "packages": {
     ".": {
-      "package-name": "openapi-contract-testing"
+      "package-name": "gesso"
     }
   }
 }

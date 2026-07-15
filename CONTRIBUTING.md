@@ -110,6 +110,60 @@ version per package path on each target branch; this repo is single-package so
 it stays `{ ".": "X.Y.Z" }`. The value may differ between `main` and `1.x`.
 The `.` key is the bot's package-root identifier; do not rename or duplicate it.
 
+### Gesso 2.0 beta and stable promotion
+
+The first release of the new `studio-design/gesso` package uses a beta stage so
+the published artifact can be tested before the stable compatibility promise.
+This is a temporary `main`-branch procedure; the `1.x` branch continues its
+normal stable patch flow from its own release configuration.
+
+1. Close any open stable v2 release PR as obsolete. Changing the release
+   component from the legacy package name to `gesso` changes release-please's
+   bot branch, so it cannot safely update that old PR in place. Never merge or
+   manually edit the obsolete release PR.
+2. Register `studio-design/gesso` on Packagist from this GitHub repository.
+   Confirm that its `dev-main` metadata reports the new package name and source
+   repository. Do not mark the old package abandoned yet.
+3. Merge the beta-readiness PR with this footer in an actual commit message:
+
+   ```text
+   Release-As: 2.0.0-beta.1
+   ```
+
+   The `main` configuration must use `versioning: prerelease`,
+   `prerelease-type: beta`, and `prerelease: true`. The footer fixes the first
+   release at `2.0.0-beta.1`; later beta fixes increment the prerelease number.
+4. Wait for the bot-managed release PR to refresh. Before merging it, verify
+   that it proposes `2.0.0-beta.1`, changes only release-please-owned files,
+   and has a green supported matrix.
+5. Merge that release PR. Verify all four records agree: the `v2.0.0-beta.1`
+   git tag, the GitHub Release marked **Pre-release**, the manifest value, and
+   the Packagist version/source reference.
+6. Test the Packagist artifact in a clean project with
+   `composer require --dev "studio-design/gesso:^2.0@beta"`. Run the repository
+   examples and at least one representative downstream migration against the
+   published package rather than a path repository. Ship any corrections as
+   normal PRs and publish another beta through release-please when necessary.
+7. To promote the accepted beta, open a normal PR that changes only
+   `prerelease` to `false` (keep `versioning: prerelease`) and updates the
+   corresponding invariant test. Its actual commit message must contain:
+
+   ```text
+   Release-As: 2.0.0
+   ```
+
+   After merge, verify that the refreshed release PR proposes stable `2.0.0`
+   and repeat the tag, GitHub Release, manifest, Packagist, clean-install, and
+   example checks before announcing general availability.
+8. Only after the stable package is installable and verified, mark
+   `studio-design/openapi-contract-testing` abandoned on Packagist with
+   `studio-design/gesso` as its suggested replacement. Do not delete its tags
+   or releases; v1 remains supported through its documented lifecycle.
+
+Do not merge a stable `2.0.0` release PR while `prerelease` is `true`, while the
+new Packagist package is unregistered, or before the published beta artifact
+has passed the clean-consumer checks.
+
 ### Maintenance branches and backports
 
 After v1.10.0 is released, `main` is the v2 development branch and `1.x` is the
