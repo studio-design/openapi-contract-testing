@@ -78,7 +78,7 @@ See [UPGRADING.md](https://github.com/studio-design/gesso/blob/main/UPGRADING.md
 
 | Component | Supported |
 | --- | --- |
-| PHP runtime | v2.x: 8.3, 8.4, 8.5 (CI matrix). v1.x: `^8.2`, subject to the lifecycle below. |
+| PHP runtime | v2.x — CI: 8.3, 8.4, 8.5; Composer: `^8.3`. v1.x — CI: 8.2, 8.3, 8.4; Composer: `^8.2`, subject to the lifecycle below. |
 | PHPUnit | v2.x: 12.x, 13.x. v1.x: 11.x, 12.x, 13.x. Each line is covered by its branch CI matrix. |
 | `opis/json-schema` | `^2.6` for v1.x and v2.x. A jump to `^3` would be a SemVer-major. |
 | Laravel (optional adapter) | Whatever `orchestra/testbench` `^9 \|\| ^10 \|\| ^11` supports. |
