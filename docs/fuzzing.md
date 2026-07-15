@@ -151,7 +151,7 @@ fuzz generator defect` diagnostic instead of sending invalid data to the API.
 | Strategy | Valid generation | Targeted invalid mutation |
 |---|---|---|
 | Scalars | `type`, `const`, `enum`, nullable branches | wrong type, const/enum miss |
-| Strings | min/max length, common regex patterns (including anchored character classes with fixed quantifiers, FQDN labels with a fixed domain suffix, and phone-number alternations), Unicode code points, Faker-backed email/UUID/date/time/URI/host/IP formats | below/above length, pattern miss, invalid recognized format |
+| Strings | min/max length, common regex patterns (including anchored character classes with fixed or `+` quantifiers, FQDN labels with a fixed domain suffix, and phone-number alternations), Unicode code points, Faker-backed email/UUID/date/time/URI/host/IP formats | below/above length, pattern miss, invalid recognized format |
 | Numbers | inclusive/exclusive bounds and `multipleOf`, including OAS 3.0 boolean-exclusive lowering | outside/equal-exclusive bound, non-multiple |
 | Arrays | `items`, `prefixItems`, min/max items, `uniqueItems` | too few/many or duplicate items |
 | Objects | properties, required, min/max properties, schema-valued/default additional properties | missing required, extra forbidden, too few/many properties, nested property constraint |
@@ -172,6 +172,8 @@ diagnostic or is an explicit whole-spec skip carrying that reason.
 When [`fakerphp/faker`][faker] is installed, generation uses Faker's
 locale-aware primitives and is deterministic for a given `seed:`. Without it,
 ordinary strings and scalar boundaries use deterministic counter-based values.
+Supported character-class patterns sample multiple class members after the
+first boundary case, so increasing `cases:` also increases their input variety.
 Recognized formats such as email and UUID cannot be synthesized reliably by
 that fallback: the existing one-shot warning is followed by the valid-case
 self-check, so the operation fails locally rather than dispatching a value that

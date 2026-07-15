@@ -410,7 +410,7 @@ final class SchemaDataGenerator
             : 16;
 
         if (isset($schema['pattern']) && is_string($schema['pattern'])) {
-            $patternValue = self::generateCommonPattern($schema['pattern'], $schema, $iteration);
+            $patternValue = self::generateCommonPattern($schema['pattern'], $schema, $faker, $iteration);
             if ($patternValue !== null) {
                 return $patternValue;
             }
@@ -832,9 +832,13 @@ final class SchemaDataGenerator
     }
 
     /** @param array<string, mixed> $schema */
-    private static function generateCommonPattern(string $pattern, array $schema, int $iteration): ?string
-    {
-        $fixedQuantifierValue = self::generateFixedQuantifierPattern($pattern, $schema);
+    private static function generateCommonPattern(
+        string $pattern,
+        array $schema,
+        ?Generator $faker,
+        int $iteration,
+    ): ?string {
+        $fixedQuantifierValue = self::generateCharacterClassPattern($pattern, $schema, $faker, $iteration);
         if ($fixedQuantifierValue !== null) {
             return $fixedQuantifierValue;
         }
@@ -970,15 +974,25 @@ final class SchemaDataGenerator
     }
 
     /** @param array<string, mixed> $schema */
-    private static function generateFixedQuantifierPattern(string $pattern, array $schema): ?string
-    {
-        if (preg_match('/^\^(\[[^]]+]|\\\\d)\{([0-9]+)\}\$$/D', $pattern, $matches) !== 1) {
+    private static function generateCharacterClassPattern(
+        string $pattern,
+        array $schema,
+        ?Generator $faker,
+        int $iteration,
+    ): ?string {
+        if (preg_match('/^\^(\[[^]]+]|\\\\d)(?:\{([0-9]+)\}|(\+))\$$/D', $pattern, $matches) !== 1) {
             return null;
         }
 
-        $length = (int) $matches[2];
         $minimum = isset($schema['minLength']) && is_int($schema['minLength']) ? max(0, $schema['minLength']) : null;
         $maximum = isset($schema['maxLength']) && is_int($schema['maxLength']) ? max(0, $schema['maxLength']) : null;
+        $length = $matches[2] !== ''
+            ? (int) $matches[2]
+            : match ($iteration % 3) {
+                0 => max(1, $minimum ?? 1),
+                1 => max(1, $maximum ?? 16),
+                default => max(1, $minimum ?? 1, min($maximum ?? 16, 8)),
+            };
         if ($length > self::MAX_SYNTHESIZED_PATTERN_LENGTH ||
             ($minimum !== null && $length < $minimum) ||
             ($maximum !== null && $length > $maximum)) {
@@ -986,34 +1000,64 @@ final class SchemaDataGenerator
         }
 
         $atom = $matches[1];
-        $character = $atom === '\\d' ? '0' : self::characterMatchingClass($atom);
-        if ($character === null) {
+        $characters = $atom === '\\d'
+            ? self::unicodeCharacters('0123456789')
+            : self::charactersMatchingClass($atom);
+        if ($characters === []) {
             return null;
         }
 
-        $value = str_repeat($character, $length);
+        $value = self::samplePatternCharacters($characters, $length, $faker, $iteration);
         $delimiter = '~';
         $escaped = str_replace($delimiter, '\\' . $delimiter, $pattern);
 
         return @preg_match($delimiter . $escaped . $delimiter . 'u', $value) === 1 ? $value : null;
     }
 
-    private static function characterMatchingClass(string $characterClass): ?string
+    /** @return list<string> */
+    private static function charactersMatchingClass(string $characterClass): array
     {
         $delimiter = '~';
         $escaped = str_replace($delimiter, '\\' . $delimiter, $characterClass);
         $expression = $delimiter . '^' . $escaped . '$' . $delimiter . 'u';
-        $candidates = self::unicodeCharacters(
+        $candidates = array_values(array_unique(self::unicodeCharacters(
             'aA0abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_- ',
-        );
+        )));
+        $matches = [];
 
         foreach ($candidates as $candidate) {
             if (@preg_match($expression, $candidate) === 1) {
-                return $candidate;
+                $matches[] = $candidate;
             }
         }
 
-        return null;
+        return $matches;
+    }
+
+    /** @param non-empty-list<string> $characters */
+    private static function samplePatternCharacters(
+        array $characters,
+        int $length,
+        ?Generator $faker,
+        int $iteration,
+    ): string {
+        if ($iteration === 0 || count($characters) === 1) {
+            return str_repeat($characters[0], $length);
+        }
+
+        $sampled = [];
+        for ($position = 0; $position < $length; $position++) {
+            $index = $faker !== null
+                ? $faker->numberBetween(0, count($characters) - 1)
+                : ($iteration + $position) % count($characters);
+            $sampled[] = $characters[$index];
+        }
+
+        if ($length > 1 && count(array_unique($sampled)) === 1) {
+            $sampled[$length - 1] = $sampled[0] === $characters[0] ? $characters[1] : $characters[0];
+        }
+
+        return implode('', $sampled);
     }
 
     private static function repeatToLength(string $value, int $length): string

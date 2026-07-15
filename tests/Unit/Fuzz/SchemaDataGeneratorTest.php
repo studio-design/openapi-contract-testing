@@ -21,6 +21,7 @@ use Studio\Gesso\Validation\Support\DiscriminatorContext;
 
 use function array_filter;
 use function array_map;
+use function array_unique;
 use function array_values;
 use function count;
 use function fmod;
@@ -30,6 +31,7 @@ use function preg_match;
 use function restore_error_handler;
 use function set_error_handler;
 use function str_repeat;
+use function str_split;
 use function strlen;
 
 class SchemaDataGeneratorTest extends TestCase
@@ -487,6 +489,37 @@ class SchemaDataGeneratorTest extends TestCase
         $this->assertSame(str_repeat('a', 64), SchemaDataGenerator::generate($schemas[0], 1, seed: 1)[0]);
         $this->assertSame('AA', SchemaDataGenerator::generate($schemas[1], 1, seed: 1)[0]);
         $this->assertSame('000000', SchemaDataGenerator::generate($schemas[2], 1, seed: 1)[0]);
+    }
+
+    #[Test]
+    public function samples_anchored_character_classes_deterministically_across_cases(): void
+    {
+        $fixed = ['type' => 'string', 'pattern' => '^[a-f0-9]{64}$'];
+        $variable = ['type' => 'string', 'pattern' => '^[a-zA-Z0-9_]+$', 'maxLength' => 40];
+
+        $fixedValues = SchemaDataGenerator::generate($fixed, 3, seed: 42);
+        $replayedFixedValues = SchemaDataGenerator::generate($fixed, 3, seed: 42);
+        $differentSeedValues = SchemaDataGenerator::generate($fixed, 3, seed: 43);
+        $variableValues = SchemaDataGenerator::generate($variable, 3, seed: 42);
+        $fallbackValues = [
+            SchemaDataGenerator::generateOne($fixed, null, 1),
+            SchemaDataGenerator::generateOne($fixed, null, 2),
+        ];
+
+        $this->assertSame($fixedValues, $replayedFixedValues);
+        $this->assertNotSame($fixedValues, $differentSeedValues);
+        $this->assertCount(3, array_unique($fixedValues));
+        $this->assertGreaterThan(1, count(array_unique(str_split($fixedValues[1]))));
+        $this->assertCount(3, array_unique($variableValues));
+        $this->assertNotSame($fallbackValues[0], $fallbackValues[1]);
+        $this->assertGreaterThan(1, count(array_unique(str_split($fallbackValues[0]))));
+        foreach ($fixedValues as $value) {
+            $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $value);
+        }
+        foreach ($variableValues as $value) {
+            $this->assertMatchesRegularExpression('/^[a-zA-Z0-9_]+$/', $value);
+            $this->assertLessThanOrEqual(40, strlen($value));
+        }
     }
 
     #[Test]
