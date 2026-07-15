@@ -1,0 +1,28 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "Boolean path fuzzing fixture",
+        "version": "1.0.0"
+    },
+    "paths": {
+        "/flags/{enabled}": {
+            "get": {
+                "parameters": [
+                    {
+                        "name": "enabled",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "boolean"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        }
+    }
+}
