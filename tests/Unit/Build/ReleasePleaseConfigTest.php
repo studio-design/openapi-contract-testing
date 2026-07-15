@@ -131,11 +131,10 @@ class ReleasePleaseConfigTest extends TestCase
             $this->config['prerelease'] ?? null,
             'The v2 beta must be tagged as a GitHub prerelease. Set this to false only in the stable-promotion PR.',
         );
-        $this->assertSame(
-            '2.0.0-beta.1',
-            $this->config['release-as'] ?? null,
-            'The first beta version MUST be fixed in configuration because squash merge commit bodies are blank. '
-                . 'Remove release-as immediately after v2.0.0-beta.1 is published.',
+        $this->assertArrayNotHasKey(
+            'release-as',
+            $this->config,
+            'release-as MUST be absent after v2.0.0-beta.1 so later beta releases can increment normally.',
         );
     }
 
