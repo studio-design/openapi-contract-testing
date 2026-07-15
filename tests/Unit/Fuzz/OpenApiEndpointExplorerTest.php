@@ -207,6 +207,30 @@ class OpenApiEndpointExplorerTest extends TestCase
     }
 
     #[Test]
+    public function generated_boolean_path_round_trips_through_uri_and_request_validation(): void
+    {
+        $cases = OpenApiEndpointExplorer::explore(
+            'fuzz-boolean-path',
+            'GET',
+            '/flags/{enabled}',
+            cases: 2,
+            seed: 1,
+        );
+        $validator = new OpenApiRequestValidator();
+        $uris = [];
+
+        foreach ($cases as $case) {
+            $uri = $case->uri();
+            $uris[] = $uri;
+            $result = $validator->validate('fuzz-boolean-path', 'GET', $uri, [], [], null);
+
+            $this->assertTrue($result->isValid(), $result->errorMessage());
+        }
+
+        $this->assertSame(['/flags/false', '/flags/true'], $uris);
+    }
+
+    #[Test]
     public function resolves_concrete_uri_to_spec_template(): void
     {
         $cases = OpenApiEndpointExplorer::explore('petstore-3.0', 'GET', '/v1/pets/123', cases: 1, seed: 1);

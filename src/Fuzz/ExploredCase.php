@@ -124,10 +124,14 @@ final readonly class ExploredCase
     {
         $path = $this->matchedPath;
         foreach ($this->pathParams as $name => $value) {
-            $path = str_replace('{' . $name . '}', rawurlencode((string) $value), $path);
+            $path = str_replace(
+                '{' . $name . '}',
+                rawurlencode((string) self::serialiseParameterValue($value)),
+                $path,
+            );
         }
         $query = $this->query !== []
-            ? '?' . http_build_query(array_map(self::serialiseQueryValue(...), $this->query))
+            ? '?' . http_build_query(array_map(self::serialiseParameterValue(...), $this->query))
             : '';
 
         return $prefix . $path . $query;
@@ -183,14 +187,14 @@ final readonly class ExploredCase
         return $command;
     }
 
-    private static function serialiseQueryValue(mixed $value): mixed
+    private static function serialiseParameterValue(mixed $value): mixed
     {
         if (is_bool($value)) {
             return $value ? 'true' : 'false';
         }
 
         return is_array($value)
-            ? array_map(self::serialiseQueryValue(...), $value)
+            ? array_map(self::serialiseParameterValue(...), $value)
             : $value;
     }
 
