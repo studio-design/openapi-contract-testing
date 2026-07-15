@@ -8,6 +8,7 @@ use const E_USER_WARNING;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Studio\Gesso\Validation\Request\SecurityValidator;
 
 use function restore_error_handler;
@@ -181,11 +182,22 @@ class SecurityValidatorTest extends TestCase
     #[Test]
     public function validate_accepts_empty_requirement_object_for_anonymous_access(): void
     {
-        $operation = ['security' => [[]]];
+        $operation = ['security' => [new stdClass()]];
 
         $errors = $this->validator->validate('GET', '/pets', [], $operation, [], [], []);
 
         $this->assertSame([], $errors);
+    }
+
+    #[Test]
+    public function validate_rejects_empty_list_as_security_requirement(): void
+    {
+        $operation = ['security' => [[]]];
+
+        $errors = $this->validator->validate('GET', '/pets', [], $operation, [], [], []);
+
+        $this->assertCount(1, $errors);
+        $this->assertStringContainsString('security requirement at index 0 must be an object', $errors[0]);
     }
 
     #[Test]

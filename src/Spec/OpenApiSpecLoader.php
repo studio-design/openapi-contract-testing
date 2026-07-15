@@ -14,6 +14,7 @@ use Psr\Http\Message\RequestFactoryInterface;
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Studio\Gesso\Exception\SpecFileNotFoundException;
+use Studio\Gesso\Internal\SpecDocumentDecoder;
 use Studio\Gesso\Internal\YamlAvailability;
 use Studio\Gesso\OpenApiVersion;
 use Symfony\Component\Yaml\Exception\ParseException;
@@ -335,7 +336,9 @@ final class OpenApiSpecLoader
         }
 
         try {
-            $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
+            $decoded = SpecDocumentDecoder::normalizeObjectMaps(
+                json_decode($content, false, 512, JSON_THROW_ON_ERROR),
+            );
         } catch (JsonException $e) {
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::MalformedJson,
@@ -372,7 +375,9 @@ final class OpenApiSpecLoader
         // Yaml::parseFile wraps its own I/O failures in ParseException, so a
         // single catch covers both syntax errors and file-read problems.
         try {
-            $decoded = Yaml::parseFile($path);
+            $decoded = SpecDocumentDecoder::normalizeObjectMaps(
+                Yaml::parseFile($path, Yaml::PARSE_OBJECT_FOR_MAP),
+            );
         } catch (ParseException $e) {
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::MalformedYaml,

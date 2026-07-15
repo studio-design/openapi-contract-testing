@@ -6,12 +6,14 @@ namespace Studio\Gesso\Validation\Request;
 
 use const E_USER_WARNING;
 
+use stdClass;
 use Studio\Gesso\Validation\Support\HeaderNormalizer;
 
 use function array_is_list;
 use function array_key_exists;
 use function array_key_first;
 use function get_debug_type;
+use function get_object_vars;
 use function in_array;
 use function is_array;
 use function is_string;
@@ -195,7 +197,13 @@ final class SecurityValidator
         $satisfied = false;
 
         foreach ($security as $entryIndex => $entry) {
-            if (!is_array($entry)) {
+            if ($entry instanceof stdClass && get_object_vars($entry) === []) {
+                $satisfied = true;
+
+                break;
+            }
+
+            if (!is_array($entry) || $entry === []) {
                 $hardErrors[] = sprintf(
                     '[security] %s %s: security requirement at index %d must be an object mapping scheme names to scope arrays, got %s.',
                     $method,

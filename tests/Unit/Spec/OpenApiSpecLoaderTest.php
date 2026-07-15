@@ -9,6 +9,7 @@ use GuzzleHttp\Psr7\HttpFactory;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Studio\Gesso\Exception\SpecFileNotFoundException;
@@ -686,6 +687,40 @@ class OpenApiSpecLoaderTest extends TestCase
         } finally {
             @unlink($scratchDir . '/dual.json');
             @unlink($scratchDir . '/dual.yaml');
+            @rmdir($scratchDir);
+        }
+    }
+
+    #[Test]
+    public function load_preserves_security_empty_object_and_list_shapes_for_json_and_yaml(): void
+    {
+        $scratchDir = sys_get_temp_dir() . '/openapi-spec-loader-test-' . uniqid('', true);
+        mkdir($scratchDir);
+
+        try {
+            file_put_contents(
+                $scratchDir . '/security-shapes-json.json',
+                '{"openapi":"3.2.0","info":{"title":"Shapes","version":"1.0.0"},'
+                . '"paths":{"/anonymous":{"get":{"security":[{}]}},'
+                . '"/malformed":{"get":{"security":[[]]}}}}',
+            );
+            file_put_contents(
+                $scratchDir . '/security-shapes-yaml.yaml',
+                "openapi: 3.2.0\ninfo:\n  title: Shapes\n  version: 1.0.0\npaths:\n"
+                . "  /anonymous:\n    get:\n      security:\n        - {}\n"
+                . "  /malformed:\n    get:\n      security:\n        - []\n",
+            );
+
+            OpenApiSpecLoader::configure($scratchDir);
+            foreach (['security-shapes-json', 'security-shapes-yaml'] as $specName) {
+                $spec = OpenApiSpecLoader::load($specName);
+
+                $this->assertInstanceOf(stdClass::class, $spec['paths']['/anonymous']['get']['security'][0]);
+                $this->assertSame([], $spec['paths']['/malformed']['get']['security'][0]);
+            }
+        } finally {
+            @unlink($scratchDir . '/security-shapes-json.json');
+            @unlink($scratchDir . '/security-shapes-yaml.yaml');
             @rmdir($scratchDir);
         }
     }
