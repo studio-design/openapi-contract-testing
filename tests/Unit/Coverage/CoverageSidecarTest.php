@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Studio\Gesso\Tests\Unit\Coverage;
 
+use const DIRECTORY_SEPARATOR;
+
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -14,13 +17,19 @@ use Studio\Gesso\Coverage\OpenApiCoverageTracker;
 use Studio\Gesso\Validation\Strict\StrictRequiredTracker;
 
 use function array_map;
+use function chmod;
+use function file_get_contents;
 use function file_put_contents;
+use function fileperms;
 use function getmypid;
 use function glob;
 use function is_dir;
+use function is_link;
 use function mkdir;
 use function rmdir;
 use function sort;
+use function sprintf;
+use function symlink;
 use function sys_get_temp_dir;
 use function uniqid;
 use function unlink;
@@ -55,6 +64,13 @@ class CoverageSidecarTest extends TestCase
             @rmdir($this->tmpDir);
         }
         parent::tearDown();
+    }
+
+    /** @return iterable<string, array{int}> */
+    public static function provideWriter_rejects_a_group_or_world_writable_sidecar_directoryCases(): iterable
+    {
+        yield 'group writable' => [0o770];
+        yield 'world writable' => [0o707];
     }
 
     #[Test]
@@ -95,9 +111,104 @@ class CoverageSidecarTest extends TestCase
 
         $this->assertDirectoryExists($nested);
         $this->assertStringStartsWith($nested . '/', $path);
+        if (DIRECTORY_SEPARATOR !== '\\') {
+            $permissions = fileperms($nested);
+            $this->assertNotFalse($permissions);
+            $this->assertSame(0o700, $permissions & 0o777);
+        }
 
         @unlink($path);
         @rmdir($nested);
+    }
+
+    #[Test]
+    public function writer_does_not_follow_a_predictable_legacy_tmp_symlink(): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('symlink semantics differ on Windows');
+        }
+
+        $target = $this->tmpDir . '/sensitive-target';
+        file_put_contents($target, 'unchanged');
+        $legacyTmp = sprintf('%s/part-slot-%s.json.tmp', $this->tmpDir, (string) getmypid());
+        if (!@symlink($target, $legacyTmp)) {
+            $this->markTestSkipped('symlink creation is not available');
+        }
+
+        $path = CoverageSidecarWriter::write(
+            $this->tmpDir,
+            'slot',
+            ['version' => 1, 'specs' => []],
+        );
+
+        $this->assertSame('unchanged', file_get_contents($target));
+        $this->assertTrue(is_link($legacyTmp));
+        $this->assertFileExists($path);
+        $permissions = fileperms($path);
+        $this->assertNotFalse($permissions);
+        $this->assertSame(0o600, $permissions & 0o777);
+    }
+
+    #[Test]
+    public function failure_marker_replaces_a_symlink_without_writing_through_it(): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('symlink semantics differ on Windows');
+        }
+
+        $target = $this->tmpDir . '/marker-target';
+        file_put_contents($target, 'unchanged');
+        $marker = sprintf('%s/failed-slot-%s.json', $this->tmpDir, (string) getmypid());
+        if (!@symlink($target, $marker)) {
+            $this->markTestSkipped('symlink creation is not available');
+        }
+
+        $path = CoverageSidecarWriter::writeFailureMarker($this->tmpDir, 'slot', 'worker failed');
+
+        $this->assertSame($marker, $path);
+        $this->assertSame('unchanged', file_get_contents($target));
+        $this->assertFalse(is_link($marker));
+        $this->assertJson((string) file_get_contents($marker));
+    }
+
+    #[Test]
+    #[DataProvider('provideWriter_rejects_a_group_or_world_writable_sidecar_directoryCases')]
+    public function writer_rejects_a_group_or_world_writable_sidecar_directory(int $mode): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('POSIX permission bits are not portable to Windows');
+        }
+
+        $this->assertTrue(chmod($this->tmpDir, $mode));
+
+        try {
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('must not be writable by group or other users');
+            CoverageSidecarWriter::write($this->tmpDir, 'slot', ['version' => 1, 'specs' => []]);
+        } finally {
+            chmod($this->tmpDir, 0o755);
+        }
+    }
+
+    #[Test]
+    public function writer_rejects_a_symlink_sidecar_directory(): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('symlink semantics differ on Windows');
+        }
+
+        $link = $this->tmpDir . '-link';
+        if (!@symlink($this->tmpDir, $link)) {
+            $this->markTestSkipped('symlink creation is not available');
+        }
+
+        try {
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('must not be a symbolic link');
+            CoverageSidecarWriter::write($link, 'slot', ['version' => 1, 'specs' => []]);
+        } finally {
+            @unlink($link);
+        }
     }
 
     #[Test]
