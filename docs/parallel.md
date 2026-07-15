@@ -58,6 +58,12 @@ trivial CI step has no extra config to keep in sync. Set `sidecar_dir` (in
 `phpunit.xml`) and `--sidecar-dir=` (on the merge CLI) to the same custom
 path if `sys_get_temp_dir()` is unavailable in your runner.
 
+Gesso creates a missing sidecar directory with mode `0700` and publishes
+sidecars and worker-failure markers with mode `0600`. For local-user safety,
+the writer rejects a `sidecar_dir` that is itself a symbolic link or is
+writable by group or other users. Use a dedicated directory rather than `/tmp`
+itself; the default already does this.
+
 ## Sidecar compatibility
 
 Sidecars are a versioned worker-to-merge protocol, separate from the coverage
