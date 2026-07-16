@@ -49,6 +49,8 @@ relevant attack vectors are:
   absolute paths, and symlinks cannot escape `spec_base_path`
 - Resolving local external `$ref`s — canonical targets are confined to
   `spec_base_path`; use the narrowest trusted common directory
+- Resolving `#[BoundToOpenApiEnum]` files — canonical targets are confined to
+  `enum_spec_base_path`, falling back to `spec_base_path` when unset
 - Resolving HTTP(S) `$ref`s (opt-in, off by default) — verify any untrusted
   spec source before enabling `allowRemoteRefs`
 - YAML spec loading (opt-in via `symfony/yaml`) — `symfony/yaml` is
