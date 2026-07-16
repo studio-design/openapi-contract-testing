@@ -15,6 +15,7 @@ enum InvalidOpenApiSpecReason
     case LocalRefUnreadable;
     case LocalRefRequiresSourceFile;
     case RemoteRefDisallowed;
+    case RemoteRefHostDisallowed;
     case RemoteRefFetchFailed;
     case HttpClientNotConfigured;
     case FileSchemeNotSupported;

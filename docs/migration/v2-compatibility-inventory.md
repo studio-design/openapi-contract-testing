@@ -123,7 +123,9 @@ The v1 PHP API snapshot includes every case of `EnumBindingReason` and
 production-unused `InvalidOpenApiSpecReason::ExternalRef` and
 `InvalidOpenApiSpecReason::RemoteRefNotImplemented` cases. Consumers must use
 the specific local, remote, HTTP-client, fetch, or file-scheme reason described
-in the repository's `UPGRADING.md`.
+in the repository's `UPGRADING.md`. V2 also adds
+`InvalidOpenApiSpecReason::RemoteRefHostDisallowed` for the destination
+allowlist enforced before HTTP requests.
 
 ### Spec loading
 
@@ -134,7 +136,8 @@ Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver
 
 The loader's static configuration, base paths, strip prefixes, local/remote
 reference inputs, cache behavior exposed through non-internal methods, and
-exception taxonomy are observable contracts.
+exception taxonomy are observable contracts. Remote resolution in v2 requires
+the new `allowedRemoteRefHosts` argument whenever `allowRemoteRefs` is enabled.
 
 ### Coverage
 
@@ -385,6 +388,7 @@ Accepted options:
 - repeated `--strip-prefix=<prefix>`;
 - `--format=text|json`;
 - `--allow-remote-refs`;
+- repeatable `--remote-ref-host=<host>` (required with `--allow-remote-refs`);
 - `--phpunit-snippet`;
 - `--help` / `-h`.
 

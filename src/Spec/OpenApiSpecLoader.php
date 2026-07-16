@@ -14,6 +14,7 @@ use Psr\Http\Message\RequestFactoryInterface;
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Studio\Gesso\Exception\SpecFileNotFoundException;
+use Studio\Gesso\Internal\HttpRefLoader;
 use Studio\Gesso\Internal\OpenApiDocumentShapeNormalizer;
 use Studio\Gesso\Internal\SpecDocumentDecoder;
 use Studio\Gesso\Internal\YamlAvailability;
@@ -22,15 +23,21 @@ use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 use function array_key_exists;
+use function array_values;
 use function file_exists;
 use function file_get_contents;
 use function get_debug_type;
 use function implode;
+use function in_array;
 use function is_array;
+use function is_string;
 use function json_decode;
 use function realpath;
 use function rtrim;
 use function sprintf;
+use function str_contains;
+use function str_ends_with;
+use function str_starts_with;
 use function trigger_error;
 use function trim;
 
@@ -62,6 +69,9 @@ final class OpenApiSpecLoader
     private static ?RequestFactoryInterface $requestFactory = null;
     private static bool $allowRemoteRefs = false;
 
+    /** @var list<string> */
+    private static array $allowedRemoteRefHosts = [];
+
     /**
      * Configure the spec loader.
      *
@@ -86,6 +96,9 @@ final class OpenApiSpecLoader
      *                                  `openapi/_shared/...`). When `null` the asserter falls
      *                                  back to `$basePath`, keeping single-root setups
      *                                  bit-for-bit identical to the pre-issue-#170 behavior.
+     * @param list<string> $allowedRemoteRefHosts Exact hostnames or IP literals permitted when
+     *                                            `$allowRemoteRefs` is true. Ports and URL paths
+     *                                            are not accepted. Matching is case-insensitive.
      *
      * @throws InvalidArgumentException for any misconfigured pair: `$allowRemoteRefs` true
      *                                  without client/factory, OR client provided without
@@ -99,6 +112,7 @@ final class OpenApiSpecLoader
         ?RequestFactoryInterface $requestFactory = null,
         bool $allowRemoteRefs = false,
         ?string $enumBasePath = null,
+        array $allowedRemoteRefHosts = [],
     ): void {
         if ($allowRemoteRefs && ($httpClient === null || $requestFactory === null)) {
             throw new InvalidArgumentException(
@@ -121,6 +135,22 @@ final class OpenApiSpecLoader
             );
         }
 
+        if ($allowRemoteRefs && $allowedRemoteRefHosts === []) {
+            throw new InvalidArgumentException(
+                'OpenApiSpecLoader::configure(): allowRemoteRefs requires at least one exact host '
+                . 'in $allowedRemoteRefHosts.',
+            );
+        }
+
+        if (!$allowRemoteRefs && $allowedRemoteRefHosts !== []) {
+            throw new InvalidArgumentException(
+                'OpenApiSpecLoader::configure(): $allowedRemoteRefHosts was provided but '
+                . 'allowRemoteRefs is false.',
+            );
+        }
+
+        $allowedRemoteRefHosts = self::normalizeAllowedRemoteRefHosts($allowedRemoteRefHosts);
+
         if ($enumBasePath !== null && trim($enumBasePath) === '') {
             // Empty / whitespace-only `enumBasePath` would otherwise survive
             // rtrim() as the empty string and surface later as
@@ -141,6 +171,7 @@ final class OpenApiSpecLoader
         self::$httpClient = $httpClient;
         self::$requestFactory = $requestFactory;
         self::$allowRemoteRefs = $allowRemoteRefs;
+        self::$allowedRemoteRefHosts = $allowedRemoteRefHosts;
         // A previous configure() call may have cached specs under a
         // different remote-refs policy. Evict so the next load() runs
         // with the new client/flag combination.
@@ -243,6 +274,7 @@ final class OpenApiSpecLoader
                     self::$httpClient,
                     self::$requestFactory,
                     self::$allowRemoteRefs,
+                    self::$allowedRemoteRefHosts,
                 ),
             );
         } catch (InvalidOpenApiSpecException $e) {
@@ -294,7 +326,49 @@ final class OpenApiSpecLoader
         self::$httpClient = null;
         self::$requestFactory = null;
         self::$allowRemoteRefs = false;
+        self::$allowedRemoteRefHosts = [];
         YamlAvailability::reset();
+    }
+
+    /**
+     * @param list<string> $hosts
+     *
+     * @return list<string>
+     */
+    private static function normalizeAllowedRemoteRefHosts(array $hosts): array
+    {
+        $normalized = [];
+        foreach ($hosts as $host) {
+            if (!is_string($host)) {
+                throw new InvalidArgumentException(
+                    'OpenApiSpecLoader::configure(): every $allowedRemoteRefHosts entry must be a string.',
+                );
+            }
+
+            $candidate = HttpRefLoader::normalizeHost($host);
+            $isBracketedIpv6 = str_starts_with($candidate, '[') && str_ends_with($candidate, ']');
+            if ($candidate === '' ||
+                str_contains($candidate, '://') ||
+                str_contains($candidate, '/') ||
+                str_contains($candidate, '@') ||
+                str_contains($candidate, '?') ||
+                str_contains($candidate, '#') ||
+                (str_contains($candidate, ':') && !$isBracketedIpv6)
+            ) {
+                throw new InvalidArgumentException(
+                    sprintf(
+                        'OpenApiSpecLoader::configure(): invalid remote-ref host `%s`; pass a host only, without scheme, port, path, or userinfo.',
+                        $host,
+                    ),
+                );
+            }
+
+            if (!in_array($candidate, $normalized, true)) {
+                $normalized[] = $candidate;
+            }
+        }
+
+        return array_values($normalized);
     }
 
     /** @return array{path: string, extension: string} */

@@ -59,12 +59,64 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
             httpClient: $client,
             requestFactory: $this->factory,
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
 
         $this->assertSame(
             ['type' => 'object', 'required' => ['id']],
             $resolved['components']['schemas']['Pet'],
         );
+    }
+
+    #[Test]
+    public function rejects_unlisted_host_before_sending_a_request(): void
+    {
+        $url = 'http://169.254.169.254/latest/meta-data.json';
+        $client = new FakeHttpClient([
+            $url => FakeHttpClient::jsonResponse('{"type":"string"}'),
+        ]);
+        $spec = ['components' => ['schemas' => ['Metadata' => ['$ref' => $url]]]];
+
+        try {
+            OpenApiRefResolver::resolve(
+                $spec,
+                httpClient: $client,
+                requestFactory: $this->factory,
+                allowRemoteRefs: true,
+                allowedRemoteRefHosts: ['specs.example.com'],
+            );
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefHostDisallowed, $e->reason);
+            $this->assertStringContainsString('169.254.169.254', $e->getMessage());
+            $this->assertSame([], $client->sentUrls());
+        }
+    }
+
+    #[Test]
+    public function rechecks_the_allowlist_for_nested_cross_host_refs(): void
+    {
+        $entry = 'https://specs.example.com/root.json';
+        $nested = 'http://169.254.169.254/latest/meta-data.json';
+        $client = new FakeHttpClient([
+            $entry => FakeHttpClient::jsonResponse('{"$ref":"' . $nested . '"}'),
+            $nested => FakeHttpClient::jsonResponse('{"type":"string"}'),
+        ]);
+        $spec = ['components' => ['schemas' => ['Metadata' => ['$ref' => $entry]]]];
+
+        try {
+            OpenApiRefResolver::resolve(
+                $spec,
+                httpClient: $client,
+                requestFactory: $this->factory,
+                allowRemoteRefs: true,
+                allowedRemoteRefHosts: ['SPECS.EXAMPLE.COM.'],
+            );
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefHostDisallowed, $e->reason);
+            $this->assertSame([$entry], $client->sentUrls());
+        }
     }
 
     #[Test]
@@ -84,6 +136,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
             httpClient: $client,
             requestFactory: $this->factory,
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
 
         $this->assertSame(['type' => 'object'], $resolved['components']['schemas']['Pet']);
@@ -108,6 +161,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
             httpClient: $client,
             requestFactory: $this->factory,
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
 
         $this->assertSame(['type' => 'string'], $resolved['components']['schemas']['Leaf']);
@@ -131,6 +185,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
                 httpClient: $client,
                 requestFactory: $this->factory,
                 allowRemoteRefs: true,
+                allowedRemoteRefHosts: ['example.com'],
             );
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
@@ -163,6 +218,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
             httpClient: $client,
             requestFactory: $this->factory,
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
 
         $this->assertSame(['type' => 'integer'], $resolved['components']['schemas']['Final']);
@@ -199,6 +255,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
             httpClient: $client,
             requestFactory: $this->factory,
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
 
         $this->assertSame(1, $callCount, 'duplicate URLs should hit the per-resolution cache');
@@ -257,6 +314,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
                 httpClient: $client,
                 requestFactory: null,
                 allowRemoteRefs: true,
+                allowedRemoteRefHosts: ['example.com'],
             );
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
@@ -279,6 +337,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
             httpClient: $client,
             requestFactory: $this->factory,
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
 
         $this->assertSame(['type' => 'object'], $resolved['components']['schemas']['Slash']);
@@ -300,6 +359,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
                 httpClient: $client,
                 requestFactory: $this->factory,
                 allowRemoteRefs: true,
+                allowedRemoteRefHosts: ['example.com'],
             );
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
@@ -330,6 +390,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
             httpClient: $client,
             requestFactory: $this->factory,
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
         $this->assertSame(['v' => 1], $first['components']['schemas']['Pet']);
 
@@ -339,6 +400,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
             httpClient: $client,
             requestFactory: $this->factory,
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
         $this->assertSame(['v' => 2], $second['components']['schemas']['Pet']);
         $this->assertSame(2, $callCount);
@@ -366,6 +428,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
             httpClient: $client,
             requestFactory: $this->factory,
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
 
         $this->assertSame(
@@ -391,6 +454,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
             httpClient: $client,
             requestFactory: $this->factory,
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
 
         $this->assertSame(['type' => 'string'], $resolved['components']['schemas']['X']);
@@ -413,6 +477,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
             httpClient: $client,
             requestFactory: $this->factory,
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
 
         $this->assertSame(['type' => 'integer'], $resolved['components']['schemas']['X']);
@@ -441,6 +506,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
                 httpClient: $client,
                 requestFactory: $this->factory,
                 allowRemoteRefs: true,
+                allowedRemoteRefHosts: ['example.com'],
             );
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
@@ -474,6 +540,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
                     httpClient: $client,
                     requestFactory: $this->factory,
                     allowRemoteRefs: true,
+                    allowedRemoteRefHosts: ['example.com'],
                 );
                 $this->fail('expected InvalidOpenApiSpecException');
             } catch (InvalidOpenApiSpecException $e) {
@@ -503,6 +570,7 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
                 httpClient: $client,
                 requestFactory: $this->factory,
                 allowRemoteRefs: true,
+                allowedRemoteRefHosts: ['example.com'],
             );
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {

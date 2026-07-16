@@ -119,5 +119,6 @@ changing a sidecar shape or filename pattern.
   `OpenApiSpecLoader::configure()` with only `spec_base_path` and
   `strip_prefixes` — `allowRemoteRefs` cannot be set via CLI flags. If your
   spec uses HTTP(S) `$ref`, run the merge step from a process that calls
-  `OpenApiSpecLoader::configure(..., allowRemoteRefs: true, ...)` first
+  `OpenApiSpecLoader::configure(..., allowRemoteRefs: true,
+  allowedRemoteRefHosts: ['specs.example.com'], ...)` first
   (e.g. a Composer script), or pre-bundle remote refs offline.

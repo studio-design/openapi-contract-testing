@@ -593,6 +593,7 @@ OpenApiSpecLoader::configure(
     httpClient: new Client(),       // PSR-18 ClientInterface
     requestFactory: new HttpFactory(), // PSR-17 RequestFactoryInterface
     allowRemoteRefs: true,
+    allowedRemoteRefHosts: ['specs.example.com'],
 );
 ```
 
@@ -607,14 +608,29 @@ The original `$ref` argument is also replaced with its diagnostic-safe form
 before network operations, so exception traces remain redacted even when
 `zend.exception_ignore_args=Off`.
 
+Remote access requires a non-empty `allowedRemoteRefHosts` list. Matching is
+case-insensitive against the URL's exact host; schemes, ports, paths, and
+userinfo do not belong in the list. Every nested remote `$ref` is checked, so
+a document served by an allowed host cannot redirect resolution to another
+host through an absolute `$ref`. Configure the injected PSR-18 client not to
+follow redirects and use the canonical URL instead: a client-side redirect
+would otherwise happen below Gesso's host-policy boundary.
+
+This follows OWASP's SSRF guidance to prefer an allowlist and disable redirect
+following. DNS and network-layer controls remain the application's
+responsibility because PSR-18 does not expose connection-level address policy.
+[See the OWASP SSRF Prevention Cheat Sheet.](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)
+
 Misconfiguration is caught early:
 
 | Setup | Result |
 | --- | --- |
 | `allowRemoteRefs: true` without `$httpClient` / `$requestFactory` | `InvalidArgumentException` at `configure()` |
+| `allowRemoteRefs: true` without `allowedRemoteRefHosts` | `InvalidArgumentException` at `configure()` |
+| HTTP(S) `$ref` targets an unlisted host | `InvalidOpenApiSpecException` with reason `RemoteRefHostDisallowed`; no request is sent |
 | `$httpClient` set but `allowRemoteRefs: false` | `InvalidArgumentException` at `configure()` (silent misuse impossible) |
 | `allowRemoteRefs: true` + client + ref to URL that 4xx/5xx | `InvalidOpenApiSpecException` with reason `RemoteRefFetchFailed` |
-| `allowRemoteRefs: true` + client + ref to URL that 3xx | `RemoteRefFetchFailed` with redirect target — configure your PSR-18 client to follow redirects, or use the canonical URL |
+| `allowRemoteRefs: true` + client + ref to URL that 3xx | `RemoteRefFetchFailed` with redirect target — keep redirects disabled and use the canonical URL |
 | `allowRemoteRefs: true` + client + ref to URL with no detectable format | reason `UnsupportedExtension` (URL extension or `Content-Type` header is required) |
 
 Format detection prefers the URL's filename extension (`.json` / `.yaml` / `.yml`) and falls back to the response's `Content-Type` (`application/json`, `application/*+json`, `application/yaml`, `text/yaml`, etc.). URLs without a recognisable extension still work as long as the server sets a usable `Content-Type`.

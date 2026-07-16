@@ -60,9 +60,16 @@ required first argument.
 case was emitted by production code by the end of v1. Use the specific resolver
 reason instead: local-reference failures use `LocalRefNotFound`,
 `LocalRefUnreadable`, or `LocalRefRequiresSourceFile`; remote-reference failures
-use `RemoteRefDisallowed`, `HttpClientNotConfigured`, or
-`RemoteRefFetchFailed`; unsupported `file:` references use
+use `RemoteRefDisallowed`, `HttpClientNotConfigured`,
+`RemoteRefHostDisallowed`, or `RemoteRefFetchFailed`; unsupported `file:` references use
 `FileSchemeNotSupported`.
+
+HTTP(S) `$ref` resolution now requires an explicit destination allowlist.
+Pass `allowedRemoteRefHosts: ['specs.example.com']` together with
+`allowRemoteRefs: true`; list every trusted host used by nested references.
+The Doctor equivalent is repeatable `--remote-ref-host=<host>`. Unlisted hosts
+are rejected before a request is sent. Keep PSR-18 redirect following disabled
+and use canonical URLs so a redirect cannot move below this policy boundary.
 
 Several orchestration types that were unintentionally part of the v1 PHP API
 are marked `@internal` in v2. Do not call coverage renderer, sidecar I/O,

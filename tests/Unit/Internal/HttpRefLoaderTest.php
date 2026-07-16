@@ -37,7 +37,7 @@ class HttpRefLoaderTest extends TestCase
         ]);
 
         $cache = [];
-        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
 
         $this->assertSame($url, $result->canonicalIdentifier);
         $this->assertSame(['type' => 'object', 'required' => ['id']], $result->decoded);
@@ -52,7 +52,7 @@ class HttpRefLoaderTest extends TestCase
         ]);
 
         $cache = [];
-        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
 
         $this->assertSame(['type' => 'object', 'required' => ['id']], $result->decoded);
     }
@@ -69,7 +69,7 @@ class HttpRefLoaderTest extends TestCase
         ]);
 
         $cache = [];
-        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['registry.example.com']);
 
         $this->assertSame(['type' => 'string'], $result->decoded);
     }
@@ -83,7 +83,7 @@ class HttpRefLoaderTest extends TestCase
         ]);
 
         $cache = [];
-        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
 
         $this->assertSame(['type' => 'object'], $result->decoded);
     }
@@ -97,7 +97,7 @@ class HttpRefLoaderTest extends TestCase
         ]);
 
         $cache = [];
-        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
 
         $this->assertSame(['type' => 'integer'], $result->decoded);
     }
@@ -116,8 +116,8 @@ class HttpRefLoaderTest extends TestCase
         ]);
 
         $cache = [];
-        HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
-        HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+        HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
+        HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
 
         $this->assertSame(1, $callCount);
     }
@@ -132,7 +132,7 @@ class HttpRefLoaderTest extends TestCase
 
         try {
             $cache = [];
-            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
@@ -151,7 +151,7 @@ class HttpRefLoaderTest extends TestCase
 
         try {
             $cache = [];
-            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
@@ -171,7 +171,7 @@ class HttpRefLoaderTest extends TestCase
 
         try {
             $cache = [];
-            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
@@ -190,7 +190,7 @@ class HttpRefLoaderTest extends TestCase
 
         try {
             $cache = [];
-            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::UnsupportedExtension, $e->reason);
@@ -208,7 +208,7 @@ class HttpRefLoaderTest extends TestCase
 
         try {
             $cache = [];
-            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::MalformedJson, $e->reason);
@@ -226,7 +226,7 @@ class HttpRefLoaderTest extends TestCase
 
         try {
             $cache = [];
-            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::MalformedYaml, $e->reason);
@@ -247,7 +247,7 @@ class HttpRefLoaderTest extends TestCase
 
         try {
             $cache = [];
-            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
@@ -269,7 +269,7 @@ class HttpRefLoaderTest extends TestCase
 
         try {
             $cache = [];
-            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertStringNotContainsString('alice', $e->getMessage());
@@ -290,7 +290,7 @@ class HttpRefLoaderTest extends TestCase
         ]);
 
         $cache = [];
-        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
 
         $this->assertSame(['type' => 'object'], $result->decoded);
     }
@@ -305,7 +305,7 @@ class HttpRefLoaderTest extends TestCase
 
         try {
             $cache = [];
-            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::UnsupportedExtension, $e->reason);
@@ -329,7 +329,7 @@ class HttpRefLoaderTest extends TestCase
         ]);
 
         $cache = [];
-        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
 
         $this->assertSame(['type' => 'object'], $result->decoded);
     }
@@ -347,7 +347,7 @@ class HttpRefLoaderTest extends TestCase
 
         try {
             $cache = [];
-            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertStringNotContainsString('secret', $e->getMessage());
@@ -368,7 +368,7 @@ class HttpRefLoaderTest extends TestCase
 
         try {
             $cache = [];
-            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertStringNotContainsString('alice', $e->getMessage());
@@ -406,7 +406,7 @@ class HttpRefLoaderTest extends TestCase
         try {
             try {
                 $cache = [];
-                HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+                HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
                 $this->fail('expected InvalidOpenApiSpecException');
             } catch (InvalidOpenApiSpecException $e) {
                 $rendered = (string) $e;
@@ -434,7 +434,7 @@ class HttpRefLoaderTest extends TestCase
 
         try {
             $cache = [];
-            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com']);
             $this->fail('expected InvalidOpenApiSpecException');
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::NonMappingRoot, $e->reason);
