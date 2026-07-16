@@ -9,11 +9,14 @@ use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
+use RuntimeException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Studio\Gesso\Internal\HttpRefLoader;
 use Studio\Gesso\Tests\Helpers\FakeHttpClient;
 use Studio\Gesso\Tests\Helpers\FakeHttpClientUnexpectedRequest;
+
+use function ini_set;
 
 class HttpRefLoaderTest extends TestCase
 {
@@ -173,7 +176,7 @@ class HttpRefLoaderTest extends TestCase
         } catch (InvalidOpenApiSpecException $e) {
             $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
             $this->assertStringContainsString('connection refused', $e->getMessage());
-            $this->assertNotNull($e->getPrevious());
+            $this->assertNull($e->getPrevious());
         }
     }
 
@@ -255,6 +258,27 @@ class HttpRefLoaderTest extends TestCase
     }
 
     #[Test]
+    public function redacts_credentials_from_redirect_location(): void
+    {
+        $url = 'https://example.com/redirect.json';
+        $client = new FakeHttpClient([
+            $url => new Response(302, [
+                'Location' => 'https://alice:secret@example.com/canonical.json?token=redirect-secret',
+            ]),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertStringNotContainsString('alice', $e->getMessage());
+            $this->assertStringNotContainsString('secret', $e->getMessage());
+            $this->assertStringContainsString('https://example.com/canonical.json?token=[redacted]', $e->getMessage());
+        }
+    }
+
+    #[Test]
     public function url_extension_takes_precedence_over_conflicting_content_type(): void
     {
         // Pin the documented priority: extension wins, even if the
@@ -329,6 +353,74 @@ class HttpRefLoaderTest extends TestCase
             $this->assertStringNotContainsString('secret', $e->getMessage());
             $this->assertStringNotContainsString('alice', $e->getMessage());
             $this->assertStringContainsString('example.com', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function redacts_credentials_from_transport_exception_chain(): void
+    {
+        $url = 'https://alice:secret@example.com/private/pet.json?token=query-secret';
+        $client = new FakeHttpClient([
+            $url => static function () use ($url): Response {
+                throw new FakeHttpClientUnexpectedRequest('request failed for ' . $url);
+            },
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertStringNotContainsString('alice', $e->getMessage());
+            $this->assertStringNotContainsString('secret', $e->getMessage());
+            $this->assertStringContainsString('https://example.com/private/pet.json?token=[redacted]', $e->getMessage());
+            $this->assertSame('https://example.com/private/pet.json?token=[redacted]', $e->ref);
+            $this->assertNull($e->getPrevious());
+        }
+    }
+
+    #[Test]
+    public function does_not_reconnect_a_sensitive_nested_transport_exception(): void
+    {
+        $url = 'https://alice:secret@example.com/pet.json?token=query-secret';
+        $client = new FakeHttpClient([
+            $url => static function (): Response {
+                $cause = new RuntimeException(
+                    'request failed for https://nested:nested-secret@example.com/private.json?token=nested-query-secret',
+                );
+
+                throw new FakeHttpClientUnexpectedRequest('transport failed', 0, $cause);
+            },
+        ]);
+
+        $previousIgnoreArgs = ini_set('zend.exception_ignore_args', '0');
+        if ($previousIgnoreArgs === false) {
+            $this->markTestSkipped('zend.exception_ignore_args cannot be changed at runtime');
+        }
+        $previousMaxLength = ini_set('zend.exception_string_param_max_len', '1024');
+        if ($previousMaxLength === false) {
+            ini_set('zend.exception_ignore_args', $previousIgnoreArgs);
+            $this->markTestSkipped('zend.exception_string_param_max_len cannot be changed at runtime');
+        }
+
+        try {
+            try {
+                $cache = [];
+                HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+                $this->fail('expected InvalidOpenApiSpecException');
+            } catch (InvalidOpenApiSpecException $e) {
+                $rendered = (string) $e;
+
+                $this->assertStringContainsString('transport failed', $rendered);
+                $this->assertStringNotContainsString('alice:secret', $rendered);
+                $this->assertStringNotContainsString('query-secret', $rendered);
+                $this->assertStringNotContainsString('nested:nested-secret', $rendered);
+                $this->assertStringNotContainsString('nested-query-secret', $rendered);
+                $this->assertNull($e->getPrevious());
+            }
+        } finally {
+            ini_set('zend.exception_ignore_args', $previousIgnoreArgs);
+            ini_set('zend.exception_string_param_max_len', $previousMaxLength);
         }
     }
 

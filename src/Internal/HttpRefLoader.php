@@ -71,17 +71,28 @@ final class HttpRefLoader
             return new LoadedDocument($canonicalUri, $documentCache[$canonicalUri]);
         }
 
-        $safeUrl = self::redactUserInfo($url);
+        $safeUrl = self::redactSensitiveUrlData($url);
+
+        // PHP may include live function arguments when stringifying an
+        // exception with zend.exception_ignore_args=Off. The raw URI is
+        // already captured for the request and cache key, so replace the
+        // parameter slot before any downstream operation can throw.
+        $url = $safeUrl;
         $request = $requestFactory->createRequest('GET', $canonicalUri);
 
         try {
             $response = $client->sendRequest($request);
         } catch (ClientExceptionInterface $e) {
+            $safeTransportMessage = self::redactSensitiveUrlData($e->getMessage());
+
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::RemoteRefFetchFailed,
-                sprintf('HTTP $ref fetch failed: %s (%s)', $safeUrl, $e->getMessage()),
+                sprintf('HTTP $ref fetch failed: %s (%s)', $safeUrl, $safeTransportMessage),
                 ref: $safeUrl,
-                previous: $e,
+                // Exception stringification includes every nested previous
+                // message. A PSR-18 client may wrap a credential-bearing
+                // exception below a harmless top-level message, so the raw
+                // transport chain cannot be safely reattached here.
             );
         }
 
@@ -92,7 +103,7 @@ final class HttpRefLoader
             // to not). A bare 3xx is almost always "user's client has
             // redirect-following disabled", not a server bug. Including
             // the Location target makes the next step obvious.
-            $location = $response->getHeaderLine('Location');
+            $location = self::redactSensitiveUrlData($response->getHeaderLine('Location'));
 
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::RemoteRefFetchFailed,
@@ -158,15 +169,27 @@ final class HttpRefLoader
     }
 
     /**
-     * Strip `user:pass@` from a URL before it lands in error messages or
-     * logs. Spec authors occasionally embed credentials in `$ref` URLs
-     * for testing, and we don't want them leaking into stderr / CI logs.
+     * Remove URL userinfo and query values before diagnostics reach stderr or
+     * CI logs. This also accepts surrounding transport-error prose because
+     * PSR-18 exception messages commonly embed the request URL.
+     *
+     * @internal Shared with the ref resolver's exception-trace boundary.
      */
-    private static function redactUserInfo(string $url): string
+    public static function redactSensitiveUrlData(string $value): string
     {
-        $redacted = preg_replace('#(://)[^/@\s]+@#', '$1', $url);
+        // Cover both absolute (`https://user:pass@host`) and network-path
+        // (`//user:pass@host`) references. HTTP client exception messages may
+        // contain either form rather than only the original URL string.
+        $redacted = preg_replace('#((?:[a-z][a-z0-9+.-]*:)?//)[^/@\s]+@#i', '$1', $value);
+        if ($redacted === null) {
+            return $value;
+        }
 
-        return $redacted ?? $url;
+        // Query values frequently carry signed-URL tokens and API keys. Keep
+        // parameter names for diagnostics without exposing their values.
+        $withoutQueryValues = preg_replace('~([?&][^=\s&#]+)=([^&#\s]*)~', '$1=[redacted]', $redacted);
+
+        return $withoutQueryValues ?? $redacted;
     }
 
     private static function canonicalizeUri(string $url): string

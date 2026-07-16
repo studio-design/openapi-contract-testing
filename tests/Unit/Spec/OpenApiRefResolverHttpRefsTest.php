@@ -15,6 +15,7 @@ use Studio\Gesso\Spec\OpenApiRefResolver;
 use Studio\Gesso\Tests\Helpers\FakeHttpClient;
 
 use function file_put_contents;
+use function ini_set;
 use function is_dir;
 use function mkdir;
 use function rmdir;
@@ -446,6 +447,45 @@ class OpenApiRefResolverHttpRefsTest extends TestCase
             $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
             $this->assertStringContainsString('via $ref chain', $e->getMessage());
             $this->assertStringContainsString($a, $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function fetch_failure_trace_redacts_the_original_remote_ref_argument(): void
+    {
+        $url = 'https://alice:secret@example.com/missing.json?token=query-secret';
+        $client = new FakeHttpClient([$url => new Response(404)]);
+        $spec = ['components' => ['schemas' => ['Leaf' => ['$ref' => $url]]]];
+
+        $previousIgnoreArgs = ini_set('zend.exception_ignore_args', '0');
+        if ($previousIgnoreArgs === false) {
+            $this->markTestSkipped('zend.exception_ignore_args cannot be changed at runtime');
+        }
+        $previousMaxLength = ini_set('zend.exception_string_param_max_len', '1024');
+        if ($previousMaxLength === false) {
+            ini_set('zend.exception_ignore_args', $previousIgnoreArgs);
+            $this->markTestSkipped('zend.exception_string_param_max_len cannot be changed at runtime');
+        }
+
+        try {
+            try {
+                OpenApiRefResolver::resolve(
+                    $spec,
+                    httpClient: $client,
+                    requestFactory: $this->factory,
+                    allowRemoteRefs: true,
+                );
+                $this->fail('expected InvalidOpenApiSpecException');
+            } catch (InvalidOpenApiSpecException $e) {
+                $rendered = (string) $e;
+
+                $this->assertStringContainsString('https://example.com/missing.json?token=[redacted]', $rendered);
+                $this->assertStringNotContainsString('alice:secret', $rendered);
+                $this->assertStringNotContainsString('query-secret', $rendered);
+            }
+        } finally {
+            ini_set('zend.exception_ignore_args', $previousIgnoreArgs);
+            ini_set('zend.exception_string_param_max_len', $previousMaxLength);
         }
     }
 
