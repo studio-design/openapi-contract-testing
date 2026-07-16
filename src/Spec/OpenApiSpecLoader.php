@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\Gesso\Spec;
 
+use const DIRECTORY_SEPARATOR;
 use const E_USER_WARNING;
 use const JSON_THROW_ON_ERROR;
 
@@ -23,6 +24,7 @@ use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 use function array_key_exists;
+use function explode;
 use function file_exists;
 use function file_get_contents;
 use function get_debug_type;
@@ -30,12 +32,15 @@ use function implode;
 use function in_array;
 use function is_array;
 use function json_decode;
+use function preg_match;
 use function realpath;
 use function rtrim;
 use function sprintf;
 use function str_contains;
 use function str_ends_with;
+use function str_replace;
 use function str_starts_with;
+use function strtolower;
 use function trigger_error;
 use function trim;
 
@@ -384,14 +389,54 @@ final class OpenApiSpecLoader
     {
         $basePath = self::getBasePath();
 
-        foreach (self::SEARCH_EXTENSIONS as $extension) {
-            $candidate = "{$basePath}/{$specName}.{$extension}";
-            if (file_exists($candidate)) {
-                return ['path' => $candidate, 'extension' => $extension];
-            }
+        // Spec names may include trusted nested directories (for example,
+        // `bundled/front`) but must never select a parent or an absolute
+        // filesystem location. Reject these shapes before checking existence
+        // so callers cannot use the exception category as an existence probe.
+        $portableSpecName = str_replace('\\', '/', $specName);
+        if (str_contains($portableSpecName, "\0") ||
+            str_starts_with($portableSpecName, '/') ||
+            preg_match('/^[A-Za-z]:\//', $portableSpecName) === 1 ||
+            in_array('..', explode('/', $portableSpecName), true)
+        ) {
+            throw self::specFileNotFound($specName, $basePath);
         }
 
-        throw new SpecFileNotFoundException(
+        foreach (self::SEARCH_EXTENSIONS as $extension) {
+            $candidate = "{$basePath}/{$specName}.{$extension}";
+            if (!file_exists($candidate)) {
+                continue;
+            }
+
+            $canonicalCandidate = realpath($candidate);
+            $canonicalBase = realpath($basePath);
+            if ($canonicalCandidate === false ||
+                $canonicalBase === false ||
+                !self::isPathInsideRoot($canonicalCandidate, $canonicalBase)
+            ) {
+                throw self::specFileNotFound($specName, $basePath);
+            }
+
+            return ['path' => $canonicalCandidate, 'extension' => $extension];
+        }
+
+        throw self::specFileNotFound($specName, $basePath);
+    }
+
+    private static function isPathInsideRoot(string $path, string $root): bool
+    {
+        $root = rtrim($root, '/\\');
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $path = strtolower($path);
+            $root = strtolower($root);
+        }
+
+        return $path === $root || str_starts_with($path, $root . DIRECTORY_SEPARATOR);
+    }
+
+    private static function specFileNotFound(string $specName, string $basePath): SpecFileNotFoundException
+    {
+        return new SpecFileNotFoundException(
             $specName,
             $basePath,
             sprintf(
