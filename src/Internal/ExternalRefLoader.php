@@ -11,6 +11,7 @@ use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 
 use function array_pop;
+use function array_slice;
 use function dirname;
 use function error_clear_last;
 use function error_get_last;
@@ -190,23 +191,31 @@ final class ExternalRefLoader
         }
     }
 
-    private static function normalizePathLexically(string $path): string
+    private static function normalizePathLexically(string $path, string $separator = DIRECTORY_SEPARATOR): string
     {
-        if (DIRECTORY_SEPARATOR === '\\') {
+        if ($separator === '\\') {
             $path = str_replace('/', '\\', $path);
         }
 
         $prefix = '';
-        if (DIRECTORY_SEPARATOR === '\\' && isset($path[2]) && $path[1] === ':' && $path[2] === '\\') {
+        if ($separator === '\\' && str_starts_with($path, '\\\\')) {
+            $prefix = '\\\\';
+            $path = substr($path, 2);
+            $uncSegments = explode($separator, $path);
+            if ($uncSegments[0] !== '' && isset($uncSegments[1]) && $uncSegments[1] !== '') {
+                $prefix .= $uncSegments[0] . $separator . $uncSegments[1] . $separator;
+                $path = implode($separator, array_slice($uncSegments, 2));
+            }
+        } elseif ($separator === '\\' && isset($path[2]) && $path[1] === ':' && $path[2] === '\\') {
             $prefix = substr($path, 0, 3);
             $path = substr($path, 3);
-        } elseif (str_starts_with($path, DIRECTORY_SEPARATOR)) {
-            $prefix = DIRECTORY_SEPARATOR;
+        } elseif (str_starts_with($path, $separator)) {
+            $prefix = $separator;
             $path = substr($path, 1);
         }
 
         $segments = [];
-        foreach (explode(DIRECTORY_SEPARATOR, $path) as $segment) {
+        foreach (explode($separator, $path) as $segment) {
             if ($segment === '' || $segment === '.') {
                 continue;
             }
@@ -223,7 +232,7 @@ final class ExternalRefLoader
             $segments[] = $segment;
         }
 
-        return $prefix . implode(DIRECTORY_SEPARATOR, $segments);
+        return $prefix . implode($separator, $segments);
     }
 
     private static function outsideAllowedRoot(string $refPath): InvalidOpenApiSpecException

@@ -6,6 +6,7 @@ namespace Studio\Gesso\Tests\Unit\Internal;
 
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Studio\Gesso\Internal\ExternalRefLoader;
@@ -40,6 +41,20 @@ class ExternalRefLoaderTest extends TestCase
         $this->removeDir($this->workDir);
         YamlAvailability::reset();
         parent::tearDown();
+    }
+
+    #[Test]
+    public function preserves_the_unc_server_and_share_as_the_windows_root_prefix(): void
+    {
+        $normalizePath = new ReflectionMethod(ExternalRefLoader::class, 'normalizePathLexically');
+
+        $normalized = $normalizePath->invoke(null, '\\\\server\\share\\root\\missing.json', '\\');
+
+        $this->assertSame('\\\\server\\share\\root\\missing.json', $normalized);
+
+        $normalizedAtShareRoot = $normalizePath->invoke(null, '\\\\server\\share\\..\\missing.json', '\\');
+
+        $this->assertSame('\\\\server\\share\\missing.json', $normalizedAtShareRoot);
     }
 
     #[Test]
