@@ -80,6 +80,13 @@ segment, absolute paths, and symlinks that resolve outside the root are reported
 as `SpecFileNotFoundException`. This intentionally uses the same diagnostic for
 existing and missing outside targets so lookup cannot reveal their existence.
 
+`#[BoundToOpenApiEnum]` paths are likewise confined to the canonical
+`enum_spec_base_path`, or to `spec_base_path` when the enum-specific root is
+unset. Nested relative paths remain supported; `..`, absolute paths, and
+symlinks resolving outside the selected root now fail with
+`EnumBindingReason::SpecFileNotFound`. Move the enum base to the narrowest
+trusted common parent instead of traversing out of it.
+
 HTTP(S) `$ref` resolution now requires an explicit destination allowlist.
 Pass `allowedRemoteRefHosts: ['specs.example.com']` together with
 `allowRemoteRefs: true`; list every trusted host used by nested references.

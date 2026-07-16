@@ -77,6 +77,13 @@ enum NotificationCodeEnum: string
 
 When this parameter is omitted (the default), `#[BoundToOpenApiEnum]` paths resolve against `spec_base_path` exactly as before — single-root projects don't need to change anything. Setting it to the same value as `spec_base_path` is functionally equivalent (the opt-in branch additionally validates that the directory exists with `is_dir()` before resolving any binding, while the fallback branch defers that check to per-file `file_exists()` lookups).
 
+The selected base path is a filesystem trust boundary. Attribute paths may use
+nested directories, but a `..` segment, an absolute path, or a symlink whose
+canonical target escapes the base is rejected as `SpecFileNotFound`. Existing
+and missing outside targets use the same reason so bindings cannot probe their
+existence. Configure `enum_spec_base_path` to the narrowest common directory
+that intentionally contains every bound enum schema.
+
 If `enum_spec_base_path` is configured but the directory does not exist, the asserter throws `EnumBindingException` with `EnumBindingReason::EnumBasePathNotFound` so a typo cannot silently fall through to a misleading `SpecFileNotFound` on every binding. From PHP, the manual `OpenApiSpecLoader::configure(basePath: …, enumBasePath: …)` call accepts the same parameter for non-PHPUnit setups (e.g. dedicated drift CI scripts).
 
 ## `EnumDriftAsserter::assertNoDrift()`

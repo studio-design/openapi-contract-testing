@@ -15,6 +15,7 @@ use Studio\Gesso\Schema\EnumDriftAsserter;
 use Studio\Gesso\Spec\OpenApiSpecLoader;
 use Studio\Gesso\Tests\Unit\Schema\Fixture\EmptySpecEnum;
 use Studio\Gesso\Tests\Unit\Schema\Fixture\EnumKeyNotArrayEnum;
+use Studio\Gesso\Tests\Unit\Schema\Fixture\EscapingSpecEnum;
 use Studio\Gesso\Tests\Unit\Schema\Fixture\IntegerBackedDriftEnum;
 use Studio\Gesso\Tests\Unit\Schema\Fixture\IntegerBackedEnum;
 use Studio\Gesso\Tests\Unit\Schema\Fixture\MalformedSpecEnum;
@@ -28,10 +29,16 @@ use Studio\Gesso\Tests\Unit\Schema\Fixture\SpecExtraEnum;
 use Studio\Gesso\Tests\Unit\Schema\Fixture\SpecFileMissingEnum;
 use Studio\Gesso\Tests\Unit\Schema\Fixture\UnattributedEnum;
 
+use function file_exists;
+use function file_put_contents;
+use function mkdir;
 use function restore_error_handler;
+use function rmdir;
 use function set_error_handler;
+use function symlink;
 use function sys_get_temp_dir;
 use function uniqid;
+use function unlink;
 
 class EnumDriftAsserterTest extends TestCase
 {
@@ -488,6 +495,83 @@ class EnumDriftAsserterTest extends TestCase
         } catch (EnumBindingException $e) {
             $this->assertSame(EnumBindingReason::SpecFileNotFound, $e->reason);
             $this->assertSame('enum-drift/matching.json', $e->specPath);
+        }
+    }
+
+    #[Test]
+    public function enum_binding_cannot_escape_its_base_path_with_parent_traversal(): void
+    {
+        $scratchDir = sys_get_temp_dir() . '/gesso-enum-root-' . uniqid('', true);
+        $enumRoot = $scratchDir . '/enums';
+        $outside = $scratchDir . '/outside.json';
+        mkdir($scratchDir);
+        mkdir($enumRoot);
+
+        try {
+            OpenApiSpecLoader::configure(basePath: $enumRoot, enumBasePath: $enumRoot);
+
+            try {
+                EnumDriftAsserter::assertNoDrift([EscapingSpecEnum::class]);
+                $this->fail('expected EnumBindingException for missing outside target');
+            } catch (EnumBindingException $e) {
+                $this->assertSame(EnumBindingReason::SpecFileNotFound, $e->reason);
+                $this->assertStringNotContainsString($outside, $e->getMessage());
+            }
+
+            file_put_contents($outside, '{"enum":["red","green","blue"]}');
+
+            try {
+                EnumDriftAsserter::assertNoDrift([EscapingSpecEnum::class]);
+                $this->fail('expected EnumBindingException for existing outside target');
+            } catch (EnumBindingException $e) {
+                $this->assertSame(EnumBindingReason::SpecFileNotFound, $e->reason);
+                $this->assertStringNotContainsString($outside, $e->getMessage());
+            }
+        } finally {
+            if (file_exists($outside)) {
+                unlink($outside);
+            }
+            rmdir($enumRoot);
+            rmdir($scratchDir);
+        }
+    }
+
+    #[Test]
+    public function enum_binding_cannot_follow_a_symlink_outside_its_base_path(): void
+    {
+        $scratchDir = sys_get_temp_dir() . '/gesso-enum-link-' . uniqid('', true);
+        $enumRoot = $scratchDir . '/enums';
+        $enumDir = $enumRoot . '/enum-drift';
+        $outside = $scratchDir . '/outside.json';
+        $link = $enumDir . '/matching.json';
+        mkdir($scratchDir);
+        mkdir($enumRoot);
+        mkdir($enumDir);
+        file_put_contents($outside, '{"enum":["red","green","blue"]}');
+        if (!@symlink($outside, $link)) {
+            unlink($outside);
+            rmdir($enumDir);
+            rmdir($enumRoot);
+            rmdir($scratchDir);
+            $this->markTestSkipped('symlinks are unavailable on this platform');
+        }
+
+        try {
+            OpenApiSpecLoader::configure(basePath: $enumRoot, enumBasePath: $enumRoot);
+
+            try {
+                EnumDriftAsserter::assertNoDrift([MatchingEnum::class]);
+                $this->fail('expected EnumBindingException for symlink outside target');
+            } catch (EnumBindingException $e) {
+                $this->assertSame(EnumBindingReason::SpecFileNotFound, $e->reason);
+                $this->assertStringNotContainsString($outside, $e->getMessage());
+            }
+        } finally {
+            unlink($link);
+            unlink($outside);
+            rmdir($enumDir);
+            rmdir($enumRoot);
+            rmdir($scratchDir);
         }
     }
 
