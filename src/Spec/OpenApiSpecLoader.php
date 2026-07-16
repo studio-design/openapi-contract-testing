@@ -23,14 +23,12 @@ use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 use function array_key_exists;
-use function array_values;
 use function file_exists;
 use function file_get_contents;
 use function get_debug_type;
 use function implode;
 use function in_array;
 use function is_array;
-use function is_string;
 use function json_decode;
 use function realpath;
 use function rtrim;
@@ -339,12 +337,6 @@ final class OpenApiSpecLoader
     {
         $normalized = [];
         foreach ($hosts as $host) {
-            if (!is_string($host)) {
-                throw new InvalidArgumentException(
-                    'OpenApiSpecLoader::configure(): every $allowedRemoteRefHosts entry must be a string.',
-                );
-            }
-
             $candidate = HttpRefLoader::normalizeHost($host);
             $isBracketedIpv6 = str_starts_with($candidate, '[') && str_ends_with($candidate, ']');
             if ($candidate === '' ||
@@ -368,7 +360,7 @@ final class OpenApiSpecLoader
             }
         }
 
-        return array_values($normalized);
+        return $normalized;
     }
 
     /** @return array{path: string, extension: string} */

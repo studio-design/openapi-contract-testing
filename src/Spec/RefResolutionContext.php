@@ -52,6 +52,8 @@ final class RefResolutionContext
      * A context with HTTP `$ref` resolution enabled. The `$client` /
      * `$factory` pair is required — passing `null` for either is
      * structurally impossible via this factory.
+     *
+     * @param list<string> $allowedRemoteRefHosts
      */
     public static function withRemoteRefs(
         ClientInterface $client,

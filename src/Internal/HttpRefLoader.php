@@ -100,19 +100,17 @@ final class HttpRefLoader
 
         $status = $response->getStatusCode();
         if ($status >= 300 && $status < 400) {
-            // Surface the redirect explicitly: PSR-18 clients diverge on
-            // whether they auto-follow (Guzzle defaults to follow, Symfony
-            // to not). A bare 3xx is almost always "user's client has
-            // redirect-following disabled", not a server bug. Including
-            // the Location target makes the next step obvious.
+            // Redirects must remain disabled because following one happens
+            // below Gesso's host allowlist boundary and could reach an
+            // unapproved host. The Location is diagnostic only, so callers
+            // can configure the canonical URL directly.
             $location = self::redactSensitiveUrlData($response->getHeaderLine('Location'));
 
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::RemoteRefFetchFailed,
                 sprintf(
                     'HTTP $ref fetch returned redirect status %d: %s%s. '
-                    . 'Configure your PSR-18 client to follow redirects, '
-                    . 'or pin the spec to the canonical URL.',
+                    . 'Keep redirects disabled and use the canonical URL directly.',
                     $status,
                     $safeUrl,
                     $location !== '' ? sprintf(' (Location: %s)', $location) : '',

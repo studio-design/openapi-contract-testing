@@ -236,10 +236,9 @@ class HttpRefLoaderTest extends TestCase
     #[Test]
     public function rejects_3xx_redirect_with_hint_pointing_at_location(): void
     {
-        // Surface the redirect explicitly: PSR-18 clients vary on whether
-        // they auto-follow (Guzzle does, Symfony does not). A bare 302
-        // landing here is almost always "user's client has redirect-following
-        // disabled", and the error message must point at the next step.
+        // Redirect following would happen below Gesso's allowlist boundary,
+        // so the diagnostic must keep it disabled and point users at the
+        // canonical URL instead of recommending an SSRF bypass.
         $url = 'https://example.com/redirect.json';
         $client = new FakeHttpClient([
             $url => new Response(302, ['Location' => 'https://example.com/canonical.json']),
@@ -253,7 +252,9 @@ class HttpRefLoaderTest extends TestCase
             $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
             $this->assertStringContainsString('302', $e->getMessage());
             $this->assertStringContainsString('https://example.com/canonical.json', $e->getMessage());
-            $this->assertStringContainsString('redirect', $e->getMessage());
+            $this->assertStringContainsString('Keep redirects disabled', $e->getMessage());
+            $this->assertStringContainsString('canonical URL', $e->getMessage());
+            $this->assertStringNotContainsString('follow redirects', $e->getMessage());
         }
     }
 
