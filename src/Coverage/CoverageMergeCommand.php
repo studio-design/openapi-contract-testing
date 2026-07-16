@@ -270,18 +270,18 @@ final class CoverageMergeCommand
         // one missing worker means the report under-counts coverage, which
         // is exactly the silent failure parallel-mode introduced. Fail
         // loudly so CI gating sees a non-zero exit.
-        $failureMarkers = CoverageSidecarReader::listFailureMarkerPaths($sidecarDir);
-        if ($failureMarkers !== []) {
-            $this->writeStderr(sprintf(
-                "[OpenAPI Coverage] FATAL: %d worker(s) failed to write a sidecar; merge would under-count coverage. Markers in %s\n",
-                count($failureMarkers),
-                $sidecarDir,
-            ));
-
-            return 1;
-        }
-
         try {
+            $failureMarkers = CoverageSidecarReader::listFailureMarkerPaths($sidecarDir);
+            if ($failureMarkers !== []) {
+                $this->writeStderr(sprintf(
+                    "[OpenAPI Coverage] FATAL: %d worker(s) failed to write a sidecar; merge would under-count coverage. Markers in %s\n",
+                    count($failureMarkers),
+                    $sidecarDir,
+                ));
+
+                return 1;
+            }
+
             $payloads = CoverageSidecarReader::readDir($sidecarDir);
         } catch (RuntimeException $e) {
             $this->writeStderr(sprintf("[OpenAPI Coverage] FATAL: %s\n", $e->getMessage()));

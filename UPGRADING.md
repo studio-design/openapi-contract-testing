@@ -87,6 +87,13 @@ symlinks resolving outside the selected root now fail with
 `EnumBindingReason::SpecFileNotFound`. Move the enum base to the narrowest
 trusted common parent instead of traversing out of it.
 
+Parallel coverage merge now applies the same sidecar trust boundary as worker
+writes. On POSIX, a `sidecar_dir` that is group/world writable is rejected;
+all platforms reject a symbolic-link sidecar directory, and individual
+sidecars must be regular non-symlink files that are not group/world writable on
+POSIX. If a custom shared directory was previously used, replace it with a
+dedicated directory owned by the test user.
+
 HTTP(S) `$ref` resolution now requires an explicit destination allowlist.
 Pass `allowedRemoteRefHosts: ['specs.example.com']` together with
 `allowRemoteRefs: true`; list every trusted host used by nested references.

@@ -55,7 +55,10 @@ relevant attack vectors are:
   spec source before enabling `allowRemoteRefs`
 - YAML spec loading (opt-in via `symfony/yaml`) — `symfony/yaml` is
   generally safe but spec inputs should still be trusted
-- Coverage sidecar files written under `sys_get_temp_dir()` in paratest mode
+- Coverage sidecar files written under `sys_get_temp_dir()` in paratest mode —
+  use a dedicated non-symlink directory that is not group/world writable;
+  merge rejects unsafe directories, symlink sidecars, and writable-by-others
+  sidecars
 
 Issues outside that scope (e.g. opis/json-schema validation behaviour) are
 forwarded upstream.
