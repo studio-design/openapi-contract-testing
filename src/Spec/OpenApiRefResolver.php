@@ -125,14 +125,16 @@ final class OpenApiRefResolver
      * any **filesystem-relative** `$ref` triggers `LocalRefRequiresSourceFile`.
      * HTTP(S) refs are dispatched via `$httpClient` regardless of `$sourceFile`.
      *
-     * Pass `$httpClient` + `$requestFactory` (PSR-18 / PSR-17) AND
-     * `$allowRemoteRefs: true` to permit HTTP(S) `$ref` resolution.
+     * Pass `$httpClient` + `$requestFactory` (PSR-18 / PSR-17),
+     * `$allowRemoteRefs: true`, and at least one exact host in
+     * `$allowedRemoteRefHosts` to permit HTTP(S) `$ref` resolution.
      * Without both, HTTP refs throw `RemoteRefDisallowed` (flag off) or
      * `HttpClientNotConfigured` (flag on but client/factory missing).
      * `file://` URLs are always rejected to keep path-resolution rules
      * predictable.
      *
      * @param array<string, mixed> $spec
+     * @param list<string> $allowedRemoteRefHosts exact hosts allowed for HTTP(S) refs
      *
      * @return array<string, mixed>
      *
@@ -144,6 +146,7 @@ final class OpenApiRefResolver
         ?ClientInterface $httpClient = null,
         ?RequestFactoryInterface $requestFactory = null,
         bool $allowRemoteRefs = false,
+        array $allowedRemoteRefHosts = [],
     ): array {
         // OpenApiSpecLoader::configure() catches this earlier with an
         // InvalidArgumentException; this guard is for callers that
@@ -158,10 +161,18 @@ final class OpenApiRefResolver
             );
         }
 
+        if ($allowRemoteRefs && $allowedRemoteRefHosts === []) {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::RemoteRefHostDisallowed,
+                'OpenApiRefResolver::resolve(): allowRemoteRefs requires at least one exact host '
+                . 'in $allowedRemoteRefHosts.',
+            );
+        }
+
         // After the guard above, allowRemoteRefs:true implies non-null
         // client + factory.
         $context = $allowRemoteRefs
-            ? RefResolutionContext::withRemoteRefs($httpClient, $requestFactory, $sourceFile)
+            ? RefResolutionContext::withRemoteRefs($httpClient, $requestFactory, $allowedRemoteRefHosts, $sourceFile)
             : RefResolutionContext::filesystemOnly($sourceFile);
 
         // $root is a frozen snapshot used for pointer lookups. PHP array
@@ -769,6 +780,7 @@ final class OpenApiRefResolver
                 $context->httpClient,
                 $context->requestFactory,
                 $documentCache,
+                $context->allowedRemoteRefHosts,
             );
         } catch (InvalidOpenApiSpecException $e) {
             // Re-wrap remote-fetch failures with the resolution chain so

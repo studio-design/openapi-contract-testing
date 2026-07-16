@@ -1405,6 +1405,7 @@
             "LocalRefUnreadable": null,
             "LocalRefRequiresSourceFile": null,
             "RemoteRefDisallowed": null,
+            "RemoteRefHostDisallowed": null,
             "RemoteRefFetchFailed": null,
             "HttpClientNotConfigured": null,
             "FileSchemeNotSupported": null,
@@ -6844,6 +6845,15 @@
                         "variadic": false,
                         "by_reference": false,
                         "default": null,
+                        "attributes": []
+                    },
+                    {
+                        "name": "allowedRemoteRefHosts",
+                        "type": "array",
+                        "optional": true,
+                        "variadic": false,
+                        "by_reference": false,
+                        "default": [],
                         "attributes": []
                     }
                 ]

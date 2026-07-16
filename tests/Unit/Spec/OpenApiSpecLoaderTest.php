@@ -418,6 +418,7 @@ class OpenApiSpecLoaderTest extends TestCase
             OpenApiSpecLoader::configure(
                 '/path/to/specs',
                 allowRemoteRefs: true,
+                allowedRemoteRefHosts: ['example.com'],
             );
             $this->fail('expected InvalidArgumentException');
         } catch (InvalidArgumentException $e) {
@@ -457,9 +458,51 @@ class OpenApiSpecLoaderTest extends TestCase
             httpClient: $client,
             requestFactory: $factory,
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
 
         $this->assertSame('/path/to/specs', OpenApiSpecLoader::getBasePath());
+    }
+
+    #[Test]
+    public function configure_rejects_remote_refs_without_an_allowed_host(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('allowedRemoteRefHosts');
+
+        OpenApiSpecLoader::configure(
+            '/path/to/specs',
+            httpClient: new Client(),
+            requestFactory: new HttpFactory(),
+            allowRemoteRefs: true,
+        );
+    }
+
+    #[Test]
+    public function configure_rejects_allowed_hosts_when_remote_refs_are_disabled(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('allowRemoteRefs is false');
+
+        OpenApiSpecLoader::configure(
+            '/path/to/specs',
+            allowedRemoteRefHosts: ['example.com'],
+        );
+    }
+
+    #[Test]
+    public function configure_rejects_urls_in_the_host_allowlist(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('pass a host only');
+
+        OpenApiSpecLoader::configure(
+            '/path/to/specs',
+            httpClient: new Client(),
+            requestFactory: new HttpFactory(),
+            allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['https://example.com/specs'],
+        );
     }
 
     #[Test]
@@ -478,6 +521,7 @@ class OpenApiSpecLoaderTest extends TestCase
             httpClient: new Client(),
             requestFactory: new HttpFactory(),
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
 
         // Reload — by-value-equal but not the cached array from before.
@@ -493,6 +537,7 @@ class OpenApiSpecLoaderTest extends TestCase
             httpClient: new Client(),
             requestFactory: new HttpFactory(),
             allowRemoteRefs: true,
+            allowedRemoteRefHosts: ['example.com'],
         );
 
         OpenApiSpecLoader::reset();

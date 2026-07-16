@@ -19,7 +19,6 @@ use function proc_close;
 use function proc_open;
 use function realpath;
 use function sprintf;
-use function str_replace;
 use function stream_get_contents;
 
 class DoctorCliIntegrationTest extends TestCase
@@ -95,11 +94,7 @@ class DoctorCliIntegrationTest extends TestCase
         $this->assertSame(0, $exit);
         $this->assertSame('', $stderr);
         $this->assertSame(
-            str_replace(
-                'openapi-contract doctor',
-                'gesso doctor',
-                (string) file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-contract-help.txt'),
-            ),
+            file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v2-gesso-doctor-help.txt'),
             $stdout,
         );
     }
@@ -112,11 +107,7 @@ class DoctorCliIntegrationTest extends TestCase
         $this->assertSame(2, $exit);
         $this->assertSame('', $stdout);
         $this->assertSame(
-            str_replace(
-                'openapi-contract doctor',
-                'gesso doctor',
-                (string) file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-contract-usage-error.txt'),
-            ),
+            file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v2-gesso-doctor-usage-error.txt'),
             $stderr,
         );
     }

@@ -56,6 +56,7 @@ final class HttpRefLoader
      * `UnsupportedExtension`.
      *
      * @param array<string, array<string, mixed>> $documentCache by-ref cache keyed by canonical URL
+     * @param list<string> $allowedRemoteRefHosts exact normalized or user-provided host allowlist
      *
      * @throws InvalidOpenApiSpecException when the URL cannot be fetched, decoded, or has no detectable format
      */
@@ -64,13 +65,9 @@ final class HttpRefLoader
         ClientInterface $client,
         RequestFactoryInterface $requestFactory,
         array &$documentCache,
+        array $allowedRemoteRefHosts,
     ): LoadedDocument {
         $canonicalUri = self::canonicalizeUri($url);
-
-        if (isset($documentCache[$canonicalUri])) {
-            return new LoadedDocument($canonicalUri, $documentCache[$canonicalUri]);
-        }
-
         $safeUrl = self::redactSensitiveUrlData($url);
 
         // PHP may include live function arguments when stringifying an
@@ -79,6 +76,11 @@ final class HttpRefLoader
         // parameter slot before any downstream operation can throw.
         $url = $safeUrl;
         $request = $requestFactory->createRequest('GET', $canonicalUri);
+        self::assertHostAllowed($safeUrl, $request->getUri()->getHost(), $allowedRemoteRefHosts);
+
+        if (isset($documentCache[$canonicalUri])) {
+            return new LoadedDocument($canonicalUri, $documentCache[$canonicalUri]);
+        }
 
         try {
             $response = $client->sendRequest($request);
@@ -98,19 +100,17 @@ final class HttpRefLoader
 
         $status = $response->getStatusCode();
         if ($status >= 300 && $status < 400) {
-            // Surface the redirect explicitly: PSR-18 clients diverge on
-            // whether they auto-follow (Guzzle defaults to follow, Symfony
-            // to not). A bare 3xx is almost always "user's client has
-            // redirect-following disabled", not a server bug. Including
-            // the Location target makes the next step obvious.
+            // Redirects must remain disabled because following one happens
+            // below Gesso's host allowlist boundary and could reach an
+            // unapproved host. The Location is diagnostic only, so callers
+            // can configure the canonical URL directly.
             $location = self::redactSensitiveUrlData($response->getHeaderLine('Location'));
 
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::RemoteRefFetchFailed,
                 sprintf(
                     'HTTP $ref fetch returned redirect status %d: %s%s. '
-                    . 'Configure your PSR-18 client to follow redirects, '
-                    . 'or pin the spec to the canonical URL.',
+                    . 'Keep redirects disabled and use the canonical URL directly.',
                     $status,
                     $safeUrl,
                     $location !== '' ? sprintf(' (Location: %s)', $location) : '',
@@ -168,6 +168,12 @@ final class HttpRefLoader
         return new LoadedDocument($canonicalUri, $decoded);
     }
 
+    /** @internal Shared with remote-ref configuration validation. */
+    public static function normalizeHost(string $host): string
+    {
+        return strtolower(rtrim(trim($host), '.'));
+    }
+
     /**
      * Remove URL userinfo and query values before diagnostics reach stderr or
      * CI logs. This also accepts surrounding transport-error prose because
@@ -190,6 +196,28 @@ final class HttpRefLoader
         $withoutQueryValues = preg_replace('~([?&][^=\s&#]+)=([^&#\s]*)~', '$1=[redacted]', $redacted);
 
         return $withoutQueryValues ?? $redacted;
+    }
+
+    /** @param list<string> $allowedRemoteRefHosts */
+    private static function assertHostAllowed(string $safeUrl, string $host, array $allowedRemoteRefHosts): void
+    {
+        $normalizedHost = self::normalizeHost($host);
+        if ($normalizedHost !== '') {
+            foreach ($allowedRemoteRefHosts as $allowedHost) {
+                if ($normalizedHost === self::normalizeHost($allowedHost)) {
+                    return;
+                }
+            }
+        }
+
+        throw new InvalidOpenApiSpecException(
+            InvalidOpenApiSpecReason::RemoteRefHostDisallowed,
+            sprintf(
+                'HTTP(S) $ref host is not allowed: %s. Add the exact host to $allowedRemoteRefHosts.',
+                $safeUrl,
+            ),
+            ref: $safeUrl,
+        );
     }
 
     private static function canonicalizeUri(string $url): string

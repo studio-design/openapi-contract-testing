@@ -69,7 +69,7 @@ use function substr;
 /**
  * Pre-test compatibility diagnostics for one or more OpenAPI documents.
  *
- * @phpstan-type DoctorOptions array{specs?: list<string>, strip_prefixes?: list<string>, format?: string, allow_remote_refs?: bool, phpunit_snippet?: bool, help?: bool, invalid_options?: list<string>}
+ * @phpstan-type DoctorOptions array{specs?: list<string>, strip_prefixes?: list<string>, remote_ref_hosts?: list<string>, format?: string, allow_remote_refs?: bool, phpunit_snippet?: bool, help?: bool, invalid_options?: list<string>}
  * @phpstan-type DoctorIssue array{severity: 'error'|'warning'|'skipped', category: string, spec: ?string, message: string, suggestion: ?string}
  * @phpstan-type SpecResult array{path: string, name: string, openapi: string, dialect: string, operations: int, responses: int}
  *
@@ -97,7 +97,7 @@ final class DoctorCommand
      */
     public static function parseArgv(array $argv): array
     {
-        $options = ['specs' => [], 'strip_prefixes' => [], 'invalid_options' => []];
+        $options = ['specs' => [], 'strip_prefixes' => [], 'remote_ref_hosts' => [], 'invalid_options' => []];
 
         foreach ($argv as $arg) {
             if ($arg === 'doctor') {
@@ -141,6 +141,13 @@ final class DoctorCommand
                     $options['allow_remote_refs'] = !in_array($value, ['0', 'false', 'no'], true);
 
                     break;
+                case 'remote_ref_host':
+                    $options['remote_ref_hosts'] = [
+                        ...$options['remote_ref_hosts'],
+                        ...array_values(array_filter(array_map('trim', explode(',', $value)), static fn(string $item): bool => $item !== '')),
+                    ];
+
+                    break;
                 case 'phpunit_snippet':
                     $options['phpunit_snippet'] = !in_array($value, ['0', 'false', 'no'], true);
 
@@ -167,6 +174,8 @@ final class DoctorCommand
               --format=text|json         Output format (default: text).
               --allow-remote-refs        Resolve HTTP(S) refs with an installed Guzzle or
                                          Symfony PSR-18 implementation.
+              --remote-ref-host=<host>   Exact host allowed for HTTP(S) refs. Required with
+                                         --allow-remote-refs; repeat as needed.
               --phpunit-snippet          Include the equivalent PHPUnit extension XML.
               --help                     Show this message.
 
@@ -193,12 +202,22 @@ final class DoctorCommand
             $message = $invalid !== []
                 ? 'Unknown argument(s): ' . implode(', ', $invalid)
                 : (($options['specs'] ?? []) === [] ? 'At least one --spec is required.' : "Unsupported --format={$format}.");
-            $this->writeStderr("[OpenAPI Doctor] {$message}\n\n" . self::usage($this->invocation));
+            $this->writeUsageError($message);
 
             return self::EXIT_USAGE;
         }
 
         $allowRemoteRefs = $options['allow_remote_refs'] ?? false;
+        $remoteRefHosts = $options['remote_ref_hosts'] ?? [];
+        if (($allowRemoteRefs && $remoteRefHosts === []) || (!$allowRemoteRefs && $remoteRefHosts !== [])) {
+            $message = $allowRemoteRefs
+                ? '--allow-remote-refs requires at least one --remote-ref-host.'
+                : '--remote-ref-host requires --allow-remote-refs.';
+            $this->writeUsageError($message);
+
+            return self::EXIT_USAGE;
+        }
+
         $transport = $allowRemoteRefs ? $this->remoteTransport() : null;
         if ($allowRemoteRefs && $transport === null) {
             $report = $this->report([], [[
@@ -216,7 +235,7 @@ final class DoctorCommand
         $specResults = [];
         $issues = [];
         foreach ($options['specs'] as $path) {
-            $this->diagnoseSpec($path, $options['strip_prefixes'] ?? [], $allowRemoteRefs, $transport, $specResults, $issues);
+            $this->diagnoseSpec($path, $options['strip_prefixes'] ?? [], $allowRemoteRefs, $remoteRefHosts, $transport, $specResults, $issues);
         }
 
         $report = $this->report($specResults, $issues, $options);
@@ -233,6 +252,7 @@ final class DoctorCommand
 
     /**
      * @param list<string> $stripPrefixes
+     * @param list<string> $remoteRefHosts
      * @param null|array{0: ClientInterface, 1: RequestFactoryInterface} $transport
      * @param list<SpecResult> $specResults
      * @param list<DoctorIssue> $issues
@@ -241,6 +261,7 @@ final class DoctorCommand
         string $inputPath,
         array $stripPrefixes,
         bool $allowRemoteRefs,
+        array $remoteRefHosts,
         ?array $transport,
         array &$specResults,
         array &$issues,
@@ -300,6 +321,7 @@ final class DoctorCommand
                 $transport[0] ?? null,
                 $transport[1] ?? null,
                 $allowRemoteRefs,
+                allowedRemoteRefHosts: $remoteRefHosts,
             );
             $spec = OpenApiSpecLoader::load($name);
             $version = OpenApiVersion::fromSpec($spec);
@@ -688,11 +710,17 @@ final class DoctorCommand
         return 'spec';
     }
 
+    private function writeUsageError(string $message): void
+    {
+        $this->writeStderr("[OpenAPI Doctor] {$message}\n\n" . self::usage($this->invocation));
+    }
+
     private function suggestionForException(InvalidOpenApiSpecException $e): ?string
     {
         return match ($e->reason->name) {
             'YamlLibraryMissing' => 'Run: composer require --dev symfony/yaml',
             'RemoteRefDisallowed' => 'Re-run with --allow-remote-refs and install a supported PSR-18 implementation, or bundle the spec.',
+            'RemoteRefHostDisallowed' => 'Add the exact trusted host with --remote-ref-host, or bundle the spec.',
             'HttpClientNotConfigured' => 'Install Guzzle or Symfony HttpClient and re-run with --allow-remote-refs.',
             default => null,
         };

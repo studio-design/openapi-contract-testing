@@ -50,6 +50,7 @@ class DoctorCommandTest extends TestCase
             [
                 'specs' => ['front.json', 'admin.yaml'],
                 'strip_prefixes' => ['/api', '/internal'],
+                'remote_ref_hosts' => ['specs.example.com', 'schemas.example.com'],
                 'invalid_options' => [],
                 'format' => 'json',
                 'allow_remote_refs' => true,
@@ -62,6 +63,8 @@ class DoctorCommandTest extends TestCase
                 '--strip-prefix=/internal',
                 '--format=json',
                 '--allow-remote-refs',
+                '--remote-ref-host=specs.example.com',
+                '--remote-ref-host=schemas.example.com',
                 '--phpunit-snippet',
             ]),
         );
@@ -141,12 +144,35 @@ class DoctorCommandTest extends TestCase
             remoteTransportFactory: static fn(): array => [$client, new HttpFactory()],
         );
 
-        $exit = $command->run(['specs' => [$root], 'format' => 'json', 'allow_remote_refs' => true]);
+        $exit = $command->run([
+            'specs' => [$root],
+            'format' => 'json',
+            'allow_remote_refs' => true,
+            'remote_ref_hosts' => ['example.com'],
+        ]);
         $report = json_decode($output, true, flags: JSON_THROW_ON_ERROR);
 
         $this->assertSame(DoctorCommand::EXIT_OK, $exit);
         $this->assertSame('ok', $report['status']);
         $this->assertSame([$url], $client->sentUrls());
+    }
+
+    #[Test]
+    public function remote_refs_require_an_explicit_host_allowlist(): void
+    {
+        $spec = $this->writeSpec('root.json', $this->validSpec('/pets'));
+        $stderr = '';
+        $command = new DoctorCommand(stderrWriter: static function (string $message) use (&$stderr): void {
+            $stderr .= $message;
+        });
+
+        $exit = $command->run([
+            'specs' => [$spec],
+            'allow_remote_refs' => true,
+        ]);
+
+        $this->assertSame(DoctorCommand::EXIT_USAGE, $exit);
+        $this->assertStringContainsString('--remote-ref-host', $stderr);
     }
 
     #[Test]

@@ -36,10 +36,11 @@ Remote references remain opt-in because diagnostics must not access the network 
 ```bash
 vendor/bin/gesso doctor \
   --spec=openapi/root.yaml \
-  --allow-remote-refs
+  --allow-remote-refs \
+  --remote-ref-host=specs.example.com
 ```
 
-The command automatically uses an installed Guzzle (`guzzlehttp/guzzle` plus `guzzlehttp/psr7`) or Symfony HttpClient PSR-18 implementation. Without `--allow-remote-refs`, an HTTP(S) `$ref` is reported as a reference error with an actionable hint. Network failures, malformed remote documents, content-type mismatches, and reference cycles also exit non-zero.
+The command automatically uses an installed Guzzle (`guzzlehttp/guzzle` plus `guzzlehttp/psr7`) or Symfony HttpClient PSR-18 implementation. Every permitted host must be listed with `--remote-ref-host`; repeat the option when a trusted contract intentionally spans hosts. A nested `$ref` that switches to an unlisted host is rejected before any request is sent. Without `--allow-remote-refs`, an HTTP(S) `$ref` is reported as a reference error with an actionable hint. Network failures, malformed remote documents, content-type mismatches, and reference cycles also exit non-zero.
 
 ## Machine-readable output
 

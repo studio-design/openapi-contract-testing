@@ -28,6 +28,7 @@ use Studio\Gesso\PHPUnit\ConsoleOutput;
 use Studio\Gesso\PHPUnit\InvalidStrictRequiredConfigurationException;
 use Studio\Gesso\SchemaContext;
 use Studio\Gesso\SkipOpenApiResolver;
+use Studio\Gesso\Spec\OpenApiSpecLoader;
 use Studio\Gesso\Tests\Helpers\PublicApiInventory;
 use Studio\Gesso\Tests\Unit\Compatibility\Fixture\PublicApiImplicitConstructorFixture;
 use Studio\Gesso\Tests\Unit\Compatibility\Fixture\PublicApiPrivateConstructorFixture;
@@ -171,6 +172,23 @@ final class PublicApiBaselineTest extends TestCase
             $expected[InvalidOpenApiSpecReason::class]['cases']['ExternalRef'],
             $expected[InvalidOpenApiSpecReason::class]['cases']['RemoteRefNotImplemented'],
         );
+        $reasonCases = [];
+        foreach ($expected[InvalidOpenApiSpecReason::class]['cases'] as $name => $value) {
+            $reasonCases[$name] = $value;
+            if ($name === 'RemoteRefDisallowed') {
+                $reasonCases['RemoteRefHostDisallowed'] = null;
+            }
+        }
+        $expected[InvalidOpenApiSpecReason::class]['cases'] = $reasonCases;
+        $expected[OpenApiSpecLoader::class]['methods']['configure']['parameters'][] = [
+            'name' => 'allowedRemoteRefHosts',
+            'type' => 'array',
+            'optional' => true,
+            'variadic' => false,
+            'by_reference' => false,
+            'default' => [],
+            'attributes' => [],
+        ];
         $expected[JsonCoverageRenderer::class]['constants']['SCHEMA_VERSION'] = 2;
         $expected[ExploredCase::class]['methods']['bodyAsArray'] = [
             'static' => false,

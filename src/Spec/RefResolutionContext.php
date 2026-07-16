@@ -35,6 +35,8 @@ final class RefResolutionContext
         public readonly ?ClientInterface $httpClient,
         public readonly ?RequestFactoryInterface $requestFactory,
         public readonly bool $allowRemoteRefs,
+        /** @var list<string> */
+        public readonly array $allowedRemoteRefHosts,
     ) {}
 
     /**
@@ -43,20 +45,23 @@ final class RefResolutionContext
      */
     public static function filesystemOnly(?string $sourceFile = null): self
     {
-        return new self($sourceFile, null, null, false);
+        return new self($sourceFile, null, null, false, []);
     }
 
     /**
      * A context with HTTP `$ref` resolution enabled. The `$client` /
      * `$factory` pair is required — passing `null` for either is
      * structurally impossible via this factory.
+     *
+     * @param list<string> $allowedRemoteRefHosts
      */
     public static function withRemoteRefs(
         ClientInterface $client,
         RequestFactoryInterface $factory,
+        array $allowedRemoteRefHosts,
         ?string $sourceFile = null,
     ): self {
-        return new self($sourceFile, $client, $factory, true);
+        return new self($sourceFile, $client, $factory, true, $allowedRemoteRefHosts);
     }
 
     /**
@@ -73,6 +78,7 @@ final class RefResolutionContext
             $this->httpClient,
             $this->requestFactory,
             $this->allowRemoteRefs,
+            $this->allowedRemoteRefHosts,
         );
     }
 }

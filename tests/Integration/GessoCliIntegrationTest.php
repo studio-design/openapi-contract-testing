@@ -63,21 +63,13 @@ final class GessoCliIntegrationTest extends TestCase
         $this->assertSame(0, $helpExit);
         $this->assertSame('', $helpStderr);
         $this->assertSame(
-            str_replace(
-                'openapi-contract doctor',
-                'gesso doctor',
-                (string) file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-contract-help.txt'),
-            ),
+            file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v2-gesso-doctor-help.txt'),
             $helpStdout,
         );
         $this->assertSame(2, $errorExit);
         $this->assertSame('', $errorStdout);
         $this->assertSame(
-            str_replace(
-                'openapi-contract doctor',
-                'gesso doctor',
-                (string) file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v1.9-openapi-contract-usage-error.txt'),
-            ),
+            file_get_contents($this->repoRoot . '/tests/fixtures/compatibility/v2-gesso-doctor-usage-error.txt'),
             $errorStderr,
         );
     }
