@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\Gesso\Tests\Unit\Spec;
 
+use const DIRECTORY_SEPARATOR;
 use const JSON_THROW_ON_ERROR;
 
 use GuzzleHttp\Client;
@@ -11,6 +12,7 @@ use GuzzleHttp\Psr7\HttpFactory;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 use stdClass;
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
@@ -24,10 +26,13 @@ use Symfony\Component\Yaml\Yaml;
 use function class_exists;
 use function file_put_contents;
 use function json_encode;
+use function ltrim;
 use function mkdir;
 use function restore_error_handler;
 use function rmdir;
 use function set_error_handler;
+use function substr;
+use function symlink;
 use function sys_get_temp_dir;
 use function uniqid;
 use function unlink;
@@ -61,6 +66,54 @@ class OpenApiSpecLoaderTest extends TestCase
         OpenApiSpecLoader::configure('/path/to/specs/');
 
         $this->assertSame('/path/to/specs', OpenApiSpecLoader::getBasePath());
+    }
+
+    #[Test]
+    public function configure_preserves_filesystem_roots(): void
+    {
+        OpenApiSpecLoader::configure('/', enumBasePath: '/');
+
+        $this->assertSame('/', OpenApiSpecLoader::getBasePath());
+        $this->assertSame('/', OpenApiSpecLoader::getEnumBasePath());
+
+        OpenApiSpecLoader::configure('C:/', enumBasePath: 'C:/');
+
+        $this->assertSame('C:/', OpenApiSpecLoader::getBasePath());
+        $this->assertSame('C:/', OpenApiSpecLoader::getEnumBasePath());
+    }
+
+    #[Test]
+    public function load_supports_the_posix_filesystem_root_as_the_base_path(): void
+    {
+        if (DIRECTORY_SEPARATOR !== '/') {
+            $this->markTestSkipped('POSIX filesystem root regression');
+        }
+
+        $scratchDir = sys_get_temp_dir() . '/openapi-root-base-' . uniqid('', true);
+        $path = $scratchDir . '/root.json';
+        mkdir($scratchDir);
+        file_put_contents($path, '{"openapi":"3.0.3","info":{"title":"Root base","version":"1"},"paths":{}}');
+
+        try {
+            OpenApiSpecLoader::configure('/');
+            $specName = ltrim(substr($path, 0, -5), '/');
+
+            $this->assertSame('Root base', OpenApiSpecLoader::load($specName)['info']['title']);
+        } finally {
+            unlink($path);
+            rmdir($scratchDir);
+        }
+    }
+
+    #[Test]
+    public function joining_a_windows_root_does_not_create_a_unc_path(): void
+    {
+        $joinBasePath = new ReflectionMethod(OpenApiSpecLoader::class, 'joinBasePath');
+
+        $candidate = $joinBasePath->invoke(null, '/', 'server/share/spec.json', '\\');
+
+        $this->assertSame('\\server/share/spec.json', $candidate);
+        $this->assertStringStartsNotWith('\\\\', $candidate);
     }
 
     #[Test]
@@ -223,6 +276,72 @@ class OpenApiSpecLoaderTest extends TestCase
             $this->assertSame('nonexistent', $e->specName);
             $this->assertSame('/nonexistent/path', $e->basePath);
             $this->assertStringContainsString('OpenAPI bundled spec not found', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function load_confines_entry_specs_to_the_canonical_base_path(): void
+    {
+        $scratchDir = sys_get_temp_dir() . '/openapi-entry-root-' . uniqid('', true);
+        $specDir = $scratchDir . '/specs';
+        $nestedDir = $specDir . '/nested';
+        mkdir($scratchDir);
+        mkdir($specDir);
+        mkdir($nestedDir);
+        file_put_contents($scratchDir . '/outside.json', '{"openapi":"3.0.3","info":{"title":"Outside","version":"1"},"paths":{}}');
+        file_put_contents($nestedDir . '/inside.json', '{"openapi":"3.0.3","info":{"title":"Inside","version":"1"},"paths":{}}');
+
+        try {
+            OpenApiSpecLoader::configure($specDir);
+
+            foreach (['../outside', '..\\outside', '../absent', '/outside', 'C:/outside'] as $specName) {
+                try {
+                    OpenApiSpecLoader::load($specName);
+                    $this->fail('expected SpecFileNotFoundException');
+                } catch (SpecFileNotFoundException $e) {
+                    $this->assertSame($specName, $e->specName);
+                    $this->assertSame($specDir, $e->basePath);
+                    $this->assertStringContainsString('OpenAPI bundled spec not found', $e->getMessage());
+                }
+            }
+
+            $this->assertSame('Inside', OpenApiSpecLoader::load('nested/inside')['info']['title']);
+        } finally {
+            unlink($scratchDir . '/outside.json');
+            unlink($nestedDir . '/inside.json');
+            rmdir($nestedDir);
+            rmdir($specDir);
+            rmdir($scratchDir);
+        }
+    }
+
+    #[Test]
+    public function load_rejects_an_entry_spec_symlinked_outside_the_base_path(): void
+    {
+        $scratchDir = sys_get_temp_dir() . '/openapi-entry-symlink-' . uniqid('', true);
+        $specDir = $scratchDir . '/specs';
+        $outside = $scratchDir . '/outside.json';
+        $link = $specDir . '/linked.json';
+        mkdir($scratchDir);
+        mkdir($specDir);
+        file_put_contents($outside, '{"openapi":"3.0.3","info":{"title":"Outside","version":"1"},"paths":{}}');
+        if (!@symlink($outside, $link)) {
+            unlink($outside);
+            rmdir($specDir);
+            rmdir($scratchDir);
+            $this->markTestSkipped('symlinks are unavailable on this platform');
+        }
+
+        try {
+            OpenApiSpecLoader::configure($specDir);
+
+            $this->expectException(SpecFileNotFoundException::class);
+            OpenApiSpecLoader::load('linked');
+        } finally {
+            unlink($link);
+            unlink($outside);
+            rmdir($specDir);
+            rmdir($scratchDir);
         }
     }
 

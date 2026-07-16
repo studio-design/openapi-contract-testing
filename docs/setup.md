@@ -32,10 +32,11 @@ openapi/
 
 HTTP(S) `$ref` (`https://example.com/schemas/pet.yaml`) is **opt-in** for security and CI predictability — see [HTTP `$ref` resolution](#http-ref-resolution-opt-in) below. If you prefer the legacy bundled-spec workflow, the loader still accepts the output of `npx @redocly/cli bundle --dereferenced` unchanged.
 
-`spec_base_path` is also the filesystem trust boundary for local external
-references. Gesso canonicalizes each target before reading it and rejects a
-`../` path, absolute path, or symlink when its final target escapes that
-directory.
+`spec_base_path` is also the filesystem trust boundary for entry documents and
+local external references. Entry spec names may include nested directories but
+cannot use `..`, an absolute path, or a symlink to escape that root. Gesso also
+canonicalizes each local `$ref` target before reading it and rejects the target
+when its final location escapes the directory.
 When entry documents and shared schemas live in sibling directories, configure
 their narrowest trusted common parent and include the entry subdirectory in the
 spec name:

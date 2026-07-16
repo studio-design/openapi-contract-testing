@@ -74,6 +74,12 @@ example, `spec_base_path=openapi` with `specs=bundled/front`). Doctor uses the
 same policy; pass `--local-ref-root=openapi` for that layout. Code branching on
 resolver reasons should handle the new `LocalRefOutsideAllowedRoot` case.
 
+Entry spec lookup is confined to the same canonical `spec_base_path`. Nested
+names such as `bundled/front` remain supported, while names containing a `..`
+segment, absolute paths, and symlinks that resolve outside the root are reported
+as `SpecFileNotFoundException`. This intentionally uses the same diagnostic for
+existing and missing outside targets so lookup cannot reveal their existence.
+
 HTTP(S) `$ref` resolution now requires an explicit destination allowlist.
 Pass `allowedRemoteRefHosts: ['specs.example.com']` together with
 `allowRemoteRefs: true`; list every trusted host used by nested references.
