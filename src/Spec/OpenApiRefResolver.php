@@ -135,6 +135,7 @@ final class OpenApiRefResolver
      *
      * @param array<string, mixed> $spec
      * @param list<string> $allowedRemoteRefHosts exact hosts allowed for HTTP(S) refs
+     * @param int $maxRemoteRefBytes maximum response bytes read per remote document; must be positive
      *
      * @return array<string, mixed>
      *
@@ -147,6 +148,7 @@ final class OpenApiRefResolver
         ?RequestFactoryInterface $requestFactory = null,
         bool $allowRemoteRefs = false,
         array $allowedRemoteRefHosts = [],
+        int $maxRemoteRefBytes = OpenApiSpecLoader::DEFAULT_MAX_REMOTE_REF_BYTES,
     ): array {
         // OpenApiSpecLoader::configure() catches this earlier with an
         // InvalidArgumentException; this guard is for callers that
@@ -169,10 +171,17 @@ final class OpenApiRefResolver
             );
         }
 
+        if ($allowRemoteRefs && $maxRemoteRefBytes < 1) {
+            throw new InvalidOpenApiSpecException(
+                InvalidOpenApiSpecReason::RemoteRefFetchFailed,
+                'OpenApiRefResolver::resolve(): $maxRemoteRefBytes must be greater than zero.',
+            );
+        }
+
         // After the guard above, allowRemoteRefs:true implies non-null
         // client + factory.
         $context = $allowRemoteRefs
-            ? RefResolutionContext::withRemoteRefs($httpClient, $requestFactory, $allowedRemoteRefHosts, $sourceFile)
+            ? RefResolutionContext::withRemoteRefs($httpClient, $requestFactory, $allowedRemoteRefHosts, $sourceFile, $maxRemoteRefBytes)
             : RefResolutionContext::filesystemOnly($sourceFile);
 
         // $root is a frozen snapshot used for pointer lookups. PHP array
@@ -781,6 +790,7 @@ final class OpenApiRefResolver
                 $context->requestFactory,
                 $documentCache,
                 $context->allowedRemoteRefHosts,
+                $context->maxRemoteRefBytes,
             );
         } catch (InvalidOpenApiSpecException $e) {
             // Re-wrap remote-fetch failures with the resolution chain so

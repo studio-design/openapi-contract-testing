@@ -7,6 +7,7 @@ namespace Studio\Gesso\Cli;
 use const E_USER_WARNING;
 use const ENT_QUOTES;
 use const ENT_XML1;
+use const FILTER_VALIDATE_INT;
 use const JSON_PRETTY_PRINT;
 use const JSON_THROW_ON_ERROR;
 use const JSON_UNESCAPED_SLASHES;
@@ -23,6 +24,7 @@ use Psr\Http\Message\RequestFactoryInterface;
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\MalformedDiscriminatorException;
 use Studio\Gesso\Exception\SpecFileNotFoundException;
+use Studio\Gesso\Internal\HttpRefLoader;
 use Studio\Gesso\OpenApiVersion;
 use Studio\Gesso\Spec\OpenApiOperationResolver;
 use Studio\Gesso\Spec\OpenApiSchemaConverter;
@@ -42,6 +44,7 @@ use function compact;
 use function count;
 use function dirname;
 use function explode;
+use function filter_var;
 use function fwrite;
 use function getcwd;
 use function htmlspecialchars;
@@ -69,7 +72,7 @@ use function substr;
 /**
  * Pre-test compatibility diagnostics for one or more OpenAPI documents.
  *
- * @phpstan-type DoctorOptions array{specs?: list<string>, strip_prefixes?: list<string>, remote_ref_hosts?: list<string>, format?: string, allow_remote_refs?: bool, phpunit_snippet?: bool, help?: bool, invalid_options?: list<string>}
+ * @phpstan-type DoctorOptions array{specs?: list<string>, strip_prefixes?: list<string>, remote_ref_hosts?: list<string>, remote_ref_max_bytes?: int|string, format?: string, allow_remote_refs?: bool, phpunit_snippet?: bool, help?: bool, invalid_options?: list<string>}
  * @phpstan-type DoctorIssue array{severity: 'error'|'warning'|'skipped', category: string, spec: ?string, message: string, suggestion: ?string}
  * @phpstan-type SpecResult array{path: string, name: string, openapi: string, dialect: string, operations: int, responses: int}
  *
@@ -148,6 +151,10 @@ final class DoctorCommand
                     ];
 
                     break;
+                case 'remote_ref_max_bytes':
+                    $options['remote_ref_max_bytes'] = $value;
+
+                    break;
                 case 'phpunit_snippet':
                     $options['phpunit_snippet'] = !in_array($value, ['0', 'false', 'no'], true);
 
@@ -176,6 +183,8 @@ final class DoctorCommand
                                          Symfony PSR-18 implementation.
               --remote-ref-host=<host>   Exact host allowed for HTTP(S) refs. Required with
                                          --allow-remote-refs; repeat as needed.
+              --remote-ref-max-bytes=<n> Maximum bytes read per remote document
+                                         (default: 10485760).
               --phpunit-snippet          Include the equivalent PHPUnit extension XML.
               --help                     Show this message.
 
@@ -218,6 +227,21 @@ final class DoctorCommand
             return self::EXIT_USAGE;
         }
 
+        $hasRemoteRefMaxBytes = array_key_exists('remote_ref_max_bytes', $options);
+        if ($hasRemoteRefMaxBytes && !$allowRemoteRefs) {
+            $this->writeUsageError('--remote-ref-max-bytes requires --allow-remote-refs.');
+
+            return self::EXIT_USAGE;
+        }
+        $maxRemoteRefBytes = $hasRemoteRefMaxBytes
+            ? filter_var($options['remote_ref_max_bytes'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+            : HttpRefLoader::DEFAULT_MAX_RESPONSE_BYTES;
+        if ($maxRemoteRefBytes === false) {
+            $this->writeUsageError('--remote-ref-max-bytes must be a positive integer.');
+
+            return self::EXIT_USAGE;
+        }
+
         $transport = $allowRemoteRefs ? $this->remoteTransport() : null;
         if ($allowRemoteRefs && $transport === null) {
             $report = $this->report([], [[
@@ -235,7 +259,7 @@ final class DoctorCommand
         $specResults = [];
         $issues = [];
         foreach ($options['specs'] as $path) {
-            $this->diagnoseSpec($path, $options['strip_prefixes'] ?? [], $allowRemoteRefs, $remoteRefHosts, $transport, $specResults, $issues);
+            $this->diagnoseSpec($path, $options['strip_prefixes'] ?? [], $allowRemoteRefs, $remoteRefHosts, $maxRemoteRefBytes, $transport, $specResults, $issues);
         }
 
         $report = $this->report($specResults, $issues, $options);
@@ -253,6 +277,7 @@ final class DoctorCommand
     /**
      * @param list<string> $stripPrefixes
      * @param list<string> $remoteRefHosts
+     * @param positive-int $maxRemoteRefBytes
      * @param null|array{0: ClientInterface, 1: RequestFactoryInterface} $transport
      * @param list<SpecResult> $specResults
      * @param list<DoctorIssue> $issues
@@ -262,6 +287,7 @@ final class DoctorCommand
         array $stripPrefixes,
         bool $allowRemoteRefs,
         array $remoteRefHosts,
+        int $maxRemoteRefBytes,
         ?array $transport,
         array &$specResults,
         array &$issues,
@@ -322,6 +348,7 @@ final class DoctorCommand
                 $transport[1] ?? null,
                 $allowRemoteRefs,
                 allowedRemoteRefHosts: $remoteRefHosts,
+                maxRemoteRefBytes: $maxRemoteRefBytes,
             );
             $spec = OpenApiSpecLoader::load($name);
             $version = OpenApiVersion::fromSpec($spec);

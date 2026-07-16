@@ -54,6 +54,7 @@ class DoctorCommandTest extends TestCase
                 'invalid_options' => [],
                 'format' => 'json',
                 'allow_remote_refs' => true,
+                'remote_ref_max_bytes' => '4096',
                 'phpunit_snippet' => true,
             ],
             DoctorCommand::parseArgv([
@@ -65,6 +66,7 @@ class DoctorCommandTest extends TestCase
                 '--allow-remote-refs',
                 '--remote-ref-host=specs.example.com',
                 '--remote-ref-host=schemas.example.com',
+                '--remote-ref-max-bytes=4096',
                 '--phpunit-snippet',
             ]),
         );
@@ -173,6 +175,44 @@ class DoctorCommandTest extends TestCase
 
         $this->assertSame(DoctorCommand::EXIT_USAGE, $exit);
         $this->assertStringContainsString('--remote-ref-host', $stderr);
+    }
+
+    #[Test]
+    public function remote_ref_max_bytes_requires_remote_refs(): void
+    {
+        $spec = $this->writeSpec('root.json', $this->validSpec('/pets'));
+        $stderr = '';
+        $command = new DoctorCommand(stderrWriter: static function (string $message) use (&$stderr): void {
+            $stderr .= $message;
+        });
+
+        $exit = $command->run([
+            'specs' => [$spec],
+            'remote_ref_max_bytes' => '1024',
+        ]);
+
+        $this->assertSame(DoctorCommand::EXIT_USAGE, $exit);
+        $this->assertStringContainsString('--remote-ref-max-bytes requires --allow-remote-refs', $stderr);
+    }
+
+    #[Test]
+    public function remote_ref_max_bytes_must_be_a_positive_integer(): void
+    {
+        $spec = $this->writeSpec('root.json', $this->validSpec('/pets'));
+        $stderr = '';
+        $command = new DoctorCommand(stderrWriter: static function (string $message) use (&$stderr): void {
+            $stderr .= $message;
+        });
+
+        $exit = $command->run([
+            'specs' => [$spec],
+            'allow_remote_refs' => true,
+            'remote_ref_hosts' => ['example.com'],
+            'remote_ref_max_bytes' => '0',
+        ]);
+
+        $this->assertSame(DoctorCommand::EXIT_USAGE, $exit);
+        $this->assertStringContainsString('positive integer', $stderr);
     }
 
     #[Test]

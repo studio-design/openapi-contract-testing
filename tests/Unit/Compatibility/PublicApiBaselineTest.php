@@ -180,6 +180,7 @@ final class PublicApiBaselineTest extends TestCase
             }
         }
         $expected[InvalidOpenApiSpecReason::class]['cases'] = $reasonCases;
+        $expected[OpenApiSpecLoader::class]['constants']['DEFAULT_MAX_REMOTE_REF_BYTES'] = 10_485_760;
         $expected[OpenApiSpecLoader::class]['methods']['configure']['parameters'][] = [
             'name' => 'allowedRemoteRefHosts',
             'type' => 'array',
@@ -187,6 +188,18 @@ final class PublicApiBaselineTest extends TestCase
             'variadic' => false,
             'by_reference' => false,
             'default' => [],
+            'attributes' => [],
+        ];
+        $expected[OpenApiSpecLoader::class]['methods']['configure']['parameters'][] = [
+            'name' => 'maxRemoteRefBytes',
+            'type' => 'int',
+            'optional' => true,
+            'variadic' => false,
+            'by_reference' => false,
+            'default' => [
+                'constant' => 'self::DEFAULT_MAX_REMOTE_REF_BYTES',
+                'value' => 10_485_760,
+            ],
             'attributes' => [],
         ];
         $expected[JsonCoverageRenderer::class]['constants']['SCHEMA_VERSION'] = 2;

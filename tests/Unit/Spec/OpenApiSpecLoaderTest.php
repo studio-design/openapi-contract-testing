@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Studio\Gesso\Tests\Unit\Spec;
 
+use const JSON_THROW_ON_ERROR;
+
 use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\HttpFactory;
 use InvalidArgumentException;
@@ -15,6 +17,7 @@ use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 use Studio\Gesso\Exception\SpecFileNotFoundException;
 use Studio\Gesso\Internal\YamlAvailability;
 use Studio\Gesso\Spec\OpenApiSpecLoader;
+use Studio\Gesso\Tests\Helpers\FakeHttpClient;
 use Studio\Gesso\Validation\Request\SecurityValidator;
 use Symfony\Component\Yaml\Yaml;
 
@@ -462,6 +465,49 @@ class OpenApiSpecLoaderTest extends TestCase
         );
 
         $this->assertSame('/path/to/specs', OpenApiSpecLoader::getBasePath());
+    }
+
+    #[Test]
+    public function configure_rejects_non_positive_remote_response_limit(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('maxRemoteRefBytes');
+
+        OpenApiSpecLoader::configure('/path/to/specs', maxRemoteRefBytes: 0);
+    }
+
+    #[Test]
+    public function load_enforces_the_configured_remote_response_limit(): void
+    {
+        $tempDir = sys_get_temp_dir() . '/openapi-remote-limit-' . uniqid('', true);
+        mkdir($tempDir);
+        $url = 'https://example.com/schema.json';
+        file_put_contents($tempDir . '/root.json', (string) json_encode([
+            'openapi' => '3.1.0',
+            'info' => ['title' => 'Test', 'version' => '1'],
+            'paths' => [],
+            'components' => ['schemas' => ['Remote' => ['$ref' => $url]]],
+        ], JSON_THROW_ON_ERROR));
+
+        try {
+            OpenApiSpecLoader::configure(
+                $tempDir,
+                httpClient: new FakeHttpClient([
+                    $url => FakeHttpClient::jsonResponse('{"type":"object"}'),
+                ]),
+                requestFactory: new HttpFactory(),
+                allowRemoteRefs: true,
+                allowedRemoteRefHosts: ['example.com'],
+                maxRemoteRefBytes: 10,
+            );
+
+            $this->expectException(InvalidOpenApiSpecException::class);
+            $this->expectExceptionMessage('configured limit of 10 bytes');
+            OpenApiSpecLoader::load('root');
+        } finally {
+            @unlink($tempDir . '/root.json');
+            @rmdir($tempDir);
+        }
     }
 
     #[Test]

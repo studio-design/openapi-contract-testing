@@ -41,6 +41,8 @@ use function trim;
 
 final class OpenApiSpecLoader
 {
+    public const DEFAULT_MAX_REMOTE_REF_BYTES = HttpRefLoader::DEFAULT_MAX_RESPONSE_BYTES;
+
     /**
      * Extensions are searched in the order listed; the first hit wins.
      * JSON is first for back-compat with the pre-existing bundle workflow.
@@ -69,6 +71,7 @@ final class OpenApiSpecLoader
 
     /** @var list<string> */
     private static array $allowedRemoteRefHosts = [];
+    private static int $maxRemoteRefBytes = self::DEFAULT_MAX_REMOTE_REF_BYTES;
 
     /**
      * Configure the spec loader.
@@ -97,6 +100,8 @@ final class OpenApiSpecLoader
      * @param list<string> $allowedRemoteRefHosts Exact hostnames or IP literals permitted when
      *                                            `$allowRemoteRefs` is true. Ports and URL paths
      *                                            are not accepted. Matching is case-insensitive.
+     * @param int $maxRemoteRefBytes Maximum HTTP response-body bytes read for each remote
+     *                               document. Must be positive; the default is 10 MiB.
      *
      * @throws InvalidArgumentException for any misconfigured pair: `$allowRemoteRefs` true
      *                                  without client/factory, OR client provided without
@@ -111,6 +116,7 @@ final class OpenApiSpecLoader
         bool $allowRemoteRefs = false,
         ?string $enumBasePath = null,
         array $allowedRemoteRefHosts = [],
+        int $maxRemoteRefBytes = self::DEFAULT_MAX_REMOTE_REF_BYTES,
     ): void {
         if ($allowRemoteRefs && ($httpClient === null || $requestFactory === null)) {
             throw new InvalidArgumentException(
@@ -147,6 +153,12 @@ final class OpenApiSpecLoader
             );
         }
 
+        if ($maxRemoteRefBytes < 1) {
+            throw new InvalidArgumentException(
+                'OpenApiSpecLoader::configure(): $maxRemoteRefBytes must be greater than zero.',
+            );
+        }
+
         $allowedRemoteRefHosts = self::normalizeAllowedRemoteRefHosts($allowedRemoteRefHosts);
 
         if ($enumBasePath !== null && trim($enumBasePath) === '') {
@@ -170,6 +182,7 @@ final class OpenApiSpecLoader
         self::$requestFactory = $requestFactory;
         self::$allowRemoteRefs = $allowRemoteRefs;
         self::$allowedRemoteRefHosts = $allowedRemoteRefHosts;
+        self::$maxRemoteRefBytes = $maxRemoteRefBytes;
         // A previous configure() call may have cached specs under a
         // different remote-refs policy. Evict so the next load() runs
         // with the new client/flag combination.
@@ -273,6 +286,7 @@ final class OpenApiSpecLoader
                     self::$requestFactory,
                     self::$allowRemoteRefs,
                     self::$allowedRemoteRefHosts,
+                    self::$maxRemoteRefBytes,
                 ),
             );
         } catch (InvalidOpenApiSpecException $e) {
@@ -325,6 +339,7 @@ final class OpenApiSpecLoader
         self::$requestFactory = null;
         self::$allowRemoteRefs = false;
         self::$allowedRemoteRefHosts = [];
+        self::$maxRemoteRefBytes = self::DEFAULT_MAX_REMOTE_REF_BYTES;
         YamlAvailability::reset();
     }
 

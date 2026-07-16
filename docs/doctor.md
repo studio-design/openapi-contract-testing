@@ -37,10 +37,11 @@ Remote references remain opt-in because diagnostics must not access the network 
 vendor/bin/gesso doctor \
   --spec=openapi/root.yaml \
   --allow-remote-refs \
-  --remote-ref-host=specs.example.com
+  --remote-ref-host=specs.example.com \
+  --remote-ref-max-bytes=10485760
 ```
 
-The command automatically uses an installed Guzzle (`guzzlehttp/guzzle` plus `guzzlehttp/psr7`) or Symfony HttpClient PSR-18 implementation. Every permitted host must be listed with `--remote-ref-host`; repeat the option when a trusted contract intentionally spans hosts. A nested `$ref` that switches to an unlisted host is rejected before any request is sent. Without `--allow-remote-refs`, an HTTP(S) `$ref` is reported as a reference error with an actionable hint. Network failures, malformed remote documents, content-type mismatches, and reference cycles also exit non-zero.
+The command automatically uses an installed Guzzle (`guzzlehttp/guzzle` plus `guzzlehttp/psr7`) or Symfony HttpClient PSR-18 implementation. Every permitted host must be listed with `--remote-ref-host`; repeat the option when a trusted contract intentionally spans hosts. A nested `$ref` that switches to an unlisted host is rejected before any request is sent. Each remote document is limited to 10 MiB by default; use `--remote-ref-max-bytes=<positive integer>` only when a trusted contract requires a larger bound. Without `--allow-remote-refs`, an HTTP(S) `$ref` is reported as a reference error with an actionable hint. Network failures, oversized or malformed remote documents, content-type mismatches, and reference cycles also exit non-zero.
 
 ## Machine-readable output
 

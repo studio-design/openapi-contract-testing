@@ -70,6 +70,11 @@ Pass `allowedRemoteRefHosts: ['specs.example.com']` together with
 The Doctor equivalent is repeatable `--remote-ref-host=<host>`. Unlisted hosts
 are rejected before a request is sent. Keep PSR-18 redirect following disabled
 and use canonical URLs so a redirect cannot move below this policy boundary.
+Remote documents are also limited to 10 MiB each by default. `OpenApiSpecLoader`
+configuration can raise the positive `maxRemoteRefBytes` value, and Doctor uses
+`--remote-ref-max-bytes=<bytes>`. Configure transport-level timeouts and body
+limits too because a PSR-18 implementation may buffer the response before
+returning its PSR-7 stream.
 
 Several orchestration types that were unintentionally part of the v1 PHP API
 are marked `@internal` in v2. Do not call coverage renderer, sidecar I/O,
