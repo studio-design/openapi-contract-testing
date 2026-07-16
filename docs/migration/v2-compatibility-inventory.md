@@ -137,7 +137,9 @@ Studio\OpenApiContractTesting\Spec\OpenApiSpecResolver
 The loader's static configuration, base paths, strip prefixes, local/remote
 reference inputs, cache behavior exposed through non-internal methods, and
 exception taxonomy are observable contracts. Remote resolution in v2 requires
-the new `allowedRemoteRefHosts` argument whenever `allowRemoteRefs` is enabled.
+the new `allowedRemoteRefHosts` argument whenever `allowRemoteRefs` is enabled
+and limits each remote document to 10 MiB by default. A positive
+`maxRemoteRefBytes` value can raise that bound for trusted contracts.
 
 ### Coverage
 
@@ -389,6 +391,7 @@ Accepted options:
 - `--format=text|json`;
 - `--allow-remote-refs`;
 - repeatable `--remote-ref-host=<host>` (required with `--allow-remote-refs`);
+- `--remote-ref-max-bytes=<positive integer>` (10 MiB default);
 - `--phpunit-snippet`;
 - `--help` / `-h`.
 
@@ -396,10 +399,11 @@ Exit codes are `0` for a usable contract, `1` for diagnostic failure, and `2`
 for invalid usage. JSON uses `schemaVersion: 1`; issue fields are `severity`,
 `category`, `spec`, `message`, and nullable `suggestion`.
 
-Migration status: unchanged. The exact v1.9 help and invalid-usage output are
-captured under `tests/fixtures/compatibility/` and exercised through the
-installed-style binary integration test, including exit code and output
-channel.
+Migration status: v2 adds the host allowlist and remote response-size option.
+The exact v1.9 help and invalid-usage output remain captured under
+`tests/fixtures/compatibility/`, while v2 fixtures pin the additive options.
+Both generations are exercised through the installed-style binary integration
+test, including exit code and output channel.
 
 ### Coverage merge
 

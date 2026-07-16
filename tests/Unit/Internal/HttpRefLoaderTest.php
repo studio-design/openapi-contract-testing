@@ -436,7 +436,7 @@ class HttpRefLoaderTest extends TestCase
         );
         $stream = FnStream::decorate(Utils::streamFor(''), [
             'isSeekable' => static fn(): bool => false,
-            'getContents' => static function () use ($cause): never {
+            'read' => static function (int $length) use ($cause): never {
                 throw new RuntimeException(
                     'body read failed for https://alice:secret@example.com/body.json?token=query-secret',
                     0,
@@ -463,6 +463,64 @@ class HttpRefLoaderTest extends TestCase
             $this->assertStringNotContainsString('query-secret', $rendered);
             $this->assertStringNotContainsString('nested-query-secret', $rendered);
             $this->assertNull($e->getPrevious());
+        }
+    }
+
+    #[Test]
+    public function accepts_response_exactly_at_the_configured_limit(): void
+    {
+        $url = 'https://example.com/exact.json';
+        $client = new FakeHttpClient([
+            $url => new Response(200, ['Content-Type' => 'application/json'], '{"a":1}'),
+        ]);
+
+        $cache = [];
+        $result = HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com'], 7);
+
+        $this->assertSame(['a' => 1], $result->decoded);
+    }
+
+    #[Test]
+    public function rejects_response_whose_content_length_exceeds_the_configured_limit(): void
+    {
+        $url = 'https://example.com/oversized.json';
+        $client = new FakeHttpClient([
+            $url => new Response(200, [
+                'Content-Type' => 'application/json',
+                'Content-Length' => '1024',
+            ], '{}'),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com'], 10);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
+            $this->assertStringContainsString('exceeds', $e->getMessage());
+            $this->assertStringContainsString('10 bytes', $e->getMessage());
+        }
+    }
+
+    #[Test]
+    public function rejects_streamed_response_that_exceeds_the_configured_limit(): void
+    {
+        $url = 'https://example.com/streamed.json';
+        $stream = FnStream::decorate(Utils::streamFor('{"value":"too large"}'), [
+            'getSize' => static fn(): ?int => null,
+        ]);
+        $client = new FakeHttpClient([
+            $url => new Response(200, ['Content-Type' => 'application/json'], $stream),
+        ]);
+
+        try {
+            $cache = [];
+            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache, ['example.com'], 10);
+            $this->fail('expected InvalidOpenApiSpecException');
+        } catch (InvalidOpenApiSpecException $e) {
+            $this->assertSame(InvalidOpenApiSpecReason::RemoteRefFetchFailed, $e->reason);
+            $this->assertStringContainsString('exceeds', $e->getMessage());
+            $this->assertStringContainsString('10 bytes', $e->getMessage());
         }
     }
 

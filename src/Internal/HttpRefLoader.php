@@ -9,17 +9,22 @@ use const PATHINFO_EXTENSION;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
+use Psr\Http\Message\StreamInterface;
 use RuntimeException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
 use Studio\Gesso\Exception\InvalidOpenApiSpecReason;
 
+use function ctype_digit;
+use function ltrim;
 use function pathinfo;
 use function preg_replace;
 use function preg_split;
 use function rtrim;
 use function sprintf;
 use function str_ends_with;
+use function strcmp;
 use function strcspn;
+use function strlen;
 use function strtolower;
 use function substr;
 use function trim;
@@ -44,6 +49,9 @@ use function trim;
  */
 final class HttpRefLoader
 {
+    public const DEFAULT_MAX_RESPONSE_BYTES = 10_485_760;
+    private const READ_CHUNK_BYTES = 8192;
+
     private function __construct() {}
 
     /**
@@ -66,6 +74,7 @@ final class HttpRefLoader
         RequestFactoryInterface $requestFactory,
         array &$documentCache,
         array $allowedRemoteRefHosts,
+        int $maxResponseBytes = self::DEFAULT_MAX_RESPONSE_BYTES,
     ): LoadedDocument {
         $canonicalUri = self::canonicalizeUri($url);
         $safeUrl = self::redactSensitiveUrlData($url);
@@ -126,17 +135,27 @@ final class HttpRefLoader
             );
         }
 
-        // Read via getContents() rather than (string) cast so a stream
-        // I/O failure surfaces as a real exception (PSR-7 permits
-        // __toString() to silently return '' on read errors, which
-        // would then mis-classify as MalformedJson/Yaml).
+        $contentLength = trim($response->getHeaderLine('Content-Length'));
+        if ($contentLength !== '' && ctype_digit($contentLength) && self::decimalExceeds($contentLength, $maxResponseBytes)) {
+            throw self::responseTooLarge($safeUrl, $maxResponseBytes);
+        }
+
+        // Read incrementally rather than casting or calling getContents().
+        // PSR-7 bodies may be arbitrarily large or have no known size, so
+        // the configured limit must be enforced against bytes actually read.
         $bodyStream = $response->getBody();
 
         try {
+            $knownSize = $bodyStream->getSize();
+            if ($knownSize !== null && $knownSize > $maxResponseBytes) {
+                throw self::responseTooLarge($safeUrl, $maxResponseBytes);
+            }
             if ($bodyStream->isSeekable()) {
                 $bodyStream->rewind();
             }
-            $body = $bodyStream->getContents();
+            $body = self::readLimitedBody($bodyStream, $safeUrl, $maxResponseBytes);
+        } catch (InvalidOpenApiSpecException $e) {
+            throw $e;
         } catch (RuntimeException $e) {
             $safeBodyMessage = self::redactSensitiveUrlData($e->getMessage());
 
@@ -201,6 +220,51 @@ final class HttpRefLoader
         $withoutQueryValues = preg_replace('~([?&][^=\s&#]+)=([^&#\s]*)~', '$1=[redacted]', $redacted);
 
         return $withoutQueryValues ?? $redacted;
+    }
+
+    private static function readLimitedBody(StreamInterface $stream, string $safeUrl, int $maxResponseBytes): string
+    {
+        $body = '';
+        while (!$stream->eof()) {
+            $remaining = $maxResponseBytes - strlen($body);
+            $readLength = $remaining >= self::READ_CHUNK_BYTES
+                ? self::READ_CHUNK_BYTES
+                : $remaining + 1;
+            $chunk = $stream->read($readLength);
+            if ($chunk === '') {
+                throw new RuntimeException('response body stream returned no data before EOF');
+            }
+
+            $body .= $chunk;
+            if (strlen($body) > $maxResponseBytes) {
+                throw self::responseTooLarge($safeUrl, $maxResponseBytes);
+            }
+        }
+
+        return $body;
+    }
+
+    private static function responseTooLarge(string $safeUrl, int $maxResponseBytes): InvalidOpenApiSpecException
+    {
+        return new InvalidOpenApiSpecException(
+            InvalidOpenApiSpecReason::RemoteRefFetchFailed,
+            sprintf(
+                'HTTP $ref response exceeds the configured limit of %d bytes: %s.',
+                $maxResponseBytes,
+                $safeUrl,
+            ),
+            ref: $safeUrl,
+        );
+    }
+
+    private static function decimalExceeds(string $decimal, int $limit): bool
+    {
+        $decimal = ltrim($decimal, '0');
+        $decimal = $decimal === '' ? '0' : $decimal;
+        $limitString = (string) $limit;
+
+        return strlen($decimal) > strlen($limitString) ||
+            (strlen($decimal) === strlen($limitString) && strcmp($decimal, $limitString) > 0);
     }
 
     /** @param list<string> $allowedRemoteRefHosts */

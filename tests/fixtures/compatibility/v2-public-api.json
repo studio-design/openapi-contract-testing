@@ -6780,7 +6780,9 @@
         "attributes": [],
         "backing_type": null,
         "cases": [],
-        "constants": [],
+        "constants": {
+            "DEFAULT_MAX_REMOTE_REF_BYTES": 10485760
+        },
         "properties": [],
         "methods": {
             "configure": {
@@ -6854,6 +6856,18 @@
                         "variadic": false,
                         "by_reference": false,
                         "default": [],
+                        "attributes": []
+                    },
+                    {
+                        "name": "maxRemoteRefBytes",
+                        "type": "int",
+                        "optional": true,
+                        "variadic": false,
+                        "by_reference": false,
+                        "default": {
+                            "constant": "self::DEFAULT_MAX_REMOTE_REF_BYTES",
+                            "value": 10485760
+                        },
                         "attributes": []
                     }
                 ]

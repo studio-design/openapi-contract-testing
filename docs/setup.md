@@ -594,6 +594,7 @@ OpenApiSpecLoader::configure(
     requestFactory: new HttpFactory(), // PSR-17 RequestFactoryInterface
     allowRemoteRefs: true,
     allowedRemoteRefHosts: ['specs.example.com'],
+    maxRemoteRefBytes: 10_485_760, // optional; 10 MiB default per document
 );
 ```
 
@@ -622,6 +623,15 @@ following. DNS and network-layer controls remain the application's
 responsibility because PSR-18 does not expose connection-level address policy.
 [See the OWASP SSRF Prevention Cheat Sheet.](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)
 
+Each remote document is limited to 10 MiB by default. Gesso checks a valid
+`Content-Length`, the PSR-7 stream's known size, and the bytes actually read, so
+a missing or false size header cannot bypass the limit. Set
+`maxRemoteRefBytes` to a positive integer only when a trusted contract is
+larger. A PSR-18 client may buffer a response before returning its PSR-7 stream;
+also configure client-level timeouts and transfer limits where the selected
+implementation supports them. This bounds the transport as well as Gesso's
+parser boundary. See the [PSR-7 stream rationale](https://www.php-fig.org/psr/psr-7/#13-streams).
+
 Misconfiguration is caught early:
 
 | Setup | Result |
@@ -632,6 +642,7 @@ Misconfiguration is caught early:
 | `$httpClient` set but `allowRemoteRefs: false` | `InvalidArgumentException` at `configure()` (silent misuse impossible) |
 | `allowRemoteRefs: true` + client + ref to URL that 4xx/5xx | `InvalidOpenApiSpecException` with reason `RemoteRefFetchFailed` |
 | `allowRemoteRefs: true` + client + ref to URL that 3xx | `RemoteRefFetchFailed` with redirect target — keep redirects disabled and use the canonical URL |
+| Remote response exceeds `maxRemoteRefBytes` | `RemoteRefFetchFailed` before parsing; raise the limit only for a trusted contract |
 | `allowRemoteRefs: true` + client + ref to URL with no detectable format | reason `UnsupportedExtension` (URL extension or `Content-Type` header is required) |
 
 Format detection prefers the URL's filename extension (`.json` / `.yaml` / `.yml`) and falls back to the response's `Content-Type` (`application/json`, `application/*+json`, `application/yaml`, `text/yaml`, etc.). URLs without a recognisable extension still work as long as the server sets a usable `Content-Type`.
