@@ -16,6 +16,8 @@ use Studio\Gesso\Internal\HttpRefLoader;
 use Studio\Gesso\Tests\Helpers\FakeHttpClient;
 use Studio\Gesso\Tests\Helpers\FakeHttpClientUnexpectedRequest;
 
+use function ini_set;
+
 class HttpRefLoaderTest extends TestCase
 {
     private HttpFactory $factory;
@@ -380,28 +382,45 @@ class HttpRefLoaderTest extends TestCase
     #[Test]
     public function does_not_reconnect_a_sensitive_nested_transport_exception(): void
     {
-        $url = 'https://example.com/pet.json';
+        $url = 'https://alice:secret@example.com/pet.json?token=query-secret';
         $client = new FakeHttpClient([
             $url => static function (): Response {
                 $cause = new RuntimeException(
-                    'request failed for https://alice:secret@example.com/private.json?token=query-secret',
+                    'request failed for https://nested:nested-secret@example.com/private.json?token=nested-query-secret',
                 );
 
                 throw new FakeHttpClientUnexpectedRequest('transport failed', 0, $cause);
             },
         ]);
 
-        try {
-            $cache = [];
-            HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
-            $this->fail('expected InvalidOpenApiSpecException');
-        } catch (InvalidOpenApiSpecException $e) {
-            $rendered = (string) $e;
+        $previousIgnoreArgs = ini_set('zend.exception_ignore_args', '0');
+        if ($previousIgnoreArgs === false) {
+            $this->markTestSkipped('zend.exception_ignore_args cannot be changed at runtime');
+        }
+        $previousMaxLength = ini_set('zend.exception_string_param_max_len', '1024');
+        if ($previousMaxLength === false) {
+            ini_set('zend.exception_ignore_args', $previousIgnoreArgs);
+            $this->markTestSkipped('zend.exception_string_param_max_len cannot be changed at runtime');
+        }
 
-            $this->assertStringContainsString('transport failed', $rendered);
-            $this->assertStringNotContainsString('alice', $rendered);
-            $this->assertStringNotContainsString('secret', $rendered);
-            $this->assertNull($e->getPrevious());
+        try {
+            try {
+                $cache = [];
+                HttpRefLoader::loadDocument($url, $client, $this->factory, $cache);
+                $this->fail('expected InvalidOpenApiSpecException');
+            } catch (InvalidOpenApiSpecException $e) {
+                $rendered = (string) $e;
+
+                $this->assertStringContainsString('transport failed', $rendered);
+                $this->assertStringNotContainsString('alice:secret', $rendered);
+                $this->assertStringNotContainsString('query-secret', $rendered);
+                $this->assertStringNotContainsString('nested:nested-secret', $rendered);
+                $this->assertStringNotContainsString('nested-query-secret', $rendered);
+                $this->assertNull($e->getPrevious());
+            }
+        } finally {
+            ini_set('zend.exception_ignore_args', $previousIgnoreArgs);
+            ini_set('zend.exception_string_param_max_len', $previousMaxLength);
         }
     }
 

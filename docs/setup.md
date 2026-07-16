@@ -603,6 +603,9 @@ reach exception messages or CI logs. Configure authentication on the HTTP
 client instead of embedding credentials in a `$ref` URL. Raw PSR-18 transport
 exceptions are not chained into the public exception because a nested cause may
 contain unsanitized request data; the sanitized top-level message is retained.
+The original `$ref` argument is also replaced with its diagnostic-safe form
+before network operations, so exception traces remain redacted even when
+`zend.exception_ignore_args=Off`.
 
 Misconfiguration is caught early:
 

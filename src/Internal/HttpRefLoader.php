@@ -72,6 +72,12 @@ final class HttpRefLoader
         }
 
         $safeUrl = self::redactSensitiveUrlData($url);
+
+        // PHP may include live function arguments when stringifying an
+        // exception with zend.exception_ignore_args=Off. The raw URI is
+        // already captured for the request and cache key, so replace the
+        // parameter slot before any downstream operation can throw.
+        $url = $safeUrl;
         $request = $requestFactory->createRequest('GET', $canonicalUri);
 
         try {
@@ -166,8 +172,10 @@ final class HttpRefLoader
      * Remove URL userinfo and query values before diagnostics reach stderr or
      * CI logs. This also accepts surrounding transport-error prose because
      * PSR-18 exception messages commonly embed the request URL.
+     *
+     * @internal Shared with the ref resolver's exception-trace boundary.
      */
-    private static function redactSensitiveUrlData(string $value): string
+    public static function redactSensitiveUrlData(string $value): string
     {
         // Cover both absolute (`https://user:pass@host`) and network-path
         // (`//user:pass@host`) references. HTTP client exception messages may

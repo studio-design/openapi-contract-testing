@@ -475,7 +475,9 @@ final class OpenApiRefResolver
         }
 
         if (str_starts_with($ref, 'http://') || str_starts_with($ref, 'https://')) {
-            self::resolveHttpRef($node, $ref, $chain, $context, $documentCache);
+            $rawRef = $ref;
+            $ref = HttpRefLoader::redactSensitiveUrlData($ref);
+            self::resolveHttpRef($node, $rawRef, $chain, $context, $documentCache);
 
             return;
         }
@@ -716,6 +718,9 @@ final class OpenApiRefResolver
         RefResolutionContext $context,
         array &$documentCache,
     ): void {
+        $rawRef = $ref;
+        $ref = HttpRefLoader::redactSensitiveUrlData($ref);
+
         if (!$context->allowRemoteRefs) {
             throw new InvalidOpenApiSpecException(
                 InvalidOpenApiSpecReason::RemoteRefDisallowed,
@@ -740,7 +745,7 @@ final class OpenApiRefResolver
             );
         }
 
-        [$urlPart, $fragment, $hadHash] = self::splitRef($ref);
+        [$urlPart, $fragment, $hadHash] = self::splitRef($rawRef);
 
         if ($urlPart === '') {
             throw new InvalidOpenApiSpecException(
@@ -772,7 +777,7 @@ final class OpenApiRefResolver
             if ($e->reason === InvalidOpenApiSpecReason::RemoteRefFetchFailed && $chain !== []) {
                 throw new InvalidOpenApiSpecException(
                     $e->reason,
-                    sprintf('%s (via $ref chain: %s)', $e->getMessage(), implode(' -> ', $chain)),
+                    sprintf('%s (via $ref chain: %s)', $e->getMessage(), self::diagnosticRefChain($chain)),
                     ref: $e->ref,
                     previous: $e,
                 );
@@ -783,7 +788,7 @@ final class OpenApiRefResolver
 
         self::descendIntoLoadedDocument(
             $node,
-            $ref,
+            $rawRef,
             $fragment,
             $chain,
             $document->canonicalIdentifier,
@@ -791,6 +796,17 @@ final class OpenApiRefResolver
             $context->withSourceFile($document->canonicalIdentifier),
             $documentCache,
         );
+    }
+
+    /** @param list<string> $chain */
+    private static function diagnosticRefChain(array $chain): string
+    {
+        $safeChain = [];
+        foreach ($chain as $ref) {
+            $safeChain[] = HttpRefLoader::redactSensitiveUrlData($ref);
+        }
+
+        return implode(' -> ', $safeChain);
     }
 
     /**
