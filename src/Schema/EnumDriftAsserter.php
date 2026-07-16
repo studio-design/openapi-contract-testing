@@ -72,7 +72,9 @@ use function trigger_error;
  * ```
  *
  * The bound spec path on each `#[BoundToOpenApiEnum]` is resolved relative
- * to the configured spec root (`OpenApiSpecLoader::getBasePath()`).
+ * to the configured enum root (`OpenApiSpecLoader::getEnumBasePath()`). When
+ * no enum-specific root is configured, it falls back to the spec root
+ * (`OpenApiSpecLoader::getBasePath()`).
  */
 final class EnumDriftAsserter
 {

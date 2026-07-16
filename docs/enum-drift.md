@@ -30,7 +30,7 @@ enum NotificationCodeEnum: string
 }
 ```
 
-The path is resolved relative to the configured spec root (`OpenApiSpecLoader::getBasePath()` — the same root used by the bundler and PHPUnit extension). The bound JSON file must contain an `enum:` array, e.g.:
+The path is resolved relative to the configured enum root (`OpenApiSpecLoader::getEnumBasePath()`), falling back to the spec root (`OpenApiSpecLoader::getBasePath()`) when the enum-specific root is unset. The bound JSON file must contain an `enum:` array, e.g.:
 
 ```json
 {
