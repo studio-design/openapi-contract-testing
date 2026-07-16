@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\Gesso\Internal;
 
+use const DIRECTORY_SEPARATOR;
 use const PATHINFO_EXTENSION;
 
 use Studio\Gesso\Exception\InvalidOpenApiSpecException;
@@ -17,6 +18,7 @@ use function file_get_contents;
 use function is_readable;
 use function pathinfo;
 use function realpath;
+use function rtrim;
 use function sprintf;
 use function str_starts_with;
 use function strtolower;
@@ -31,13 +33,11 @@ use function strtolower;
  * different fragments of it. The cache lives only for the duration of
  * one `OpenApiRefResolver::resolve()` call.
  *
- * Path-traversal note: there is no sandbox check on resolved paths. A
- * `$ref` like `'../../etc/passwd.json'` will resolve and read whatever
- * the PHP process can access. Spec authors are trusted; treat the spec
- * directory as a trust boundary in the same way you treat your own
- * source tree. `file://` URLs are rejected separately because they
- * bypass the source-file-relative resolution rules and would surprise
- * a reader scanning paths visually.
+ * Canonical targets must remain inside an explicitly allowed root. When
+ * no root is supplied, the source document's directory is the boundary.
+ * Validation happens after realpath(), so both `../` traversal and symlinks
+ * that escape the boundary are rejected. `file://` URLs are rejected
+ * separately by the resolver.
  *
  * @internal Not part of the package's public API. Do not use from user code.
  */
@@ -55,14 +55,22 @@ final class ExternalRefLoader
      * that resolve to the same canonical target share a cache entry.
      *
      * @param array<string, array<string, mixed>> $documentCache by-ref cache keyed by absolute path
+     * @param list<string> $allowedLocalRefRoots canonical filesystem roots local refs may read from
      *
      * @throws InvalidOpenApiSpecException when the file cannot be located, decoded, or has an unsupported extension
      */
-    public static function loadDocument(string $refPath, string $sourceFile, array &$documentCache): LoadedDocument
-    {
+    public static function loadDocument(
+        string $refPath,
+        string $sourceFile,
+        array &$documentCache,
+        array $allowedLocalRefRoots = [],
+    ): LoadedDocument {
         $candidate = str_starts_with($refPath, '/')
             ? $refPath
             : dirname($sourceFile) . '/' . $refPath;
+        if ($allowedLocalRefRoots === []) {
+            $allowedLocalRefRoots = [dirname($sourceFile)];
+        }
 
         // realpath() returns false for several distinct conditions
         // (missing file, unreadable parent, broken symlink,
@@ -71,6 +79,10 @@ final class ExternalRefLoader
         // the right reason category.
         $absolutePath = realpath($candidate);
         if ($absolutePath === false) {
+            $candidateParent = realpath(dirname($candidate));
+            if ($candidateParent !== false && !self::isInsideAllowedRoot($candidateParent, $allowedLocalRefRoots)) {
+                throw self::outsideAllowedRoot($refPath);
+            }
             if (!file_exists($candidate)) {
                 throw new InvalidOpenApiSpecException(
                     InvalidOpenApiSpecReason::LocalRefNotFound,
@@ -92,6 +104,10 @@ final class ExternalRefLoader
                 ),
                 ref: $refPath,
             );
+        }
+
+        if (!self::isInsideAllowedRoot($absolutePath, $allowedLocalRefRoots)) {
+            throw self::outsideAllowedRoot($refPath);
         }
 
         if (isset($documentCache[$absolutePath])) {
@@ -120,6 +136,35 @@ final class ExternalRefLoader
         $documentCache[$absolutePath] = $decoded;
 
         return new LoadedDocument($absolutePath, $decoded);
+    }
+
+    /** @param list<string> $allowedLocalRefRoots */
+    private static function isInsideAllowedRoot(string $absolutePath, array $allowedLocalRefRoots): bool
+    {
+        foreach ($allowedLocalRefRoots as $root) {
+            $canonicalRoot = realpath($root);
+            if ($canonicalRoot === false) {
+                continue;
+            }
+
+            $canonicalRoot = rtrim($canonicalRoot, '/\\');
+            if ($absolutePath === $canonicalRoot ||
+                str_starts_with($absolutePath, $canonicalRoot . DIRECTORY_SEPARATOR)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function outsideAllowedRoot(string $refPath): InvalidOpenApiSpecException
+    {
+        return new InvalidOpenApiSpecException(
+            InvalidOpenApiSpecReason::LocalRefOutsideAllowedRoot,
+            sprintf('Local $ref target is outside the configured local-ref roots: %s.', $refPath),
+            ref: $refPath,
+        );
     }
 
     /** @return array<string, mixed> */
