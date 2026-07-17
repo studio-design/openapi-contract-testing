@@ -10,6 +10,50 @@ the README for the full surface contract.
 
 ## Unreleased
 
+## [2.0.0-beta.3](https://github.com/studio-design/gesso/compare/v2.0.0-beta.2...v2.0.0-beta.3) (2026-07-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **coverage:** harden sidecar merge trust boundary ([#372](https://github.com/studio-design/gesso/issues/372))
+* **enum:** confine bound spec paths to enum root ([#371](https://github.com/studio-design/gesso/issues/371))
+* **spec:** confine entry specs to base path ([#370](https://github.com/studio-design/gesso/issues/370))
+* **refs:** confine local references to spec root ([#369](https://github.com/studio-design/gesso/issues/369))
+* **api:** internalize implementation types ([#359](https://github.com/studio-design/gesso/issues/359))
+* **exception:** remove deprecated ref reasons ([#358](https://github.com/studio-design/gesso/issues/358))
+* **laravel:** classify external route parity operations ([#357](https://github.com/studio-design/gesso/issues/357))
+* **response:** require strict tracker dependency ([#355](https://github.com/studio-design/gesso/issues/355))
+
+### Features
+
+* **laravel:** classify external route parity operations ([#357](https://github.com/studio-design/gesso/issues/357)) ([615815a](https://github.com/studio-design/gesso/commit/615815a34bd161b21849cbae7ef5ce7299307fcb))
+
+
+### Bug Fixes
+
+* **build:** exclude generated files from archives ([#362](https://github.com/studio-design/gesso/issues/362)) ([df6f83b](https://github.com/studio-design/gesso/commit/df6f83b8a04638fa7f9c72c99b591391e061d74b))
+* **ci:** enforce least-privilege workflow tokens ([#363](https://github.com/studio-design/gesso/issues/363)) ([f813917](https://github.com/studio-design/gesso/commit/f813917896fb19cc9c18a5805893435d46f90993))
+* **coverage:** harden sidecar merge trust boundary ([#372](https://github.com/studio-design/gesso/issues/372)) ([febda6b](https://github.com/studio-design/gesso/commit/febda6b9800863e1279e09e984af789d15ae1469))
+* **coverage:** secure sidecar file writes ([#364](https://github.com/studio-design/gesso/issues/364)) ([e47e2db](https://github.com/studio-design/gesso/commit/e47e2dbb5c1d4612f580cd7f10d61e7cc875c228))
+* **enum:** confine bound spec paths to enum root ([#371](https://github.com/studio-design/gesso/issues/371)) ([0d67f4b](https://github.com/studio-design/gesso/commit/0d67f4be51c4dc39de89566b271b0dfa7471e447))
+* **fuzz:** diversify pattern-generated strings ([#356](https://github.com/studio-design/gesso/issues/356)) ([6434e16](https://github.com/studio-design/gesso/commit/6434e16291333977ca1bde90c0322c95f1945f28))
+* **laravel:** preserve multipart request body presence ([#373](https://github.com/studio-design/gesso/issues/373)) ([a473059](https://github.com/studio-design/gesso/commit/a4730596467d12c210f33b528bad920c4598ba16))
+* **refs:** bound remote response bodies ([#368](https://github.com/studio-design/gesso/issues/368)) ([e994974](https://github.com/studio-design/gesso/commit/e9949740fef93251bb9fe07b68f8373270c45daa))
+* **refs:** confine local references to spec root ([#369](https://github.com/studio-design/gesso/issues/369)) ([8043ac0](https://github.com/studio-design/gesso/commit/8043ac0f7cd7cd5c6439c8d745ef8c3f31595d5c))
+* **refs:** redact credentials from remote errors ([#365](https://github.com/studio-design/gesso/issues/365)) ([0d79e38](https://github.com/studio-design/gesso/commit/0d79e38768569dfa07ca03309653ac17a1ea5b42))
+* **refs:** redact response body read errors ([#367](https://github.com/studio-design/gesso/issues/367)) ([efb6556](https://github.com/studio-design/gesso/commit/efb6556f115a6082e9c8e2440969ec4d9fe3bf9f))
+* **refs:** require a remote ref host allowlist ([#366](https://github.com/studio-design/gesso/issues/366)) ([9ff0f73](https://github.com/studio-design/gesso/commit/9ff0f73bb5534dbd1bdc3fa19ccf3b68c7deb95c))
+* **request:** reject absent required bodies without schemas ([#353](https://github.com/studio-design/gesso/issues/353)) ([25910fd](https://github.com/studio-design/gesso/commit/25910fd804f6c00083e1a3b2ca6105bfa94aa588))
+* **security:** reject malformed requirement shapes ([#354](https://github.com/studio-design/gesso/issues/354)) ([b1f4494](https://github.com/studio-design/gesso/commit/b1f44940f5c25e82a7178f47d28b53355c3dab12))
+* **spec:** confine entry specs to base path ([#370](https://github.com/studio-design/gesso/issues/370)) ([f787e85](https://github.com/studio-design/gesso/commit/f787e857e4b72bf1a32132ad6791aa5eba35deb6))
+
+
+### Code Refactoring
+
+* **api:** internalize implementation types ([#359](https://github.com/studio-design/gesso/issues/359)) ([76086da](https://github.com/studio-design/gesso/commit/76086dac1f8d57beb973c4331ea1bcd15a7cc08a))
+* **exception:** remove deprecated ref reasons ([#358](https://github.com/studio-design/gesso/issues/358)) ([ccbf8cb](https://github.com/studio-design/gesso/commit/ccbf8cba80b319bb589f625e1e9dedad5160b214))
+* **response:** require strict tracker dependency ([#355](https://github.com/studio-design/gesso/issues/355)) ([584165f](https://github.com/studio-design/gesso/commit/584165ff950d067b329ae3ba14f1653ed8df8231))
+
 ## [2.0.0-beta.2](https://github.com/studio-design/gesso/compare/v2.0.0-beta.1...v2.0.0-beta.2) (2026-07-15)
 
 
