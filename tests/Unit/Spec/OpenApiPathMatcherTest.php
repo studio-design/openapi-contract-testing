@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 use Studio\Gesso\Spec\OpenApiPathMatcher;
 
 use function array_fill;
@@ -178,6 +179,21 @@ class OpenApiPathMatcherTest extends TestCase
         $this->expectExceptionMessage('declares 10001 placeholders; a single template may declare at most 10000');
 
         new OpenApiPathMatcher([$path]);
+    }
+
+    #[Test]
+    public function a_single_template_above_the_jit_capture_budget_disables_jit(): void
+    {
+        $path = self::pathWithParameters('/large', 'parameter', 401);
+        $matcher = new OpenApiPathMatcher([$path]);
+        $compiled = (new ReflectionProperty($matcher, 'compiledPathsBySegmentCount'))->getValue($matcher);
+
+        $this->assertStringStartsWith('#(*NO_JIT)', $compiled[402][0]['pattern']);
+
+        $requestPath = '/large/' . implode('/', array_fill(0, 401, 'x'));
+        $matched = $matcher->matchWithVariables($requestPath);
+        $this->assertNotNull($matched);
+        $this->assertCount(401, $matched['variables']);
     }
 
     #[Test]

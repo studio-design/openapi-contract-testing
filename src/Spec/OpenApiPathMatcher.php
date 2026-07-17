@@ -30,8 +30,8 @@ final class OpenApiPathMatcher
     /** Keep each combined PCRE bounded for specs with thousands of templates. */
     private const MAX_TEMPLATES_PER_PATTERN = 32;
 
-    /** Bound total captures in a combined pattern at PCRE's 10,000 named-capture ceiling. */
-    private const MAX_CAPTURES_PER_COMBINED_PATTERN = 10_000;
+    /** Keep JIT patterns at the largest capture count exercised safely by the legacy matcher. */
+    private const MAX_CAPTURES_PER_JIT_PATTERN = 400;
 
     /** Leave headroom below PCRE's compiled-pattern size ceiling. */
     private const MAX_COMBINED_PATTERN_BYTES = 30_000;
@@ -141,7 +141,7 @@ final class OpenApiPathMatcher
             foreach ($paths as $path) {
                 if ($chunk !== [] && (
                     count($chunk) >= self::MAX_TEMPLATES_PER_PATTERN ||
-                    $chunkCaptureCount + $path['parameterCount'] > self::MAX_CAPTURES_PER_COMBINED_PATTERN ||
+                    $chunkCaptureCount + $path['parameterCount'] > self::MAX_CAPTURES_PER_JIT_PATTERN ||
                     $chunkPatternBytes + $path['patternBytes'] > self::MAX_COMBINED_PATTERN_BYTES
                 )) {
                     $chunks[] = $chunk;
@@ -182,8 +182,11 @@ final class OpenApiPathMatcher
                     $matches[$marker] = ['path' => $path['path'], 'parameters' => $parameters];
                 }
 
+                $jitControl = $captureIndex - 1 > self::MAX_CAPTURES_PER_JIT_PATTERN
+                    ? '(*NO_JIT)'
+                    : '';
                 $compiledPathsBySegmentCount[$segmentCount][] = [
-                    'pattern' => '#^(?:' . implode('|', $alternatives) . ')$#',
+                    'pattern' => '#' . $jitControl . '^(?:' . implode('|', $alternatives) . ')$#',
                     'matches' => $matches,
                 ];
             }
