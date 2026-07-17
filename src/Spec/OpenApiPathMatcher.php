@@ -6,6 +6,7 @@ namespace Studio\Gesso\Spec;
 
 use InvalidArgumentException;
 
+use function array_chunk;
 use function explode;
 use function implode;
 use function in_array;
@@ -26,10 +27,18 @@ use function usort;
  */
 final class OpenApiPathMatcher
 {
+    /** Keep each combined PCRE bounded for specs with thousands of templates. */
+    private const MAX_TEMPLATES_PER_PATTERN = 32;
+
     /** @var array<string, string> normalized request path => original spec path */
     private array $literalPaths;
 
-    /** @var array<int, array{pattern: string, path: string, paramNames: string[], literalSegments: int}[]> */
+    /**
+     * @var array<int, list<array{
+     *     pattern: string,
+     *     matches: array<int, array{path: string, parameters: array<string, string>}>,
+     * }>>
+     */
     private array $compiledPathsBySegmentCount;
 
     /**
@@ -45,7 +54,7 @@ final class OpenApiPathMatcher
         foreach ($specPaths as $specPath) {
             $segments = explode('/', trim($specPath, '/'));
             $literalCount = 0;
-            $regexSegments = [];
+            $compiledSegments = [];
             $paramNames = [];
 
             foreach ($segments as $segment) {
@@ -62,10 +71,10 @@ final class OpenApiPathMatcher
                         ));
                     }
 
-                    $regexSegments[] = '([^/]+)';
+                    $compiledSegments[] = ['parameter' => $m[1]];
                     $paramNames[] = $m[1];
                 } else {
-                    $regexSegments[] = preg_quote($segment, '#');
+                    $compiledSegments[] = ['literal' => $segment];
                     $literalCount++;
                 }
             }
@@ -83,11 +92,9 @@ final class OpenApiPathMatcher
                 continue;
             }
 
-            $pattern = '#^/' . implode('/', $regexSegments) . '$#';
             $compiled[] = [
-                'pattern' => $pattern,
+                'segments' => $compiledSegments,
                 'path' => $specPath,
-                'paramNames' => $paramNames,
                 'literalSegments' => $literalCount,
             ];
         }
@@ -95,10 +102,43 @@ final class OpenApiPathMatcher
         // Sort by literal segment count descending so more specific paths match first
         usort($compiled, static fn(array $a, array $b): int => $b['literalSegments'] <=> $a['literalSegments']);
 
-        $compiledPathsBySegmentCount = [];
+        $pathsBySegmentCount = [];
         foreach ($compiled as $path) {
             $segmentCount = self::segmentCount($path['path']);
-            $compiledPathsBySegmentCount[$segmentCount][] = $path;
+            $pathsBySegmentCount[$segmentCount][] = $path;
+        }
+
+        $compiledPathsBySegmentCount = [];
+        foreach ($pathsBySegmentCount as $segmentCount => $paths) {
+            foreach (array_chunk($paths, self::MAX_TEMPLATES_PER_PATTERN) as $chunk) {
+                $alternatives = [];
+                $matches = [];
+                foreach ($chunk as $pathIndex => $path) {
+                    $regexSegments = [];
+                    $parameters = [];
+                    $parameterIndex = 0;
+                    foreach ($path['segments'] as $segment) {
+                        if (isset($segment['literal'])) {
+                            $regexSegments[] = preg_quote($segment['literal'], '#');
+
+                            continue;
+                        }
+
+                        $captureName = sprintf('p%d_%d', $pathIndex, $parameterIndex++);
+                        $regexSegments[] = sprintf('(?<%s>[^/]+)', $captureName);
+                        $parameters[$segment['parameter']] = $captureName;
+                    }
+
+                    $marker = (string) $pathIndex;
+                    $alternatives[] = '/' . implode('/', $regexSegments) . sprintf('(*MARK:%s)', $marker);
+                    $matches[$marker] = ['path' => $path['path'], 'parameters' => $parameters];
+                }
+
+                $compiledPathsBySegmentCount[$segmentCount][] = [
+                    'pattern' => '#^(?:' . implode('|', $alternatives) . ')$#',
+                    'matches' => $matches,
+                ];
+            }
         }
 
         $this->literalPaths = $literalPaths;
@@ -180,19 +220,22 @@ final class OpenApiPathMatcher
             return ['path' => $this->literalPaths[$normalizedPath], 'variables' => []];
         }
 
-        $compiledPaths = $this->compiledPathsBySegmentCount[self::segmentCount($normalizedPath)] ?? [];
-        foreach ($compiledPaths as $compiled) {
-            if (preg_match($compiled['pattern'], $normalizedPath, $matches) !== 1) {
+        $compiledPatterns = $this->compiledPathsBySegmentCount[self::segmentCount($normalizedPath)] ?? [];
+        foreach ($compiledPatterns as $compiled) {
+            $captures = [];
+            if (preg_match($compiled['pattern'], $normalizedPath, $captures) !== 1) {
                 continue;
             }
 
+            // Numeric-string array keys are stored as integers by PHP; PCRE's
+            // MARK capture is the corresponding numeric string.
+            $matched = $compiled['matches'][(int) $captures['MARK']];
             $variables = [];
-            foreach ($compiled['paramNames'] as $i => $name) {
-                // $matches[0] is the full match; capture groups start at index 1.
-                $variables[$name] = $matches[$i + 1];
+            foreach ($matched['parameters'] as $name => $captureName) {
+                $variables[$name] = $captures[$captureName];
             }
 
-            return ['path' => $compiled['path'], 'variables' => $variables];
+            return ['path' => $matched['path'], 'variables' => $variables];
         }
 
         return null;

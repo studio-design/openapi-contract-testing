@@ -10,6 +10,8 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\Gesso\Spec\OpenApiPathMatcher;
 
+use function sprintf;
+
 class OpenApiPathMatcherTest extends TestCase
 {
     /** @return array<string, array{string, ?string}> */
@@ -121,6 +123,33 @@ class OpenApiPathMatcherTest extends TestCase
     }
 
     #[Test]
+    public function combined_template_patterns_preserve_order_across_bounded_chunks(): void
+    {
+        $paths = [];
+        for ($i = 0; $i < 40; $i++) {
+            $paths[] = sprintf('/{parameter%d}/fixed', $i);
+        }
+        $matcher = new OpenApiPathMatcher($paths);
+
+        $this->assertSame('/{parameter0}/fixed', $matcher->match('/value/fixed'));
+    }
+
+    #[Test]
+    public function combined_template_patterns_extract_variables_from_later_chunks(): void
+    {
+        $paths = [];
+        for ($i = 0; $i < 40; $i++) {
+            $paths[] = sprintf('/resource%d/{parameter%d}', $i, $i);
+        }
+        $matcher = new OpenApiPathMatcher($paths);
+
+        $this->assertSame(
+            ['path' => '/resource35/{parameter35}', 'variables' => ['parameter35' => 'value']],
+            $matcher->matchWithVariables('/resource35/value'),
+        );
+    }
+
+    #[Test]
     #[DataProvider('provideMatches_paths_with_strip_prefixCases')]
     public function matches_paths_with_strip_prefix(string $requestPath, ?string $expected): void
     {
@@ -202,6 +231,23 @@ class OpenApiPathMatcherTest extends TestCase
         $matcher = self::createMatcher();
 
         $this->assertNull($matcher->matchWithVariables('/v2/unknown/path'));
+    }
+
+    #[Test]
+    public function parameterized_paths_require_one_leading_slash(): void
+    {
+        $matcher = new OpenApiPathMatcher(['/v2/projects/{project_id}']);
+
+        $this->assertNull($matcher->matchWithVariables('v2/projects/abc123'));
+        $this->assertNull($matcher->matchWithVariables('//v2/projects/abc123'));
+    }
+
+    #[Test]
+    public function parameterized_paths_reject_empty_segments(): void
+    {
+        $matcher = new OpenApiPathMatcher(['/v2/projects/{project_id}/assets']);
+
+        $this->assertNull($matcher->matchWithVariables('/v2/projects//assets'));
     }
 
     #[Test]
