@@ -96,6 +96,13 @@ trait ValidatesOpenApiSchema
      */
     private static $skipWarningHandler;
 
+    /**
+     * @internal Laravel dispatch snapshot; not a consumer extension point.
+     *
+     * @var null|WeakMap<Request, Request>
+     */
+    private ?WeakMap $requestsBeforeDispatch = null;
+
     // Per-request skip flags set by withoutRequestValidation() /
     // withoutResponseValidation() / withoutValidation(). Consumed (and reset)
     // on the next auto-assert attempt, so the flag covers exactly one HTTP
@@ -331,6 +338,27 @@ trait ValidatesOpenApiSchema
     }
 
     /**
+     * Capture the immutable validation view immediately before Laravel sends
+     * the request through middleware and the application kernel. Request,
+     * file, query, cookie, server, and header bags are cloned by Symfony's
+     * Request::__clone(), so later mutations cannot rewrite the wire input
+     * that contract validation observes.
+     *
+     * @internal Laravel testing hook; not a consumer extension point.
+     *
+     * @param Request $symfonyRequest
+     */
+    protected function createTestRequest($symfonyRequest): Request
+    {
+        $request = parent::createTestRequest($symfonyRequest);
+
+        $this->requestsBeforeDispatch ??= new WeakMap();
+        $this->requestsBeforeDispatch[$request] = clone $request;
+
+        return $request;
+    }
+
+    /**
      * Overrides Laravel's MakesHttpRequests::createTestResponse hook so every
      * HTTP test call runs schema validation when auto_assert is enabled.
      * When the library is used outside Laravel, this method is never called.
@@ -346,14 +374,18 @@ trait ValidatesOpenApiSchema
     {
         $testResponse = parent::createTestResponse($response, $request);
 
-        $method = $request !== null ? HttpMethod::tryFrom(strtoupper($request->getMethod())) : null;
-        $path = $request?->getPathInfo();
+        $validationRequest = $request !== null
+            ? $this->takeRequestBeforeDispatch($request)
+            : null;
+
+        $method = $validationRequest !== null ? HttpMethod::tryFrom(strtoupper($validationRequest->getMethod())) : null;
+        $path = $validationRequest?->getPathInfo();
 
         // Request-side runs first so that the skipNextRequestValidation flag is
         // consumed at the HTTP boundary before the response hook gets a chance
         // to (defensively) clear it. The response status is forwarded so the
         // request validator can apply the documented-4xx downgrade (issue #179).
-        $this->maybeAutoValidateOpenApiRequest($request, $method, $path, $response->getStatusCode());
+        $this->maybeAutoValidateOpenApiRequest($validationRequest, $method, $path, $response->getStatusCode());
         $this->maybeAutoAssertOpenApiSchema($testResponse, $method, $path);
 
         return $testResponse;
@@ -597,6 +629,21 @@ trait ValidatesOpenApiSchema
         }
 
         return is_string($value) && $value !== '';
+    }
+
+    /**
+     * @internal Laravel dispatch snapshot plumbing.
+     */
+    private function takeRequestBeforeDispatch(Request $request): Request
+    {
+        if ($this->requestsBeforeDispatch === null || !isset($this->requestsBeforeDispatch[$request])) {
+            return $request;
+        }
+
+        $snapshot = $this->requestsBeforeDispatch[$request];
+        unset($this->requestsBeforeDispatch[$request]);
+
+        return $snapshot;
     }
 
     /**

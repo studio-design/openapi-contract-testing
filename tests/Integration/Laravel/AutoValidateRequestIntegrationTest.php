@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Studio\Gesso\Tests\Integration\Laravel;
 
+use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Route;
 use Orchestra\Testbench\TestCase;
@@ -212,6 +213,41 @@ class AutoValidateRequestIntegrationTest extends TestCase
     }
 
     #[Test]
+    public function required_multipart_body_ignores_parameters_added_by_the_controller(): void
+    {
+        config()->set('gesso.auto_validate_request', true);
+        config()->set('gesso.default_spec', 'non-json-content-schema');
+
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('Request body is empty');
+
+        $this
+            ->withHeaders([
+                'Content-Type' => 'multipart/form-data',
+                'X-Gesso-Mutate-Request' => 'add-parameter',
+            ])
+            ->post('/multipart-required');
+    }
+
+    #[Test]
+    public function required_multipart_body_preserves_files_removed_by_the_controller(): void
+    {
+        config()->set('gesso.auto_validate_request', true);
+        config()->set('gesso.default_spec', 'non-json-content-schema');
+
+        $response = $this
+            ->withHeaders([
+                'Content-Type' => 'multipart/form-data',
+                'X-Gesso-Mutate-Request' => 'remove-files',
+            ])
+            ->post('/multipart-required', [
+                'font_file' => UploadedFile::fake()->create('font.woff', 10, 'font/woff'),
+            ]);
+
+        $response->assertNoContent();
+    }
+
+    #[Test]
     public function required_form_body_accepts_parsed_parameters(): void
     {
         config()->set('gesso.auto_validate_request', true);
@@ -237,7 +273,17 @@ class AutoValidateRequestIntegrationTest extends TestCase
             201,
         ));
 
-        Route::post('/multipart-required', static fn() => response()->noContent());
+        Route::post('/multipart-required', static function (Request $request) {
+            if ($request->header('X-Gesso-Mutate-Request') === 'add-parameter') {
+                $request->merge(['controller_only' => 'not-on-the-wire']);
+            }
+
+            if ($request->header('X-Gesso-Mutate-Request') === 'remove-files') {
+                $request->files->replace([]);
+            }
+
+            return response()->noContent();
+        });
         Route::post('/form-required', static fn() => response()->noContent());
 
         // Bearer-protected endpoint in the spec. Route implementation is
