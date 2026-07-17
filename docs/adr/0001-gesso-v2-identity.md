@@ -396,7 +396,7 @@ Gesso 2.0 is not ready for stable release until all of the following pass:
 - [Composer repositories and package renaming](https://getcomposer.org/doc/05-repositories.md)
 - [Packagist package naming](https://packagist.org/about)
 - [PSR-4 autoloading](https://www.php-fig.org/psr/psr-4/)
-- [PHP `class_alias()`](https://www.php.net/class-alias)
+- [PHP `class_alias()`](https://www.php.net/manual/en/function.class-alias.php)
 - [Composer autoloader optimization](https://getcomposer.org/doc/articles/autoloader-optimization.md)
 - [Laravel package configuration](https://laravel.com/docs/packages#configuration)
 - [Symfony backward compatibility promise](https://symfony.com/doc/current/contributing/code/bc.html)
