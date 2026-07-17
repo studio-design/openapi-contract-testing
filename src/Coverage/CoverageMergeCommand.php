@@ -349,8 +349,8 @@ final class CoverageMergeCommand
                     : 'no coverage recorded across sidecars',
             ));
 
-            if ($cleanup) {
-                $this->cleanup($sidecarDir);
+            if ($cleanup && !$this->cleanupSafely($sidecarDir)) {
+                return 1;
             }
 
             return $strictGated ? 1 : 0;
@@ -368,11 +368,9 @@ final class CoverageMergeCommand
         // the coverage output users rely on for triage.
         $strictFailure = $this->evaluateStrictRequiredGate($strictRequiredMode, $githubSummaryPath, $strictRequiredTracker);
 
-        if ($cleanup) {
-            $this->cleanup($sidecarDir);
-        }
+        $cleanupFailure = $cleanup && !$this->cleanupSafely($sidecarDir);
 
-        return $writeFailures > 0 || $thresholdFailure || $strictFailure ? 1 : 0;
+        return $writeFailures > 0 || $thresholdFailure || $strictFailure || $cleanupFailure ? 1 : 0;
     }
 
     /**
@@ -647,7 +645,7 @@ final class CoverageMergeCommand
     private function reportThresholdProblem(bool $strict, string $detail): array
     {
         $severity = $strict ? 'FATAL' : 'WARNING';
-        $this->writeStderr(sprintf("[OpenAPI Coverage] %s: %s\n", $severity, $detail));
+        $this->writeCoverageDiagnostic($severity, $detail);
 
         return ['value' => null, 'fatal' => $strict];
     }
@@ -703,6 +701,27 @@ final class CoverageMergeCommand
                 ));
             }
         }
+    }
+
+    private function cleanupSafely(string $sidecarDir): bool
+    {
+        try {
+            $this->cleanup($sidecarDir);
+        } catch (RuntimeException $e) {
+            $this->writeCoverageDiagnostic(
+                'FATAL',
+                sprintf('failed to inspect sidecars for cleanup: %s', $e->getMessage()),
+            );
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private function writeCoverageDiagnostic(string $severity, string $detail): void
+    {
+        $this->writeStderr(sprintf("[OpenAPI Coverage] %s: %s\n", $severity, $detail));
     }
 
     private function absolutise(string $path): string

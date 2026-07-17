@@ -147,6 +147,52 @@ class CoverageMergeCommandTest extends TestCase
     }
 
     #[Test]
+    public function exits_one_when_sidecar_directory_becomes_unsafe_before_cleanup(): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('POSIX permission bits are not portable to Windows');
+        }
+
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $stderr = '';
+        $sidecarDir = $this->sidecarDir;
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static function (string $msg) use ($sidecarDir): void {
+                chmod($sidecarDir, 0o777);
+            },
+        );
+
+        try {
+            $exit = $command->run([
+                'sidecar_dir' => $this->sidecarDir,
+                'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+                'specs' => ['petstore-3.0'],
+                'output_file' => $this->outputFile,
+                'cleanup' => true,
+            ]);
+        } finally {
+            chmod($this->sidecarDir, 0o755);
+        }
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('failed to inspect sidecars for cleanup', $stderr);
+        $this->assertCount(1, $this->sidecars());
+    }
+
+    #[Test]
     public function appends_to_github_step_summary_once(): void
     {
         OpenApiCoverageTracker::recordResponse(
