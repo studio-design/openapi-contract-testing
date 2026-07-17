@@ -151,6 +151,11 @@ normal stable patch flow from its own release configuration.
    Release, manifest, Packagist, clean-install, and example checks before
    announcing general availability. Remove `release-as` through a normal PR
    immediately after the stable release is published.
+   If downstream evaluation finds another release-blocking defect before the
+   stable release PR is merged, do not merge that release PR. First merge a
+   normal PR that restores `prerelease: true`, removes `release-as`, and updates
+   the invariant test. Wait for release-please to refresh the proposal to the
+   next beta, then repeat steps 5 and 6 before attempting stable promotion again.
 8. Only after the stable package is installable and verified, mark
    `studio-design/openapi-contract-testing` abandoned on Packagist with
    `studio-design/gesso` as its suggested replacement. Do not delete its tags

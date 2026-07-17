@@ -114,7 +114,7 @@ class ReleasePleaseConfigTest extends TestCase
     }
 
     #[Test]
-    public function main_is_configured_for_v2_stable_promotion(): void
+    public function main_is_configured_for_the_v2_beta_line(): void
     {
         $this->assertSame(
             'prerelease',
@@ -127,31 +127,14 @@ class ReleasePleaseConfigTest extends TestCase
             'The v2 prerelease line MUST use the documented beta identifier.',
         );
         $this->assertSame(
-            false,
+            true,
             $this->config['prerelease'] ?? null,
-            'The stable v2 release MUST not be tagged as a GitHub prerelease.',
+            'The v2 beta must be tagged as a GitHub prerelease. Set this to false only in the stable-promotion PR.',
         );
-        $this->assertSame(
-            '2.0.0',
-            $this->config['release-as'] ?? null,
-            'The stable-promotion PR MUST temporarily force exactly v2.0.0.',
-        );
-        $this->assertSame(
-            [
-                ['type' => 'feat', 'section' => 'Features'],
-                ['type' => 'fix', 'section' => 'Bug Fixes'],
-                ['type' => 'perf', 'section' => 'Performance Improvements'],
-                ['type' => 'revert', 'section' => 'Reverts'],
-                ['type' => 'chore', 'section' => 'Miscellaneous Chores'],
-                ['type' => 'docs', 'section' => 'Documentation', 'hidden' => true],
-                ['type' => 'style', 'section' => 'Styles', 'hidden' => true],
-                ['type' => 'refactor', 'section' => 'Code Refactoring', 'hidden' => true],
-                ['type' => 'test', 'section' => 'Tests', 'hidden' => true],
-                ['type' => 'build', 'section' => 'Build System', 'hidden' => true],
-                ['type' => 'ci', 'section' => 'Continuous Integration', 'hidden' => true],
-            ],
-            $this->config['changelog-sections'] ?? null,
-            'The stable-promotion chore MUST be visible so release-please does not skip an empty changelog.',
+        $this->assertArrayNotHasKey(
+            'release-as',
+            $this->config,
+            'release-as MUST be absent after v2.0.0-beta.1 so later beta releases can increment normally.',
         );
 
         $rootPackage = $this->config['packages']['.'] ?? null;
@@ -159,7 +142,7 @@ class ReleasePleaseConfigTest extends TestCase
         $this->assertArrayNotHasKey(
             'release-as',
             $rootPackage,
-            'Package-level release-as MUST stay absent so it cannot override the stable-promotion version.',
+            'Package-level release-as MUST be absent after v2.0.0-beta.1 so it cannot override the root configuration.',
         );
     }
 
