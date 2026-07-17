@@ -11,9 +11,12 @@ use JsonException;
 use RuntimeException;
 
 use function file_get_contents;
+use function fileperms;
 use function glob;
 use function is_array;
 use function is_dir;
+use function is_file;
+use function is_link;
 use function json_decode;
 use function rtrim;
 use function sort;
@@ -49,6 +52,16 @@ final class CoverageSidecarReader
     {
         $payloads = [];
         foreach (self::listPaths($sidecarDir) as $path) {
+            if (is_link($path) || !is_file($path)) {
+                throw new RuntimeException(sprintf('sidecar must be a regular non-symlink file: "%s"', $path));
+            }
+            if (DIRECTORY_SEPARATOR !== '\\') {
+                $permissions = @fileperms($path);
+                if ($permissions !== false && ($permissions & 0o022) !== 0) {
+                    throw new RuntimeException(sprintf('sidecar must not be writable by group or other users: "%s"', $path));
+                }
+            }
+
             $contents = @file_get_contents($path);
             if ($contents === false) {
                 throw new RuntimeException(sprintf('failed to read sidecar "%s"', $path));
@@ -94,8 +107,19 @@ final class CoverageSidecarReader
     private static function globPattern(string $sidecarDir, string $pattern): array
     {
         $dir = rtrim($sidecarDir, '/' . DIRECTORY_SEPARATOR);
+        if (is_link($dir)) {
+            throw new RuntimeException(sprintf('sidecar dir must not be a symbolic link: "%s"', $dir));
+        }
+
         if (!is_dir($dir)) {
             return [];
+        }
+
+        if (DIRECTORY_SEPARATOR !== '\\') {
+            $permissions = @fileperms($dir);
+            if ($permissions !== false && ($permissions & 0o022) !== 0) {
+                throw new RuntimeException(sprintf('sidecar dir must not be writable by group or other users: "%s"', $dir));
+            }
         }
 
         $matches = glob($dir . '/' . $pattern);

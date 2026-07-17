@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Studio\Gesso\Tests\Unit\Coverage;
 
+use const DIRECTORY_SEPARATOR;
+
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\Gesso\Coverage\CoverageMergeCommand;
@@ -13,6 +15,7 @@ use Studio\Gesso\Coverage\OpenApiCoverageTracker;
 use Studio\Gesso\Spec\OpenApiSpecLoader;
 use Studio\Gesso\Validation\Strict\StrictRequiredTracker;
 
+use function chmod;
 use function dirname;
 use function file_exists;
 use function file_get_contents;
@@ -144,6 +147,52 @@ class CoverageMergeCommandTest extends TestCase
     }
 
     #[Test]
+    public function exits_one_when_sidecar_directory_becomes_unsafe_before_cleanup(): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('POSIX permission bits are not portable to Windows');
+        }
+
+        OpenApiCoverageTracker::recordResponse(
+            'petstore-3.0',
+            'GET',
+            '/v1/pets',
+            '200',
+            'application/json',
+            schemaValidated: true,
+        );
+        CoverageSidecarWriter::write($this->sidecarDir, '1', OpenApiCoverageTracker::exportState());
+
+        $stderr = '';
+        $sidecarDir = $this->sidecarDir;
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static function (string $msg) use ($sidecarDir): void {
+                chmod($sidecarDir, 0o777);
+            },
+        );
+
+        try {
+            $exit = $command->run([
+                'sidecar_dir' => $this->sidecarDir,
+                'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+                'specs' => ['petstore-3.0'],
+                'output_file' => $this->outputFile,
+                'cleanup' => true,
+            ]);
+        } finally {
+            chmod($this->sidecarDir, 0o755);
+        }
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('failed to inspect sidecars for cleanup', $stderr);
+        $this->assertCount(1, $this->sidecars());
+    }
+
+    #[Test]
     public function appends_to_github_step_summary_once(): void
     {
         OpenApiCoverageTracker::recordResponse(
@@ -208,6 +257,38 @@ class CoverageMergeCommandTest extends TestCase
         $this->assertSame(1, $exit);
         $this->assertStringContainsString('FATAL', $stderr);
         $this->assertStringContainsString('failed to decode', $stderr);
+    }
+
+    #[Test]
+    public function exits_one_when_sidecar_directory_is_not_private(): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('POSIX permission bits are not portable to Windows');
+        }
+
+        $this->assertTrue(chmod($this->sidecarDir, 0o777));
+        $stderr = '';
+        $command = new CoverageMergeCommand(
+            stderrWriter: static function (string $msg) use (&$stderr): void {
+                $stderr .= $msg;
+            },
+            stdoutWriter: static fn(string $msg): null => null,
+        );
+
+        try {
+            $exit = $command->run([
+                'sidecar_dir' => $this->sidecarDir,
+                'spec_base_path' => __DIR__ . '/../../fixtures/specs',
+                'specs' => ['petstore-3.0'],
+                'output_file' => $this->outputFile,
+            ]);
+        } finally {
+            chmod($this->sidecarDir, 0o755);
+        }
+
+        $this->assertSame(1, $exit);
+        $this->assertStringContainsString('FATAL', $stderr);
+        $this->assertStringContainsString('must not be writable by group or other users', $stderr);
     }
 
     #[Test]

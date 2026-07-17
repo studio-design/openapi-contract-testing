@@ -361,6 +361,87 @@ class CoverageSidecarTest extends TestCase
     }
 
     #[Test]
+    #[DataProvider('provideWriter_rejects_a_group_or_world_writable_sidecar_directoryCases')]
+    public function reader_rejects_a_group_or_world_writable_sidecar_directory(int $mode): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('POSIX permission bits are not portable to Windows');
+        }
+
+        $this->assertTrue(chmod($this->tmpDir, $mode));
+
+        try {
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('must not be writable by group or other users');
+            CoverageSidecarReader::readDir($this->tmpDir);
+        } finally {
+            chmod($this->tmpDir, 0o755);
+        }
+    }
+
+    #[Test]
+    public function reader_rejects_a_symlink_sidecar_directory(): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('symlink semantics differ on Windows');
+        }
+
+        $link = $this->tmpDir . '-reader-link';
+        if (!@symlink($this->tmpDir, $link)) {
+            $this->markTestSkipped('symlink creation is not available');
+        }
+
+        try {
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('must not be a symbolic link');
+            CoverageSidecarReader::readDir($link);
+        } finally {
+            @unlink($link);
+        }
+    }
+
+    #[Test]
+    public function reader_rejects_a_symlink_sidecar_file(): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('symlink semantics differ on Windows');
+        }
+
+        $target = $this->tmpDir . '/attacker-controlled.json';
+        file_put_contents($target, '{"version":1,"specs":[]}');
+        $link = $this->tmpDir . '/part-1-9999.json';
+        if (!@symlink($target, $link)) {
+            $this->markTestSkipped('symlink creation is not available');
+        }
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('must be a regular non-symlink file');
+
+        CoverageSidecarReader::readDir($this->tmpDir);
+    }
+
+    #[Test]
+    #[DataProvider('provideWriter_rejects_a_group_or_world_writable_sidecar_directoryCases')]
+    public function reader_rejects_a_group_or_world_writable_sidecar_file(int $mode): void
+    {
+        if (DIRECTORY_SEPARATOR === '\\') {
+            $this->markTestSkipped('POSIX permission bits are not portable to Windows');
+        }
+
+        $path = $this->tmpDir . '/part-1-9999.json';
+        file_put_contents($path, '{"version":1,"specs":[]}');
+        $this->assertTrue(chmod($path, $mode));
+
+        try {
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('sidecar must not be writable by group or other users');
+            CoverageSidecarReader::readDir($this->tmpDir);
+        } finally {
+            chmod($path, 0o600);
+        }
+    }
+
+    #[Test]
     public function reader_throws_on_malformed_json(): void
     {
         file_put_contents($this->tmpDir . '/part-1-9999.json', '{not valid json');
