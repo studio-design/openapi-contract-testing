@@ -74,6 +74,6 @@ supported API accidentally.
 
 ## Sources
 
-- [PHP `class_alias()`](https://www.php.net/class-alias)
+- [PHP `class_alias()`](https://www.php.net/manual/en/function.class-alias.php)
 - [Composer autoload `files`](https://getcomposer.org/doc/04-schema.md#files)
 - [Composer autoloader optimization](https://getcomposer.org/doc/articles/autoloader-optimization.md)
