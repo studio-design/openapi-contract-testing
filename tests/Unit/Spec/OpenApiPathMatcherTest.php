@@ -99,6 +99,28 @@ class OpenApiPathMatcherTest extends TestCase
     }
 
     #[Test]
+    public function equivalent_literal_paths_preserve_declaration_order(): void
+    {
+        $matcher = new OpenApiPathMatcher([
+            '/v2/account/',
+            '/v2/account',
+        ]);
+
+        $this->assertSame('/v2/account/', $matcher->match('/v2/account'));
+    }
+
+    #[Test]
+    public function equally_specific_templates_preserve_declaration_order(): void
+    {
+        $matcher = new OpenApiPathMatcher([
+            '/{first}/fixed',
+            '/fixed/{second}',
+        ]);
+
+        $this->assertSame('/{first}/fixed', $matcher->match('/fixed/fixed'));
+    }
+
+    #[Test]
     #[DataProvider('provideMatches_paths_with_strip_prefixCases')]
     public function matches_paths_with_strip_prefix(string $requestPath, ?string $expected): void
     {

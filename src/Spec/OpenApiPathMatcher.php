@@ -17,6 +17,7 @@ use function str_ends_with;
 use function str_starts_with;
 use function strlen;
 use function substr;
+use function substr_count;
 use function trim;
 use function usort;
 
@@ -25,8 +26,11 @@ use function usort;
  */
 final class OpenApiPathMatcher
 {
-    /** @var array{pattern: string, path: string, paramNames: string[], literalSegments: int}[] */
-    private array $compiledPaths;
+    /** @var array<string, string> normalized request path => original spec path */
+    private array $literalPaths;
+
+    /** @var array<int, array{pattern: string, path: string, paramNames: string[], literalSegments: int}[]> */
+    private array $compiledPathsBySegmentCount;
 
     /**
      * @param string[] $specPaths
@@ -37,6 +41,7 @@ final class OpenApiPathMatcher
         private readonly array $stripPrefixes = [],
     ) {
         $compiled = [];
+        $literalPaths = [];
         foreach ($specPaths as $specPath) {
             $segments = explode('/', trim($specPath, '/'));
             $literalCount = 0;
@@ -65,6 +70,19 @@ final class OpenApiPathMatcher
                 }
             }
 
+            if ($paramNames === []) {
+                // Requests are normalized by removing trailing slashes before
+                // matching. Preserve the first declaration when two literal
+                // spec paths normalize to the same request path, matching the
+                // stable ordering of the previous compiled-regex scan.
+                $literalPath = '/' . implode('/', $segments);
+                if (!isset($literalPaths[$literalPath])) {
+                    $literalPaths[$literalPath] = $specPath;
+                }
+
+                continue;
+            }
+
             $pattern = '#^/' . implode('/', $regexSegments) . '$#';
             $compiled[] = [
                 'pattern' => $pattern,
@@ -77,7 +95,14 @@ final class OpenApiPathMatcher
         // Sort by literal segment count descending so more specific paths match first
         usort($compiled, static fn(array $a, array $b): int => $b['literalSegments'] <=> $a['literalSegments']);
 
-        $this->compiledPaths = $compiled;
+        $compiledPathsBySegmentCount = [];
+        foreach ($compiled as $path) {
+            $segmentCount = self::segmentCount($path['path']);
+            $compiledPathsBySegmentCount[$segmentCount][] = $path;
+        }
+
+        $this->literalPaths = $literalPaths;
+        $this->compiledPathsBySegmentCount = $compiledPathsBySegmentCount;
     }
 
     public function match(string $requestPath): ?string
@@ -151,7 +176,12 @@ final class OpenApiPathMatcher
     {
         $normalizedPath = $this->normalizeRequestPath($requestPath)['path'];
 
-        foreach ($this->compiledPaths as $compiled) {
+        if (isset($this->literalPaths[$normalizedPath])) {
+            return ['path' => $this->literalPaths[$normalizedPath], 'variables' => []];
+        }
+
+        $compiledPaths = $this->compiledPathsBySegmentCount[self::segmentCount($normalizedPath)] ?? [];
+        foreach ($compiledPaths as $compiled) {
             if (preg_match($compiled['pattern'], $normalizedPath, $matches) !== 1) {
                 continue;
             }
@@ -166,5 +196,10 @@ final class OpenApiPathMatcher
         }
 
         return null;
+    }
+
+    private static function segmentCount(string $path): int
+    {
+        return substr_count(trim($path, '/'), '/') + 1;
     }
 }
