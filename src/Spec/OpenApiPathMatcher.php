@@ -6,7 +6,7 @@ namespace Studio\Gesso\Spec;
 
 use InvalidArgumentException;
 
-use function array_chunk;
+use function count;
 use function explode;
 use function implode;
 use function in_array;
@@ -30,13 +30,22 @@ final class OpenApiPathMatcher
     /** Keep each combined PCRE bounded for specs with thousands of templates. */
     private const MAX_TEMPLATES_PER_PATTERN = 32;
 
+    /** Bound total captures in a combined pattern at PCRE's 10,000 named-capture ceiling. */
+    private const MAX_CAPTURES_PER_COMBINED_PATTERN = 10_000;
+
+    /** Leave headroom below PCRE's compiled-pattern size ceiling. */
+    private const MAX_COMBINED_PATTERN_BYTES = 30_000;
+
+    /** Reject one template that cannot be split below PCRE's named-capture ceiling. */
+    private const MAX_PARAMETERS_PER_TEMPLATE = 10_000;
+
     /** @var array<string, string> normalized request path => original spec path */
     private array $literalPaths;
 
     /**
      * @var array<int, list<array{
      *     pattern: string,
-     *     matches: array<int, array{path: string, parameters: array<string, string>}>,
+     *     matches: array<int, array{path: string, parameters: array<string, int>}>,
      * }>>
      */
     private array $compiledPathsBySegmentCount;
@@ -56,6 +65,7 @@ final class OpenApiPathMatcher
             $literalCount = 0;
             $compiledSegments = [];
             $paramNames = [];
+            $patternBytes = 16; // anchors, non-capturing wrapper, and MARK
 
             foreach ($segments as $segment) {
                 if (preg_match('/^\{(.+)\}$/', $segment, $m)) {
@@ -73,10 +83,22 @@ final class OpenApiPathMatcher
 
                     $compiledSegments[] = ['parameter' => $m[1]];
                     $paramNames[] = $m[1];
+                    $patternBytes += 8; // slash plus `([^/]+)`
                 } else {
                     $compiledSegments[] = ['literal' => $segment];
                     $literalCount++;
+                    $patternBytes += strlen(preg_quote($segment, '#')) + 1;
                 }
+            }
+
+            $parameterCount = count($paramNames);
+            if ($parameterCount > self::MAX_PARAMETERS_PER_TEMPLATE) {
+                throw new InvalidArgumentException(sprintf(
+                    "Spec path '%s' declares %d placeholders; a single template may declare at most %d.",
+                    $specPath,
+                    $parameterCount,
+                    self::MAX_PARAMETERS_PER_TEMPLATE,
+                ));
             }
 
             if ($paramNames === []) {
@@ -96,6 +118,8 @@ final class OpenApiPathMatcher
                 'segments' => $compiledSegments,
                 'path' => $specPath,
                 'literalSegments' => $literalCount,
+                'parameterCount' => $parameterCount,
+                'patternBytes' => $patternBytes,
             ];
         }
 
@@ -110,13 +134,38 @@ final class OpenApiPathMatcher
 
         $compiledPathsBySegmentCount = [];
         foreach ($pathsBySegmentCount as $segmentCount => $paths) {
-            foreach (array_chunk($paths, self::MAX_TEMPLATES_PER_PATTERN) as $chunk) {
+            $chunks = [];
+            $chunk = [];
+            $chunkCaptureCount = 0;
+            $chunkPatternBytes = 0;
+            foreach ($paths as $path) {
+                if ($chunk !== [] && (
+                    count($chunk) >= self::MAX_TEMPLATES_PER_PATTERN ||
+                    $chunkCaptureCount + $path['parameterCount'] > self::MAX_CAPTURES_PER_COMBINED_PATTERN ||
+                    $chunkPatternBytes + $path['patternBytes'] > self::MAX_COMBINED_PATTERN_BYTES
+                )) {
+                    $chunks[] = $chunk;
+                    $chunk = [];
+                    $chunkCaptureCount = 0;
+                    $chunkPatternBytes = 0;
+                }
+
+                // A single long-literal template can exceed the combination
+                // byte budget but still compile on its own, as in the legacy
+                // one-pattern-per-template implementation.
+                $chunk[] = $path;
+                $chunkCaptureCount += $path['parameterCount'];
+                $chunkPatternBytes += $path['patternBytes'];
+            }
+            $chunks[] = $chunk;
+
+            foreach ($chunks as $chunk) {
                 $alternatives = [];
                 $matches = [];
+                $captureIndex = 1;
                 foreach ($chunk as $pathIndex => $path) {
                     $regexSegments = [];
                     $parameters = [];
-                    $parameterIndex = 0;
                     foreach ($path['segments'] as $segment) {
                         if (isset($segment['literal'])) {
                             $regexSegments[] = preg_quote($segment['literal'], '#');
@@ -124,9 +173,8 @@ final class OpenApiPathMatcher
                             continue;
                         }
 
-                        $captureName = sprintf('p%d_%d', $pathIndex, $parameterIndex++);
-                        $regexSegments[] = sprintf('(?<%s>[^/]+)', $captureName);
-                        $parameters[$segment['parameter']] = $captureName;
+                        $regexSegments[] = '([^/]+)';
+                        $parameters[$segment['parameter']] = $captureIndex++;
                     }
 
                     $marker = (string) $pathIndex;
@@ -231,8 +279,8 @@ final class OpenApiPathMatcher
             // MARK capture is the corresponding numeric string.
             $matched = $compiled['matches'][(int) $captures['MARK']];
             $variables = [];
-            foreach ($matched['parameters'] as $name => $captureName) {
-                $variables[$name] = $captures[$captureName];
+            foreach ($matched['parameters'] as $name => $captureIndex) {
+                $variables[$name] = $captures[$captureIndex];
             }
 
             return ['path' => $matched['path'], 'variables' => $variables];

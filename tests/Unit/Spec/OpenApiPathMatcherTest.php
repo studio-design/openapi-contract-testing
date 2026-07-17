@@ -10,6 +10,8 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use Studio\Gesso\Spec\OpenApiPathMatcher;
 
+use function array_fill;
+use function implode;
 use function sprintf;
 
 class OpenApiPathMatcherTest extends TestCase
@@ -147,6 +149,35 @@ class OpenApiPathMatcherTest extends TestCase
             ['path' => '/resource35/{parameter35}', 'variables' => ['parameter35' => 'value']],
             $matcher->matchWithVariables('/resource35/value'),
         );
+    }
+
+    #[Test]
+    public function combined_patterns_split_before_the_pcre_named_capture_limit(): void
+    {
+        $paths = [];
+        for ($i = 0; $i < 32; $i++) {
+            $paths[] = self::pathWithParameters("/resource{$i}", "parameter{$i}_", 400);
+        }
+        $matcher = new OpenApiPathMatcher($paths);
+        $requestPath = '/resource31/' . implode('/', array_fill(0, 400, 'value'));
+
+        $matched = $matcher->matchWithVariables($requestPath);
+
+        $this->assertNotNull($matched);
+        $this->assertSame($paths[31], $matched['path']);
+        $this->assertCount(400, $matched['variables']);
+        $this->assertSame('value', $matched['variables']['parameter31_399']);
+    }
+
+    #[Test]
+    public function a_single_template_above_the_pcre_capture_limit_is_rejected_explicitly(): void
+    {
+        $path = self::pathWithParameters('/large', 'parameter', 10_001);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('declares 10001 placeholders; a single template may declare at most 10000');
+
+        new OpenApiPathMatcher([$path]);
     }
 
     #[Test]
@@ -366,5 +397,15 @@ class OpenApiPathMatcherTest extends TestCase
             '/v2/workspace/{workspace_id}/members',
             '/v2/add-on/plans',
         ]);
+    }
+
+    private static function pathWithParameters(string $prefix, string $parameterPrefix, int $count): string
+    {
+        $segments = [$prefix];
+        for ($i = 0; $i < $count; $i++) {
+            $segments[] = sprintf('{%s%d}', $parameterPrefix, $i);
+        }
+
+        return implode('/', $segments);
     }
 }
