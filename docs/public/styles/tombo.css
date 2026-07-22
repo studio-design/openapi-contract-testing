@@ -1,0 +1,294 @@
+/*! TOMBO v0.4.0 — wadakatu design system. MIT. https://github.com/wadakatu/tombo */
+@layer tombo.reset, tombo.tokens, tombo.base, tombo.components, tombo.utilities;
+
+@layer tombo.tokens {
+  :root {
+    color-scheme: light dark;
+    /* surfaces */
+    --tombo-paper:    light-dark(#F2F4EF, #131714);
+    --tombo-surface:  light-dark(#FAFBF8, #1A201C);
+    --tombo-raised:   light-dark(#FAFBF8, #212824); /* light has no +2 step (spec §5) */
+    /* ink */
+    --tombo-ink:       light-dark(#1A211D, #E5EBE6);
+    --tombo-ink-sub:   light-dark(#4C5650, #9AA69F);
+    --tombo-ink-faint: light-dark(#667069, #808D86);
+    --tombo-hairline:  light-dark(rgba(26,33,29,.16), rgba(229,235,230,.14));
+    --tombo-grid:      light-dark(rgba(26,33,29,.07), rgba(229,235,230,.05));
+    --tombo-grid-bold: light-dark(rgba(26,33,29,.13), rgba(229,235,230,.09)); /* wide-screen gutters only */
+    /* shell — the container scale. `--tombo-shell` is the page's active width; the
+       steps below are the values you assign to it. `reading` is font-relative because
+       it IS a measure — it has to track whatever type it wraps. `default` and `wide`
+       are structural, so they stay px to match the px type scale: a rem container
+       under a px type scale lengthens the line without enlarging the text, which is
+       backwards. If the type scale ever moves to rem, these move with it.
+       No breakpoints — max-inline-size plus a clamp()ed gutter cover every viewport. */
+    --tombo-shell-reading: 65ch;    /* 621px at the body voice — 76 latin / 41 japanese per line */
+    --tombo-shell-default: 1280px;
+    --tombo-shell-wide:    1792px;
+    --tombo-shell-gutter:  clamp(20px, 3.25vw, 64px);
+    --tombo-shell: var(--tombo-shell-default); /* the page's width — reassign to pick a step */
+    --tombo-shell-max: var(--tombo-shell);     /* DEPRECATED since 0.4 — read --tombo-shell.
+                                                  NOTE: the value moved 1100px -> 1280px and the
+                                                  1600px step is gone. Removed in 0.5. */
+    /* instruments */
+    --tombo-green:    light-dark(#0E5A47, #4FC2A2);
+    --tombo-on-green: light-dark(#F2F4EF, #10201A);
+    --tombo-shu:      light-dark(#D8442B, #E5654C);
+    /* status (app volume only) */
+    --tombo-success: light-dark(#2C7A4B, #57B98A);
+    --tombo-warn:    light-dark(#B07818, #D9A441);
+    --tombo-error:   light-dark(#A6301C, #D06A5A);
+    --tombo-callout-label: light-dark(#A6301C, #E5654C); /* crimson by day, shu by night — shu text is a night-only privilege */
+    /* code block: day = night panel, night = outlined, never sunken (spec §10-5) */
+    --tombo-code-bg:     light-dark(#161B18, #1A201C);
+    --tombo-code-ink:    light-dark(#DDE5DF, #E5EBE6);
+    --tombo-code-border: light-dark(transparent, rgba(229,235,230,.14));
+    --tombo-code-faint:    #7D8A82;              /* captions on code-bg — the panel is dark in both themes */
+    --tombo-code-hairline: rgba(229,235,230,.09);
+    --tombo-code-green:    #4FC2A2;              /* syntax accent — night-side constant, panel is always dark */
+    --tombo-code-shu:      #E5654C;
+    /* type — three voices (spec 2026-07-21) */
+    --tombo-font-display: "Instrument Sans", "M PLUS 2", system-ui, sans-serif; /* Latin display only */
+    --tombo-font-body: "M PLUS 2", system-ui, sans-serif;
+    --tombo-font-mono: "Martian Mono", ui-monospace, SFMono-Regular, monospace;
+    --tombo-w-body: 450; /* variable weight — 400 thins out on hotaru */
+    /* type scale — no ad-hoc sizes: every font-size below references these */
+    --tombo-text-label: 10.5px;  --tombo-lh-label: 18px;
+    --tombo-text-note: 12px;     --tombo-lh-note: 18px;
+    --tombo-text-code: 12px;     --tombo-lh-code: 22px;
+    --tombo-text-ui: 13px;       --tombo-lh-ui: 24px;
+    --tombo-text-body: 15px;     --tombo-lh-body: 30px;
+    --tombo-text-h3: 19px;       --tombo-lh-h3: 30px;
+    --tombo-text-h2: 23px;       --tombo-lh-h2: 36px;
+    --tombo-text-h1: 29px;       --tombo-lh-h1: 42px;
+    --tombo-text-metric: 29px;   --tombo-lh-metric: 36px;
+    --tombo-text-display: clamp(44px, 6vw, 64px);
+    /* motion */
+    --tombo-ease: cubic-bezier(0.2, 0, 0, 1);
+    --tombo-dur: 150ms;
+  }
+  :root[data-theme="tombo"]  { color-scheme: light; }
+  :root[data-theme="hotaru"] { color-scheme: dark; }
+}
+
+@layer tombo.reset {
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  img, svg { max-width: 100%; display: block; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+}
+
+@layer tombo.base {
+  html { font-family: var(--tombo-font-body); }
+  body {
+    background: var(--tombo-paper);
+    color: var(--tombo-ink);
+    font-size: var(--tombo-text-body);
+    font-weight: var(--tombo-w-body);
+    line-height: 2; /* = 30px at body size; unitless so larger text inherits safely */
+    transition: background var(--tombo-dur) var(--tombo-ease), color var(--tombo-dur) var(--tombo-ease);
+  }
+  h1, h2, h3, h4 { font-weight: 700; }
+  h1 { font-size: var(--tombo-text-h1); line-height: var(--tombo-lh-h1); }
+  h2 { font-size: var(--tombo-text-h2); line-height: var(--tombo-lh-h2); }
+  h3 { font-size: var(--tombo-text-h3); line-height: var(--tombo-lh-h3); }
+  h4 { line-height: 1.3; }
+  .tombo-display { font-family: var(--tombo-font-display); font-weight: 700; /* Instrument Sans has no 900 */
+    font-size: var(--tombo-text-display); line-height: 1.1; letter-spacing: -.015em; }
+  a { color: var(--tombo-green); text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+  code, kbd, samp, pre { font-family: var(--tombo-font-mono); font-weight: 400; }
+  hr { border: 0; border-top: 1px solid var(--tombo-hairline); }
+  ::selection { background: var(--tombo-green); color: var(--tombo-on-green); }
+  :focus-visible { outline: 2px solid var(--tombo-green); outline-offset: 2px; }
+}
+
+@layer tombo.utilities {
+  /* S-06 方眼 — volume dial */
+  .tombo-vol-lp {
+    background-image:
+      repeating-linear-gradient(0deg,  var(--tombo-grid) 0 1px, transparent 1px 24px),
+      repeating-linear-gradient(90deg, var(--tombo-grid) 0 1px, transparent 1px 24px);
+  }
+  /* container scale — one class, four widths. The page runs at --tombo-shell-default;
+     reassign --tombo-shell on :root (only there — the deprecated --tombo-shell-max
+     alias is declared at :root and will not follow an override made lower down)
+     when a whole page wants another step. .tombo-gutters reads the same variable, so
+     the margins always meet the content edge. The modifiers rebind it per element. */
+  .tombo-shell {
+    inline-size: 100%;
+    max-inline-size: var(--tombo-shell);
+    margin-inline: auto;
+    padding-inline: var(--tombo-shell-gutter);
+  }
+  /* reading is a measure of TEXT, so the box has to carry the gutter on top of it —
+     the shell is border-box, and capping it at the bare 65ch would leave 65ch minus
+     two gutters of actual line (51.9ch at a 1920px viewport). default and wide are
+     frame widths and mean exactly what they say, so they are not compensated. */
+  .tombo-shell--reading { --tombo-shell: calc(var(--tombo-shell-reading) + 2 * var(--tombo-shell-gutter)); }
+  .tombo-shell--wide    { --tombo-shell: var(--tombo-shell-wide); }
+  /* full bleed leaves --tombo-shell untouched so a nested .tombo-shell keeps the page width */
+  .tombo-shell--full    { max-inline-size: none; padding-inline: 0; }
+
+  .tombo-gutters { position: relative; }
+  .tombo-gutters::before, .tombo-gutters::after {
+    content: ""; position: absolute; inset-block: 0; pointer-events: none;
+    /* reach the content edge, not the shell's outer edge: the margin outside the
+       shell PLUS the shell's own gutter. 100% (the body box) rather than 100vw so a
+       classic scrollbar does not push the grid past the content. Below the shell
+       width the first term is 0 and the grid is exactly the gutter. */
+    inline-size: calc(max(0px, (100% - var(--tombo-shell)) / 2) + var(--tombo-shell-gutter));
+    background-image:
+      repeating-linear-gradient(0deg,  var(--tombo-grid) 0 1px, transparent 1px 24px),
+      repeating-linear-gradient(90deg, var(--tombo-grid) 0 1px, transparent 1px 24px);
+  }
+  .tombo-gutters::before { inset-inline-start: 0; }
+  .tombo-gutters::after  { inset-inline-end: 0; }
+  @media (min-width: 1600px) {
+    /* wide screens: the margins become the trim area — bolder grid, and the
+       registration mark moves to the window's own corners (print puts tombo
+       outside the live area; here the viewport edge is that outside) */
+    .tombo-gutters::before, .tombo-gutters::after { --tombo-grid: var(--tombo-grid-bold); }
+    html:has(> body.tombo-gutters)::before {
+      content: ""; position: fixed; inset: 20px; pointer-events: none; opacity: .45;
+      background:
+        linear-gradient(var(--tombo-ink), var(--tombo-ink)) left 0 top 0 / 22px 1.5px,
+        linear-gradient(var(--tombo-ink), var(--tombo-ink)) left 0 top 0 / 1.5px 22px,
+        linear-gradient(var(--tombo-ink), var(--tombo-ink)) right 0 top 0 / 22px 1.5px,
+        linear-gradient(var(--tombo-ink), var(--tombo-ink)) right 0 top 0 / 1.5px 22px,
+        linear-gradient(var(--tombo-ink), var(--tombo-ink)) left 0 bottom 0 / 22px 1.5px,
+        linear-gradient(var(--tombo-ink), var(--tombo-ink)) left 0 bottom 0 / 1.5px 22px,
+        linear-gradient(var(--tombo-ink), var(--tombo-ink)) right 0 bottom 0 / 22px 1.5px,
+        linear-gradient(var(--tombo-ink), var(--tombo-ink)) right 0 bottom 0 / 1.5px 22px;
+      background-repeat: no-repeat;
+    }
+  }
+
+  .tombo-mono { font-family: var(--tombo-font-mono); }
+  .tombo-label {
+    font-family: var(--tombo-font-mono); font-size: var(--tombo-text-label);
+    line-height: var(--tombo-lh-label); font-weight: 500;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--tombo-ink-sub);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+}
+
+@layer tombo.components {
+  /* S-01 トンボ: 2 corners via pseudos; add <b class="tombo-corner-tr/bl"> for 4 */
+  .tombo-corners { position: relative; }
+  .tombo-corners::before, .tombo-corners::after,
+  .tombo-corner-tr, .tombo-corner-bl { position: absolute; width: 12px; height: 12px; border: 0 solid var(--tombo-ink); opacity: .8; content: ""; }
+  .tombo-corners::before { top: -1px; left: -1px; border-top-width: 1.5px; border-left-width: 1.5px; }
+  .tombo-corners::after  { bottom: -1px; right: -1px; border-bottom-width: 1.5px; border-right-width: 1.5px; }
+  .tombo-corner-tr { top: -1px; right: -1px; border-top-width: 1.5px; border-right-width: 1.5px; }
+  .tombo-corner-bl { bottom: -1px; left: -1px; border-bottom-width: 1.5px; border-left-width: 1.5px; }
+
+  /* S-02 寸法線 */
+  .tombo-dim { position: relative; height: 10px; border-left: 1px solid var(--tombo-ink); border-right: 1px solid var(--tombo-ink); }
+  .tombo-dim::after { content: ""; position: absolute; inset: 4.5px 0 auto; border-top: 1px solid var(--tombo-ink); }
+  .tombo-dimlab { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-note); line-height: var(--tombo-lh-note); font-weight: 400; letter-spacing: .08em; color: var(--tombo-ink-faint); margin-top: 7px; }
+
+  /* S-03 目盛 */
+  .tombo-ticks { list-style: none; padding: 0; }
+  .tombo-ticks > li { position: relative; padding: 5px 0 5px 22px; }
+  .tombo-ticks > li::before { content: ""; position: absolute; left: 0; top: 50%; width: 12px; border-top: 1.5px solid var(--tombo-green); }
+
+  .tombo-ruler { position: relative; height: 20px; border-bottom: 1.5px solid var(--tombo-ink);
+    background-image: repeating-linear-gradient(90deg, var(--tombo-hairline) 0 1px, transparent 1px 10%); }
+  .tombo-ruler::before { content: ""; position: absolute; bottom: 0; left: 0; height: 6px;
+    width: var(--tombo-ruler-value, 0%); background: var(--tombo-green);
+    transition: width var(--tombo-dur) var(--tombo-ease); }
+  .tombo-ruler::after { content: ""; position: absolute; top: 0; bottom: -5px;
+    left: var(--tombo-ruler-value, 0%); border-left: 1.5px solid var(--tombo-shu); }
+
+  /* S-04 通し番号 */
+  .tombo-sections { counter-reset: tombo-section; }
+  .tombo-sec { counter-increment: tombo-section; }
+  .tombo-sec::before { content: counter(tombo-section, decimal-leading-zero) " — ";
+    font-family: var(--tombo-font-mono); font-weight: 500; font-size: .72em; color: var(--tombo-green); }
+  .tombo-fig { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-note); line-height: var(--tombo-lh-note); font-weight: 400; letter-spacing: .08em; color: var(--tombo-ink-faint); text-transform: uppercase; }
+
+  /* S-05 朱の現在地 */
+  .tombo-current { position: relative; }
+  .tombo-current::before { content: ""; position: absolute; left: 0; top: 50%; width: 12px; border-top: 2px solid var(--tombo-shu); }
+  .tombo-kicker { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-label); line-height: var(--tombo-lh-label); font-weight: 500; letter-spacing: .16em; color: var(--tombo-green); text-transform: uppercase; }
+  .tombo-kicker::before { content: ""; display: inline-block; width: 12px; border-top: 2px solid var(--tombo-shu); vertical-align: 4px; margin-right: 10px; }
+}
+
+@layer tombo.components {
+  .tombo-btn { display: inline-block; padding: 12px 26px; font-size: var(--tombo-text-ui); font-family: var(--tombo-font-body);
+    border: 1px solid transparent; cursor: pointer; background: none;
+    transition: background var(--tombo-dur) var(--tombo-ease), color var(--tombo-dur) var(--tombo-ease); }
+  .tombo-btn--primary { background: var(--tombo-green); color: var(--tombo-on-green); font-weight: 700; }
+  .tombo-btn--primary:hover { background: var(--tombo-ink); color: var(--tombo-paper); }
+  .tombo-btn--secondary { border-color: var(--tombo-ink); color: var(--tombo-ink); }
+  .tombo-btn--secondary:hover { background: var(--tombo-surface); }
+  .tombo-btn--ghost { color: var(--tombo-green); text-decoration: underline; text-underline-offset: 4px; padding: 12px 8px; }
+
+  .tombo-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--tombo-hairline); }
+  .tombo-tabs > * { padding: 6px 2px 9px; color: var(--tombo-ink-sub); text-decoration: none; position: relative; font-size: var(--tombo-text-ui); }
+  .tombo-tabs > [aria-current] { color: var(--tombo-ink); font-weight: 500; }
+  .tombo-tabs > [aria-current]::after { content: ""; position: absolute; left: 0; bottom: -1px; width: 100%; border-bottom: 2px solid var(--tombo-shu); }
+
+  .tombo-toc { font-size: var(--tombo-text-ui); }
+  .tombo-toc a { display: block; color: var(--tombo-ink-sub); text-decoration: none; padding: 7px 0 7px 22px; position: relative; }
+  .tombo-toc a[aria-current] { color: var(--tombo-ink); font-weight: 500; }
+  .tombo-toc a[aria-current]::before { content: ""; position: absolute; left: 0; top: 50%; width: 12px; border-top: 2px solid var(--tombo-shu); }
+
+  .tombo-code { background: var(--tombo-code-bg); color: var(--tombo-code-ink);
+    border: 1px solid var(--tombo-code-border); border-radius: 6px; overflow: hidden; }
+  .tombo-code > figcaption { display: flex; justify-content: space-between; font-family: var(--tombo-font-mono);
+    font-size: var(--tombo-text-label); font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--tombo-code-faint);
+    padding: 8px 14px; border-bottom: 1px solid var(--tombo-code-hairline); }
+  .tombo-code pre { font-size: var(--tombo-text-code); line-height: var(--tombo-lh-code); font-stretch: 87.5%; padding: 14px 18px; overflow-x: auto; }
+
+  .tombo-callout { border: 1px solid var(--tombo-hairline); border-left: 2px solid var(--tombo-shu);
+    padding: 12px 16px; font-size: var(--tombo-text-ui); line-height: var(--tombo-lh-ui); color: var(--tombo-ink-sub); }
+  .tombo-callout--warn { border-left-color: var(--tombo-warn); }
+  .tombo-callout > b:first-child { font-family: var(--tombo-font-mono); font-weight: 500; font-size: var(--tombo-text-label);
+    letter-spacing: .14em; color: var(--tombo-callout-label); margin-right: 10px; text-transform: uppercase; }
+
+  .tombo-table { width: 100%; border-collapse: collapse; font-size: var(--tombo-text-ui); }
+  .tombo-table th { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-label); letter-spacing: .12em;
+    text-transform: uppercase; color: var(--tombo-ink-sub); font-weight: 500; text-align: left;
+    padding: 11px 14px; border-bottom: 1.5px solid var(--tombo-ink); }
+  .tombo-table td { padding: 10px 14px; border-bottom: 1px solid var(--tombo-hairline); }
+  /* A data table is a reflow exception under WCAG 2.2 SC 1.4.10, but the scroll
+     belongs to the table, not the page. Wrap every .tombo-table that can outgrow
+     its column. The region must be focusable or a keyboard user cannot scroll it,
+     and role="region" needs an accessible name:
+     <div class="tombo-table-wrap" role="region" aria-labelledby="ID" tabindex="0">
+       <table class="tombo-table"> … */
+  .tombo-table-wrap { overflow-x: auto; }
+
+  .tombo-chip { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-label); font-weight: 500; letter-spacing: .08em;
+    padding: 3px 10px; border: 1px solid var(--tombo-hairline); border-radius: 99px; }
+  .tombo-chip::before { content: ""; display: inline-block; width: .5em; height: .5em; border-radius: 50%;
+    background: currentColor; margin-right: .55em; vertical-align: .08em; color: var(--tombo-ink-faint); }
+  .tombo-chip[data-status="ok"]::before   { color: var(--tombo-success); }
+  .tombo-chip[data-status="warn"]::before { color: var(--tombo-warn); }
+  .tombo-chip[data-status="err"]::before  { color: var(--tombo-error); }
+
+  .tombo-metric { background: var(--tombo-surface); border: 1px solid var(--tombo-hairline); padding: 20px 24px; }
+  .tombo-metric > .k { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-label); font-weight: 500; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--tombo-ink-sub); }
+  .tombo-metric > .v { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-metric); line-height: var(--tombo-lh-metric); font-weight: 600; margin: 8px 0 12px; }
+
+  .tombo-footer { border-top: 1px solid var(--tombo-hairline); padding: 22px 0 46px;
+    font-family: var(--tombo-font-mono); font-size: var(--tombo-text-label); font-weight: 400; letter-spacing: .12em; color: var(--tombo-ink-faint); line-height: 1.9; }
+
+  /* S-04 — the mark, engraved: C-01 見当 (assets/logo/tombo-mark.svg) drawn in CSS.
+     markup: <span class="tombo-logo" aria-hidden="true"><i class="h"></i><i class="b"></i><i class="w1"></i><i class="w2"></i><i class="t"></i></span> */
+  .tombo-logo { position: relative; display: inline-block; width: 24px; height: 24px; color: var(--tombo-green); }
+  .tombo-logo > i { position: absolute; display: block; }
+  .tombo-logo > .h { top: 0; left: 50%; width: 5px; height: 5px; transform: translateX(-50%);
+    border: 1.5px solid currentColor; border-radius: 50%; }
+  .tombo-logo > .b { top: 5px; bottom: 4px; left: calc(50% - .75px); border-left: 1.5px solid currentColor; }
+  .tombo-logo > .w1 { top: 8.5px; left: 2px; right: 2px; border-top: 1.5px solid currentColor; }
+  .tombo-logo > .w2 { top: 11.5px; left: 5px; right: 5px; border-top: 1.5px solid currentColor; }
+  .tombo-logo > .t { bottom: 0; left: calc(50% - .75px); height: 4px; border-left: 1.5px solid var(--tombo-shu); }
+  /* spec §9 — the single glow exception: at night the LP hero tail is a firefly, not a mark */
+  .tombo-logo--glow > .t { border-color: light-dark(var(--tombo-shu), var(--tombo-green));
+    box-shadow: 0 0 7px light-dark(transparent, var(--tombo-green)); }
+}

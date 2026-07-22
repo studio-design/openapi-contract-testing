@@ -7,6 +7,7 @@
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs",
     "docs:verify-base": "node scripts/verify-docs-base.mjs",
+    "docs:verify-tombo": "node scripts/verify-tombo-vendor.mjs",
     "docs:verify-version": "node scripts/verify-docs-version.mjs",
     "docs:links": "markdown-link-check --config .markdown-link-check.json README.md docs/*.md docs/**/*.md examples/*/README.md"
   },
