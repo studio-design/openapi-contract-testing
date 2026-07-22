@@ -1,10 +1,395 @@
+:root {
+  --vp-layout-top-height: 36px;
+  --vp-layout-max-width: var(--tombo-shell-default);
+  --vp-font-family-base: var(--tombo-font-body);
+  --vp-font-family-mono: var(--tombo-font-mono);
+  --vp-c-bg: var(--tombo-paper);
+  --vp-c-bg-alt: var(--tombo-surface);
+  --vp-c-bg-elv: var(--tombo-raised);
+  --vp-c-bg-soft: var(--tombo-surface);
+  --vp-c-border: var(--tombo-hairline);
+  --vp-c-divider: var(--tombo-hairline);
+  --vp-c-gutter: var(--tombo-hairline);
+  --vp-c-text-1: var(--tombo-ink);
+  --vp-c-text-2: var(--tombo-ink-sub);
+  --vp-c-text-3: var(--tombo-ink-faint);
+  --vp-c-brand-1: var(--tombo-green);
+  --vp-c-brand-2: var(--tombo-green);
+  --vp-c-brand-3: var(--tombo-green);
+  --vp-c-brand-soft: color-mix(in srgb, var(--tombo-green) 14%, transparent);
+  --vp-code-color: var(--tombo-code-green);
+  --vp-code-bg: var(--tombo-code-bg);
+  --vp-code-block-bg: var(--tombo-code-bg);
+  --vp-code-line-highlight-color: color-mix(in srgb, var(--tombo-code-green) 10%, transparent);
+  --vp-custom-block-info-border: var(--tombo-green);
+  --vp-custom-block-info-bg: var(--tombo-surface);
+  --vp-custom-block-warning-border: var(--tombo-warn);
+  --vp-custom-block-warning-bg: var(--tombo-surface);
+  --vp-custom-block-danger-border: var(--tombo-error);
+  --vp-custom-block-danger-bg: var(--tombo-surface);
+}
+
+html {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--tombo-paper);
+  color: var(--tombo-ink);
+}
+
 .version-banner {
-  position: relative;
-  z-index: 30;
-  padding: 0.45rem 1rem;
-  border-bottom: 1px solid var(--vp-c-divider);
-  background: var(--vp-c-bg-soft);
-  color: var(--vp-c-text-2);
-  font-size: 0.8rem;
+  position: fixed;
+  z-index: 31;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  height: var(--vp-layout-top-height);
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding-inline: 1rem;
+  border-bottom: 1px solid var(--tombo-hairline);
+  background: var(--tombo-surface);
+  color: var(--tombo-ink-faint);
   text-align: center;
+}
+
+.version-banner .tombo-kicker {
+  white-space: nowrap;
+}
+
+.version-banner-note {
+  font-family: var(--tombo-font-mono);
+  font-size: var(--tombo-text-label);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.VPNav,
+.VPNavBar,
+.VPNavBar.has-sidebar .content,
+.VPNavBar:not(.home) {
+  background: color-mix(in srgb, var(--tombo-paper) 94%, transparent);
+}
+
+.VPNavBar {
+  border-bottom-color: var(--tombo-hairline);
+}
+
+.VPNavBarTitle .title {
+  color: var(--tombo-ink);
+  font-family: var(--tombo-font-display);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.VPNavBarTitle .logo {
+  width: 24px;
+  height: 24px;
+}
+
+.VPNavBarMenuLink {
+  position: relative;
+  color: var(--tombo-ink-sub);
+  font-size: var(--tombo-text-ui);
+}
+
+.VPNavBarMenuLink.active {
+  color: var(--tombo-ink);
+}
+
+.VPNavBarMenuLink.active::after {
+  content: "";
+  position: absolute;
+  right: 12px;
+  bottom: -1px;
+  left: 12px;
+  border-bottom: 2px solid var(--tombo-shu);
+}
+
+.VPNavBarSearchButton,
+.DocSearch-Button,
+.VPLocalSearchBox .shell {
+  border-color: var(--tombo-hairline);
+  border-radius: 0;
+  background: var(--tombo-surface);
+  box-shadow: none;
+}
+
+.VPNavBarSearch .DocSearch-Button .DocSearch-Button-Keys {
+  display: none;
+}
+
+.VPSwitch,
+.VPSwitchAppearance {
+  border-color: var(--tombo-hairline);
+  background: var(--tombo-surface);
+}
+
+.VPLocalNav,
+.VPSidebar {
+  background: var(--tombo-paper);
+}
+
+.VPSidebar {
+  border-right: 1px solid var(--tombo-hairline);
+}
+
+.VPSidebarItem.level-0 > .item > .text {
+  color: var(--tombo-ink-faint);
+  font-family: var(--tombo-font-mono);
+  font-size: var(--tombo-text-label);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.VPSidebarItem .link {
+  color: var(--tombo-ink-sub);
+}
+
+.VPSidebarItem.is-active > .item .link > .text {
+  position: relative;
+  padding-left: 22px;
+  color: var(--tombo-ink);
+}
+
+.VPSidebarItem.is-active > .item .link > .text::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 12px;
+  border-top: 2px solid var(--tombo-shu);
+}
+
+.VPDocAsideOutline .outline-title,
+.VPDocAsideOutline .outline-link {
+  font-size: var(--tombo-text-ui);
+}
+
+.VPDocAsideOutline .outline-title {
+  color: var(--tombo-ink-faint);
+  font-family: var(--tombo-font-mono);
+  font-size: var(--tombo-text-label);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.VPDocAsideOutline .outline-link.active {
+  color: var(--tombo-ink);
+}
+
+.VPDocAsideOutline .outline-marker {
+  width: 2px;
+  background: var(--tombo-shu);
+}
+
+.vp-doc {
+  color: var(--tombo-ink-sub);
+  font-size: var(--tombo-text-body);
+  line-height: var(--tombo-lh-body);
+}
+
+.vp-doc > :is(p, ul, ol, blockquote, .custom-block),
+.vp-doc > :is(h1, h2, h3, h4) {
+  max-inline-size: var(--tombo-shell-reading);
+}
+
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3,
+.vp-doc h4 {
+  color: var(--tombo-ink);
+}
+
+.vp-doc h1 {
+  font-family: var(--tombo-font-display);
+  font-size: var(--tombo-text-display);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+
+.vp-doc h2 {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--tombo-hairline);
+  font-size: var(--tombo-text-h2);
+  line-height: var(--tombo-lh-h2);
+}
+
+.vp-doc h3 {
+  font-size: var(--tombo-text-h3);
+  line-height: var(--tombo-lh-h3);
+}
+
+.vp-doc a {
+  color: var(--tombo-green);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+.vp-doc :not(pre) > code {
+  border: 1px solid var(--tombo-hairline);
+  border-radius: 0;
+  background: var(--tombo-surface);
+  color: var(--tombo-green);
+}
+
+.vp-doc div[class*="language-"] {
+  border: 1px solid var(--tombo-code-border);
+  border-radius: 6px;
+  background: var(--tombo-code-bg);
+  box-shadow: none;
+}
+
+.vp-doc div[class*="language-"] code,
+.vp-doc div[class*="language-"] pre {
+  color: var(--tombo-code-ink);
+  font-family: var(--tombo-font-mono);
+}
+
+.vp-doc .shiki span[style*="#6A737D"] {
+  --shiki-light: var(--tombo-code-faint) !important;
+  --shiki-dark: var(--tombo-code-faint) !important;
+}
+
+.vp-doc .custom-block {
+  border: 1px solid var(--tombo-hairline);
+  border-left-width: 2px;
+  border-radius: 0;
+  background: var(--tombo-surface);
+}
+
+.vp-doc .custom-block.info,
+.vp-doc .custom-block.tip {
+  border-left-color: var(--tombo-green);
+}
+
+.vp-doc .custom-block.warning {
+  border-left-color: var(--tombo-warn);
+}
+
+.vp-doc .custom-block.danger {
+  border-left-color: var(--tombo-error);
+}
+
+.vp-doc .custom-block-title {
+  color: var(--tombo-ink);
+  font-family: var(--tombo-font-mono);
+  font-size: var(--tombo-text-label);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.vp-doc table {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.vp-doc .tombo-table-wrap {
+  margin: 20px 0;
+}
+
+.vp-doc .tombo-table-wrap table {
+  margin: 0;
+}
+
+.vp-doc th {
+  border: 0;
+  border-bottom: 1.5px solid var(--tombo-ink);
+  background: transparent;
+  color: var(--tombo-ink-sub);
+  font-family: var(--tombo-font-mono);
+  font-size: var(--tombo-text-label);
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.vp-doc td {
+  border: 0;
+  border-bottom: 1px solid var(--tombo-hairline);
+}
+
+.vp-doc tr:nth-child(2n) {
+  background: var(--tombo-surface);
+}
+
+.vp-doc blockquote {
+  border-left-color: var(--tombo-shu);
+  color: var(--tombo-ink-sub);
+}
+
+.prev-next .pager-link {
+  border-color: var(--tombo-hairline);
+  border-radius: 0;
+  background: var(--tombo-surface);
+}
+
+.tombo-site-footer {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  padding-block: 1.5rem 2.75rem;
+  border-top: 1px solid var(--tombo-hairline);
+  color: var(--tombo-ink-faint);
+}
+
+.tombo-site-footer p {
+  margin: 0;
+  font-family: var(--tombo-font-mono);
+  font-size: var(--tombo-text-label);
+  line-height: 1.9;
+  letter-spacing: 0.1em;
+}
+
+@media (min-width: 1440px) {
+  .VPDoc {
+    background-image:
+      linear-gradient(90deg, var(--tombo-grid) 1px, transparent 1px),
+      linear-gradient(var(--tombo-grid) 1px, transparent 1px);
+    background-position: right top;
+    background-size: 24px 24px;
+  }
+
+  .VPDoc .container {
+    background: var(--tombo-paper);
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --vp-layout-top-height: 48px;
+  }
+
+  .version-banner {
+    gap: 0.35rem;
+    flex-direction: column;
+    line-height: 1.15;
+  }
+
+  .version-banner .tombo-kicker,
+  .version-banner-note {
+    font-size: 9px;
+    line-height: 12px;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }

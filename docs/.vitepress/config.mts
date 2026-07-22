@@ -13,6 +13,16 @@ export default defineConfig({
   description: 'OpenAPI contract testing for PHP',
   base,
   head: [
+    ['link', { rel: 'stylesheet', href: `${base}styles/tombo.css` }],
+    ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
+    ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
+    [
+      'link',
+      {
+        rel: 'stylesheet',
+        href: 'https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@600;700&family=M+PLUS+2:wght@450;500;700&family=Martian+Mono:wdth,wght@75..112.5,400..600&display=swap'
+      }
+    ],
     ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}favicon.svg` }],
     ['link', { rel: 'apple-touch-icon', sizes: '180x180', href: `${base}apple-touch-icon.png` }],
     ['meta', { property: 'og:image', content: socialPreviewUrl }],
@@ -24,7 +34,47 @@ export default defineConfig({
   lastUpdated: true,
   sitemap: { hostname: siteUrl },
   vite: { define: { __DOCS_VERSION__: JSON.stringify(version) } },
-  markdown: { lineNumbers: true },
+  markdown: {
+    lineNumbers: true,
+    config(markdown) {
+      markdown.renderer.rules.table_open = (tokens, index, options, _env, renderer) => {
+        tokens[index].attrJoin('class', 'tombo-table')
+
+        let tableNumber = 1
+        let heading = ''
+
+        for (let cursor = 0; cursor < index; cursor++) {
+          if (tokens[cursor].type === 'table_open') {
+            tableNumber++
+          }
+
+          if (tokens[cursor].type !== 'heading_open') {
+            continue
+          }
+
+          const inline = tokens[cursor + 1]
+          heading = inline?.children
+            ?.filter((token) => token.type === 'text' || token.type === 'code_inline')
+            .map((token) => token.content)
+            .join('')
+            .trim() ?? ''
+        }
+
+        const label = heading === ''
+          ? `Data table ${tableNumber}`
+          : `Data table ${tableNumber}: ${heading}`
+        const table = renderer.renderToken(tokens, index, options)
+
+        return `<div class="tombo-table-wrap" role="region" aria-label="${markdown.utils.escapeHtml(label)}" tabindex="0">\n${table}`
+      }
+
+      markdown.renderer.rules.table_close = (tokens, index, options, _env, renderer) => {
+        const table = renderer.renderToken(tokens, index, options)
+
+        return `${table}</div>\n`
+      }
+    }
+  },
   themeConfig: {
     logo: '/favicon.svg',
     search: { provider: 'local' },
@@ -82,7 +132,6 @@ export default defineConfig({
     editLink: {
       pattern: `${repositoryUrl}/edit/main/docs/:path`,
       text: 'Edit this page on GitHub'
-    },
-    footer: { message: 'Released under the MIT License.' }
+    }
   }
 })
