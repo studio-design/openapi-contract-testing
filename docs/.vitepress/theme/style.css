@@ -1,6 +1,6 @@
 :root {
   --vp-layout-top-height: 36px;
-  --vp-layout-max-width: var(--tombo-shell-default);
+  --vp-layout-max-width: min(var(--tombo-shell-wide), 100vw);
   --vp-font-family-base: var(--tombo-font-body);
   --vp-font-family-mono: var(--tombo-font-mono);
   --vp-c-bg: var(--tombo-paper);
@@ -199,7 +199,13 @@ body {
   line-height: var(--tombo-lh-body);
 }
 
+.VPDoc.has-aside .content .content-container {
+  max-width: 1160px;
+}
+
 .vp-doc > :is(p, ul, ol, blockquote, .custom-block),
+.vp-doc > div > :is(p, ul, ol, blockquote, .custom-block),
+.vp-doc > div > :is(h1, h2, h3, h4),
 .vp-doc > :is(h1, h2, h3, h4) {
   max-inline-size: var(--tombo-shell-reading);
 }
