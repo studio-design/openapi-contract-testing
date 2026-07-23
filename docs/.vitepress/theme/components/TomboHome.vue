@@ -55,7 +55,10 @@ const quickstarts = [
 
           <div class="headline-measure" aria-hidden="true">
             <div class="tombo-dim"></div>
-            <p class="tombo-dimlab">headline / 02 lines · spec / 3.0 · 3.1 · 3.2</p>
+            <p class="tombo-dimlab headline-dim-label">
+              <span>headline / 02 lines</span>
+              <span class="headline-dim-spec">spec / 3.0 · 3.1 · 3.2</span>
+            </p>
           </div>
 
           <p class="hero-lead">
@@ -157,7 +160,7 @@ const quickstarts = [
           <div class="quickstart-proof">
             <figure class="tombo-code">
               <figcaption><span>SHELL — INSTALL &amp; RUN</span><span>02 STEPS</span></figcaption>
-              <pre><code><span class="code-line"><i>001</i><b>$</b> composer require --dev studio-design/gesso</span>
+              <pre><code><span class="code-line"><i>001</i><b>$</b> composer require --dev &quot;studio-design/gesso:^2.0@beta&quot;</span>
 <span class="code-line"><i>002</i><b>$</b> vendor/bin/phpunit</span>
 <span class="code-line code-comment"><i>003</i># coverage: method · path · status · content-type</span></code></pre>
             </figure>
@@ -254,8 +257,18 @@ const quickstarts = [
 }
 
 .headline-measure {
-  width: min(100%, 340px);
+  width: min(100%, 430px);
   margin-top: 1.5rem;
+}
+
+.headline-dim-label {
+  display: flex;
+  gap: 0.6em;
+  white-space: nowrap;
+}
+
+.headline-dim-spec::before {
+  content: "· ";
 }
 
 .hero-lead {
@@ -652,6 +665,16 @@ const quickstarts = [
 }
 
 @media (max-width: 480px) {
+  .headline-dim-label {
+    display: grid;
+    gap: 0.1rem;
+    white-space: normal;
+  }
+
+  .headline-dim-spec::before {
+    content: "";
+  }
+
   .hero-actions {
     align-items: stretch;
     flex-direction: column;
