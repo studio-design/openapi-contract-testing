@@ -77,5 +77,34 @@ final class DocumentationInstallPolicyTest extends TestCase
                 $relativePath . ' must not present an unavailable stable release as the current install path.',
             );
         }
+
+        $homeContents = file_get_contents($root . '/docs/.vitepress/theme/components/TomboHome.vue');
+        $this->assertIsString($homeContents);
+
+        if (!$isPrerelease) {
+            $this->assertStringContainsString(
+                'studio-design/gesso:^2.0',
+                $homeContents,
+                'The home page must install the stable Gesso 2 line.',
+            );
+            $this->assertStringNotContainsString(
+                'studio-design/gesso:^2.0@beta',
+                $homeContents,
+                'The home page must stop opting in to prereleases during stable promotion.',
+            );
+
+            return;
+        }
+
+        $this->assertStringContainsString(
+            'studio-design/gesso:^2.0@beta',
+            $homeContents,
+            'The home page must opt in to the published Gesso 2 beta.',
+        );
+        $this->assertStringNotContainsString(
+            'composer require --dev studio-design/gesso',
+            $homeContents,
+            'The home page must not present an unavailable stable release as the current install path.',
+        );
     }
 }
