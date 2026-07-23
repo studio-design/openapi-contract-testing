@@ -12,20 +12,20 @@ use PHPUnit\Framework\TestCase;
 use function dirname;
 use function file_get_contents;
 use function json_decode;
-use function str_contains;
 
 final class DocumentationInstallPolicyTest extends TestCase
 {
     #[Test]
-    public function prerelease_install_guides_are_explicitly_marked_for_evaluation(): void
+    public function installation_guides_follow_the_configured_release_channel(): void
     {
         $root = dirname(__DIR__, 3);
-        $manifestContents = file_get_contents($root . '/.release-please-manifest.json');
-        $this->assertNotFalse($manifestContents);
+        $configContents = file_get_contents($root . '/release-please-config.json');
+        $this->assertNotFalse($configContents);
 
-        /** @var array{'.': string} $manifest */
-        $manifest = json_decode($manifestContents, true, flags: JSON_THROW_ON_ERROR);
-        $currentVersion = $manifest['.'];
+        /** @var array<string, mixed> $config */
+        $config = json_decode($configContents, true, flags: JSON_THROW_ON_ERROR);
+        $isPrerelease = $config['prerelease'] ?? null;
+        $this->assertIsBool($isPrerelease);
 
         foreach ([
             'README.md',
@@ -41,7 +41,7 @@ final class DocumentationInstallPolicyTest extends TestCase
             $contents = file_get_contents($root . '/' . $relativePath);
             $this->assertIsString($contents);
 
-            if (!str_contains($currentVersion, '-')) {
+            if (!$isPrerelease) {
                 $this->assertStringContainsString(
                     'studio-design/gesso:^2.0',
                     $contents,
@@ -50,12 +50,12 @@ final class DocumentationInstallPolicyTest extends TestCase
                 $this->assertStringNotContainsString(
                     'studio-design/gesso:^2.0@beta',
                     $contents,
-                    $relativePath . ' must stop opting in to prereleases after the stable release.',
+                    $relativePath . ' must stop opting in to prereleases during stable promotion.',
                 );
                 $this->assertStringNotContainsString(
                     'Pre-release evaluation only',
                     $contents,
-                    $relativePath . ' must remove the prerelease warning after the stable release.',
+                    $relativePath . ' must remove the prerelease warning during stable promotion.',
                 );
 
                 continue;
