@@ -33,6 +33,7 @@ final class DocumentationInstallPolicyTest extends TestCase
             'docs/quickstarts/laravel.md',
             'docs/quickstarts/pest.md',
             'docs/quickstarts/symfony.md',
+            'docs/migration/v2.md',
             'examples/core/README.md',
             'examples/laravel/README.md',
             'examples/pest/README.md',
