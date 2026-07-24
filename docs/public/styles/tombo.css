@@ -1,4 +1,4 @@
-/*! TOMBO v0.4.0 — wadakatu design system. MIT. https://github.com/wadakatu/tombo */
+/*! TOMBO v0.12.0 — wadakatu design system. MIT. https://github.com/wadakatu/tombo */
 @layer tombo.reset, tombo.tokens, tombo.base, tombo.components, tombo.utilities;
 
 @layer tombo.tokens {
@@ -27,13 +27,34 @@
     --tombo-shell-wide:    1792px;
     --tombo-shell-gutter:  clamp(20px, 3.25vw, 64px);
     --tombo-shell: var(--tombo-shell-default); /* the page's width — reassign to pick a step */
-    --tombo-shell-max: var(--tombo-shell);     /* DEPRECATED since 0.4 — read --tombo-shell.
-                                                  NOTE: the value moved 1100px -> 1280px and the
-                                                  1600px step is gone. Removed in 0.5. */
+    /* space scale — 4px base; 24 and up are multiples of the 24px grid cell.
+       Names are pixel-encoded (the name is the measurement). See spec §7. */
+    --tombo-space-4:   4px;
+    --tombo-space-8:   8px;
+    --tombo-space-12:  12px;
+    --tombo-space-16:  16px;
+    --tombo-space-24:  24px;   /* one grid cell — default block rhythm */
+    --tombo-space-32:  32px;
+    --tombo-space-48:  48px;   /* 2 cells */
+    --tombo-space-72:  72px;   /* 3 cells — docs section rhythm */
+    --tombo-space-96:  96px;   /* 4 cells — LP section rhythm */
     /* instruments */
     --tombo-green:    light-dark(#0E5A47, #4FC2A2);
     --tombo-on-green: light-dark(#F2F4EF, #10201A);
     --tombo-shu:      light-dark(#D8442B, #E5654C);
+    /* glow — the hotaru firefly (spec §9), opt-in via .tombo-glow. Every value is
+       transparent by day, so the rules that use them need no theme selector and
+       follow the OS and data-theme alike through color-scheme. Writing them as
+       [data-theme="hotaru"] instead would miss every page that merely follows a
+       dark OS without forcing a theme. */
+    --tombo-glow-wash: light-dark(transparent, rgba(79,194,162,.16));
+    --tombo-glow-edge: light-dark(transparent, rgba(79,194,162,.14));
+    --tombo-glow-halo: light-dark(transparent, rgba(79,194,162,.30));
+    /* a lit surface sits ~1.3 contrast points brighter, which drops ink-faint to
+       3.93:1 on the wash and 3.68:1 on a lit panel — under the 4.5 floor. Inside
+       .tombo-glow the annotation ink is lifted one step. The two values mirror
+       ink-faint by day and ink-sub by night; check_contrast.py asserts that. */
+    --tombo-ink-faint-glow: light-dark(#667069, #9AA69F);
     /* status (app volume only) */
     --tombo-success: light-dark(#2C7A4B, #57B98A);
     --tombo-warn:    light-dark(#B07818, #D9A441);
@@ -85,17 +106,21 @@
     font-size: var(--tombo-text-body);
     font-weight: var(--tombo-w-body);
     line-height: 2; /* = 30px at body size; unitless so larger text inherits safely */
+    text-autospace: normal; /* 八分アキ(1/8 em) at 和欧 boundaries — CSS Text L4. Unsupported → tight (PE) */
     transition: background var(--tombo-dur) var(--tombo-ease), color var(--tombo-dur) var(--tombo-ease);
   }
-  h1, h2, h3, h4 { font-weight: 700; }
+  h1, h2, h3, h4, h5, h6 { font-weight: 700; }
   h1 { font-size: var(--tombo-text-h1); line-height: var(--tombo-lh-h1); }
   h2 { font-size: var(--tombo-text-h2); line-height: var(--tombo-lh-h2); }
   h3 { font-size: var(--tombo-text-h3); line-height: var(--tombo-lh-h3); }
-  h4 { line-height: 1.3; }
+  /* TOMBO's heading language is h1–h3 (spec §6); deeper levels are bold body, never smaller */
+  h4, h5, h6 { font-size: var(--tombo-text-body); line-height: 1.3; }
   .tombo-display { font-family: var(--tombo-font-display); font-weight: 700; /* Instrument Sans has no 900 */
     font-size: var(--tombo-text-display); line-height: 1.1; letter-spacing: -.015em; }
+  /* classless prose lists only — component lists (.tombo-ticks/.tombo-toc/…) keep their own padding */
+  ul:not([class]), ol:not([class]) { padding-inline-start: 1.4em; }
   a { color: var(--tombo-green); text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
-  code, kbd, samp, pre { font-family: var(--tombo-font-mono); font-weight: 400; }
+  code, kbd, samp, pre { font-family: var(--tombo-font-mono); font-weight: 400; text-autospace: no-autospace; } /* verbatim: no re-spacing (text-autospace inherits) */
   hr { border: 0; border-top: 1px solid var(--tombo-hairline); }
   ::selection { background: var(--tombo-green); color: var(--tombo-on-green); }
   :focus-visible { outline: 2px solid var(--tombo-green); outline-offset: 2px; }
@@ -108,11 +133,15 @@
       repeating-linear-gradient(0deg,  var(--tombo-grid) 0 1px, transparent 1px 24px),
       repeating-linear-gradient(90deg, var(--tombo-grid) 0 1px, transparent 1px 24px);
   }
+  /* visually hidden — for the copy live region (spec §5.3) */
+  .tombo-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+
   /* container scale — one class, four widths. The page runs at --tombo-shell-default;
-     reassign --tombo-shell on :root (only there — the deprecated --tombo-shell-max
-     alias is declared at :root and will not follow an override made lower down)
-     when a whole page wants another step. .tombo-gutters reads the same variable, so
-     the margins always meet the content edge. The modifiers rebind it per element. */
+     reassign --tombo-shell on :root (only there — .tombo-gutters sits on <body> and its
+     margin grid will not follow an override made lower down) when a whole page wants
+     another step. .tombo-gutters reads the same variable, so the margins always meet the
+     content edge. The modifiers rebind it per element. */
   .tombo-shell {
     inline-size: 100%;
     max-inline-size: var(--tombo-shell);
@@ -127,6 +156,32 @@
   .tombo-shell--wide    { --tombo-shell: var(--tombo-shell-wide); }
   /* full bleed leaves --tombo-shell untouched so a nested .tombo-shell keeps the page width */
   .tombo-shell--full    { max-inline-size: none; padding-inline: 0; }
+
+  /* S-06 発光 — LP volume, night only, opt-in. The wash is a background layer and
+     never a pseudo-element: .tombo-corners, .tombo-dim, .tombo-ticks, .tombo-ruler,
+     .tombo-current and .tombo-kicker all own ::before/::after already, so a glow
+     built on a pseudo silently eats one of their marks the first time the classes
+     are combined. Pair it with .tombo-vol-lp on a hero and the grid rides on top. */
+  .tombo-glow {
+    --tombo-ink-faint: var(--tombo-ink-faint-glow);
+    background-image: radial-gradient(72% 88% at 26% 46%, var(--tombo-glow-wash), transparent 68%);
+    background-repeat: no-repeat;
+  }
+  .tombo-vol-lp.tombo-glow {
+    background-image:
+      radial-gradient(72% 88% at 26% 46%, var(--tombo-glow-wash), transparent 68%),
+      repeating-linear-gradient(0deg,  var(--tombo-grid) 0 1px, transparent 1px 24px),
+      repeating-linear-gradient(90deg, var(--tombo-grid) 0 1px, transparent 1px 24px);
+    background-repeat: no-repeat, repeat, repeat;
+  }
+  /* offset-zero glows only — a shadow that implies a light source is still forbidden */
+  .tombo-glow.tombo-metric { box-shadow: 0 0 0 1px var(--tombo-glow-edge), 0 0 46px -14px var(--tombo-glow-halo); }
+  .tombo-glow .tombo-display,
+  .tombo-glow.tombo-metric > .v { text-shadow: 0 0 22px var(--tombo-glow-halo); }
+  @media (forced-colors: active) {
+    .tombo-glow { background-image: none; box-shadow: none; }
+    .tombo-glow .tombo-display, .tombo-glow.tombo-metric > .v { text-shadow: none; }
+  }
 
   .tombo-gutters { position: relative; }
   .tombo-gutters::before, .tombo-gutters::after {
@@ -169,6 +224,12 @@
     letter-spacing: .14em; text-transform: uppercase; color: var(--tombo-ink-sub);
   }
 
+  /* flow — vertical rhythm between stacked children (Every Layout "Stack" /
+     Andy Bell "flow"). Override --tombo-flow-space on the container or on any
+     child to change the space that precedes it. Default is one grid cell. */
+  .tombo-flow { --tombo-flow-space: var(--tombo-space-24); }
+  .tombo-flow > * + * { margin-block-start: var(--tombo-flow-space); }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition: none !important; animation: none !important; }
   }
@@ -187,11 +248,11 @@
   /* S-02 寸法線 */
   .tombo-dim { position: relative; height: 10px; border-left: 1px solid var(--tombo-ink); border-right: 1px solid var(--tombo-ink); }
   .tombo-dim::after { content: ""; position: absolute; inset: 4.5px 0 auto; border-top: 1px solid var(--tombo-ink); }
-  .tombo-dimlab { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-note); line-height: var(--tombo-lh-note); font-weight: 400; letter-spacing: .08em; color: var(--tombo-ink-faint); margin-top: 7px; }
+  .tombo-dimlab { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-note); line-height: var(--tombo-lh-note); font-weight: 400; letter-spacing: .08em; color: var(--tombo-ink-faint); margin-top: var(--tombo-space-8); }
 
   /* S-03 目盛 */
   .tombo-ticks { list-style: none; padding: 0; }
-  .tombo-ticks > li { position: relative; padding: 5px 0 5px 22px; }
+  .tombo-ticks > li { position: relative; padding: var(--tombo-space-4) 0 var(--tombo-space-4) var(--tombo-space-24); }
   .tombo-ticks > li::before { content: ""; position: absolute; left: 0; top: 50%; width: 12px; border-top: 1.5px solid var(--tombo-green); }
 
   .tombo-ruler { position: relative; height: 20px; border-bottom: 1.5px solid var(--tombo-ink);
@@ -213,47 +274,51 @@
   .tombo-current { position: relative; }
   .tombo-current::before { content: ""; position: absolute; left: 0; top: 50%; width: 12px; border-top: 2px solid var(--tombo-shu); }
   .tombo-kicker { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-label); line-height: var(--tombo-lh-label); font-weight: 500; letter-spacing: .16em; color: var(--tombo-green); text-transform: uppercase; }
-  .tombo-kicker::before { content: ""; display: inline-block; width: 12px; border-top: 2px solid var(--tombo-shu); vertical-align: 4px; margin-right: 10px; }
+  .tombo-kicker::before { content: ""; display: inline-block; width: 12px; border-top: 2px solid var(--tombo-shu); vertical-align: 4px; margin-right: var(--tombo-space-8); }
 }
 
 @layer tombo.components {
-  .tombo-btn { display: inline-block; padding: 12px 26px; font-size: var(--tombo-text-ui); font-family: var(--tombo-font-body);
+  .tombo-btn { display: inline-block; padding: var(--tombo-space-12) var(--tombo-space-24); font-size: var(--tombo-text-ui); font-family: var(--tombo-font-body);
     border: 1px solid transparent; cursor: pointer; background: none;
     transition: background var(--tombo-dur) var(--tombo-ease), color var(--tombo-dur) var(--tombo-ease); }
   .tombo-btn--primary { background: var(--tombo-green); color: var(--tombo-on-green); font-weight: 700; }
   .tombo-btn--primary:hover { background: var(--tombo-ink); color: var(--tombo-paper); }
   .tombo-btn--secondary { border-color: var(--tombo-ink); color: var(--tombo-ink); }
   .tombo-btn--secondary:hover { background: var(--tombo-surface); }
-  .tombo-btn--ghost { color: var(--tombo-green); text-decoration: underline; text-underline-offset: 4px; padding: 12px 8px; }
+  .tombo-btn--ghost { color: var(--tombo-green); text-decoration: underline; text-underline-offset: 4px; padding: var(--tombo-space-12) var(--tombo-space-8); }
+  .tombo-btn:disabled { opacity: .45; cursor: not-allowed; }
+  /* :hover still applies to disabled buttons in Chromium — hold the resting look */
+  .tombo-btn--primary:disabled:hover { background: var(--tombo-green); color: var(--tombo-on-green); }
+  .tombo-btn--secondary:disabled:hover { background: none; }
 
-  .tombo-tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--tombo-hairline); }
-  .tombo-tabs > * { padding: 6px 2px 9px; color: var(--tombo-ink-sub); text-decoration: none; position: relative; font-size: var(--tombo-text-ui); }
+  .tombo-tabs { display: flex; gap: var(--tombo-space-24); border-bottom: 1px solid var(--tombo-hairline); }
+  .tombo-tabs > * { padding: var(--tombo-space-8) 2px var(--tombo-space-8); color: var(--tombo-ink-sub); text-decoration: none; position: relative; font-size: var(--tombo-text-ui); }
   .tombo-tabs > [aria-current] { color: var(--tombo-ink); font-weight: 500; }
   .tombo-tabs > [aria-current]::after { content: ""; position: absolute; left: 0; bottom: -1px; width: 100%; border-bottom: 2px solid var(--tombo-shu); }
 
   .tombo-toc { font-size: var(--tombo-text-ui); }
-  .tombo-toc a { display: block; color: var(--tombo-ink-sub); text-decoration: none; padding: 7px 0 7px 22px; position: relative; }
+  .tombo-toc a { display: block; color: var(--tombo-ink-sub); text-decoration: none; padding: var(--tombo-space-8) 0 var(--tombo-space-8) var(--tombo-space-24); position: relative; }
   .tombo-toc a[aria-current] { color: var(--tombo-ink); font-weight: 500; }
   .tombo-toc a[aria-current]::before { content: ""; position: absolute; left: 0; top: 50%; width: 12px; border-top: 2px solid var(--tombo-shu); }
 
   .tombo-code { background: var(--tombo-code-bg); color: var(--tombo-code-ink);
     border: 1px solid var(--tombo-code-border); border-radius: 6px; overflow: hidden; }
-  .tombo-code > figcaption { display: flex; justify-content: space-between; font-family: var(--tombo-font-mono);
+  .tombo-code > figcaption { display: flex; justify-content: space-between; gap: var(--tombo-space-16); font-family: var(--tombo-font-mono);
     font-size: var(--tombo-text-label); font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--tombo-code-faint);
-    padding: 8px 14px; border-bottom: 1px solid var(--tombo-code-hairline); }
-  .tombo-code pre { font-size: var(--tombo-text-code); line-height: var(--tombo-lh-code); font-stretch: 87.5%; padding: 14px 18px; overflow-x: auto; }
+    padding: var(--tombo-space-8) var(--tombo-space-16); border-bottom: 1px solid var(--tombo-code-hairline); }
+  .tombo-code pre { font-size: var(--tombo-text-code); line-height: var(--tombo-lh-code); font-stretch: 87.5%; padding: var(--tombo-space-16) var(--tombo-space-16); overflow-x: auto; }
 
   .tombo-callout { border: 1px solid var(--tombo-hairline); border-left: 2px solid var(--tombo-shu);
-    padding: 12px 16px; font-size: var(--tombo-text-ui); line-height: var(--tombo-lh-ui); color: var(--tombo-ink-sub); }
+    padding: var(--tombo-space-12) var(--tombo-space-16); font-size: var(--tombo-text-ui); line-height: var(--tombo-lh-ui); color: var(--tombo-ink-sub); }
   .tombo-callout--warn { border-left-color: var(--tombo-warn); }
   .tombo-callout > b:first-child { font-family: var(--tombo-font-mono); font-weight: 500; font-size: var(--tombo-text-label);
-    letter-spacing: .14em; color: var(--tombo-callout-label); margin-right: 10px; text-transform: uppercase; }
+    letter-spacing: .14em; color: var(--tombo-callout-label); margin-right: var(--tombo-space-8); text-transform: uppercase; }
 
   .tombo-table { width: 100%; border-collapse: collapse; font-size: var(--tombo-text-ui); }
   .tombo-table th { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-label); letter-spacing: .12em;
     text-transform: uppercase; color: var(--tombo-ink-sub); font-weight: 500; text-align: left;
-    padding: 11px 14px; border-bottom: 1.5px solid var(--tombo-ink); }
-  .tombo-table td { padding: 10px 14px; border-bottom: 1px solid var(--tombo-hairline); }
+    padding: var(--tombo-space-12) var(--tombo-space-16); border-bottom: 1.5px solid var(--tombo-ink); }
+  .tombo-table td { padding: var(--tombo-space-8) var(--tombo-space-16); border-bottom: 1px solid var(--tombo-hairline); }
   /* A data table is a reflow exception under WCAG 2.2 SC 1.4.10, but the scroll
      belongs to the table, not the page. Wrap every .tombo-table that can outgrow
      its column. The region must be focusable or a keyboard user cannot scroll it,
@@ -263,19 +328,19 @@
   .tombo-table-wrap { overflow-x: auto; }
 
   .tombo-chip { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-label); font-weight: 500; letter-spacing: .08em;
-    padding: 3px 10px; border: 1px solid var(--tombo-hairline); border-radius: 99px; }
+    padding: var(--tombo-space-4) var(--tombo-space-8); border: 1px solid var(--tombo-hairline); border-radius: 99px; }
   .tombo-chip::before { content: ""; display: inline-block; width: .5em; height: .5em; border-radius: 50%;
     background: currentColor; margin-right: .55em; vertical-align: .08em; color: var(--tombo-ink-faint); }
   .tombo-chip[data-status="ok"]::before   { color: var(--tombo-success); }
   .tombo-chip[data-status="warn"]::before { color: var(--tombo-warn); }
   .tombo-chip[data-status="err"]::before  { color: var(--tombo-error); }
 
-  .tombo-metric { background: var(--tombo-surface); border: 1px solid var(--tombo-hairline); padding: 20px 24px; }
+  .tombo-metric { background: var(--tombo-surface); border: 1px solid var(--tombo-hairline); padding: var(--tombo-space-24) var(--tombo-space-24); }
   .tombo-metric > .k { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-label); font-weight: 500; letter-spacing: .14em;
     text-transform: uppercase; color: var(--tombo-ink-sub); }
-  .tombo-metric > .v { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-metric); line-height: var(--tombo-lh-metric); font-weight: 600; margin: 8px 0 12px; }
+  .tombo-metric > .v { font-family: var(--tombo-font-mono); font-size: var(--tombo-text-metric); line-height: var(--tombo-lh-metric); font-weight: 600; margin: var(--tombo-space-8) 0 var(--tombo-space-12); }
 
-  .tombo-footer { border-top: 1px solid var(--tombo-hairline); padding: 22px 0 46px;
+  .tombo-footer { border-top: 1px solid var(--tombo-hairline); padding: var(--tombo-space-24) 0 var(--tombo-space-48);
     font-family: var(--tombo-font-mono); font-size: var(--tombo-text-label); font-weight: 400; letter-spacing: .12em; color: var(--tombo-ink-faint); line-height: 1.9; }
 
   /* S-04 — the mark, engraved: C-01 見当 (assets/logo/tombo-mark.svg) drawn in CSS.
@@ -291,4 +356,260 @@
   /* spec §9 — the single glow exception: at night the LP hero tail is a firefly, not a mark */
   .tombo-logo--glow > .t { border-color: light-dark(var(--tombo-shu), var(--tombo-green));
     box-shadow: 0 0 7px light-dark(transparent, var(--tombo-green)); }
+
+  /* theme control — author markup, revealed + wired by tombo.js. Current position = shu underline (S-05) */
+  .tombo-themes { display: flex; gap: var(--tombo-space-16); }
+  .tombo-themes button { background: none; border: 0; border-bottom: 2px solid transparent;
+    padding: 0 0 2px; cursor: pointer; font: inherit; color: var(--tombo-ink-sub); }
+  .tombo-themes button[aria-pressed="true"] { border-bottom-color: var(--tombo-shu); color: var(--tombo-ink); }
+
+  /* copy button — injected by tombo.js into a .tombo-code figcaption; matches the caption voice */
+  .tombo-copy { background: none; border: 0; padding: 0; cursor: pointer; margin-inline-start: auto;
+    font-family: var(--tombo-font-mono); font-size: var(--tombo-text-label); font-weight: 500;
+    letter-spacing: .1em; text-transform: uppercase; color: var(--tombo-code-faint); }
+  .tombo-copy:hover { color: var(--tombo-code-ink); }
+}
+
+@layer tombo.components {
+  /* forms — native-first field vocabulary (spec 2026-07-23). Everything is
+     scoped to .tombo-field / .tombo-check / .tombo-fieldset so it never
+     restyles inputs outside the system. Field look = hybrid: a hairline box
+     with a heavier bottom rule that carries state (green focus / crimson
+     invalid) — the instrument's reading line. Adds no new color. */
+  .tombo-field > label {
+    display: block; margin-block-end: var(--tombo-space-8);
+    font-family: var(--tombo-font-mono);
+    font-size: var(--tombo-text-label); line-height: var(--tombo-lh-label);
+    font-weight: 500; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--tombo-ink-sub);
+  }
+  .tombo-req { color: var(--tombo-ink); margin-inline-start: .3em; } /* required *, never shu */
+  .tombo-field .help,
+  .tombo-field .error {
+    margin-block-start: var(--tombo-space-8);
+    font-size: var(--tombo-text-note); line-height: var(--tombo-lh-note);
+  }
+  .tombo-field .help  { color: var(--tombo-ink-faint); }
+  .tombo-field .error { color: var(--tombo-error); }
+  .tombo-field .error::before { content: "!\00a0"; font-weight: 700; } /* non-color cue (1.4.1) */
+
+  /* control appearance — the allowlist boxes exactly text-like inputs, select,
+     textarea; date/range/color/file/checkbox/radio stay native by omission */
+  .tombo-field :is(
+    input:not([type]), input[type="text"], input[type="email"], input[type="password"],
+    input[type="number"], input[type="search"], input[type="tel"], input[type="url"],
+    select, textarea
+  ) {
+    inline-size: 100%;
+    background: var(--tombo-surface);
+    border: 1px solid var(--tombo-hairline);
+    border-block-end: 1.5px solid var(--tombo-ink-sub); /* the measured baseline */
+    padding: var(--tombo-space-8) var(--tombo-space-12);
+    font-family: var(--tombo-font-body);
+    font-size: var(--tombo-text-ui); line-height: var(--tombo-lh-ui);
+    color: var(--tombo-ink);
+    transition: border-color var(--tombo-dur) var(--tombo-ease);
+  }
+  /* focus — the baseline lights (mouse or keyboard). The 2px green ring is the
+     base-layer :focus-visible outline; the two are layers, not duplicates. */
+  .tombo-field :is(
+    input:not([type]), input[type="text"], input[type="email"], input[type="password"],
+    input[type="number"], input[type="search"], input[type="tel"], input[type="url"],
+    select, textarea
+  ):focus { border-block-end-color: var(--tombo-green); }
+  /* invalid — :user-invalid fires only after interaction (not on load); the
+     [aria-invalid] hook is the universal fallback for scripted/server validation */
+  .tombo-field :is(
+    input:not([type]), input[type="text"], input[type="email"], input[type="password"],
+    input[type="number"], input[type="search"], input[type="tel"], input[type="url"],
+    select, textarea
+  ):user-invalid,
+  .tombo-field :is(
+    input:not([type]), input[type="text"], input[type="email"], input[type="password"],
+    input[type="number"], input[type="search"], input[type="tel"], input[type="url"],
+    select, textarea
+  )[aria-invalid="true"] { border-block-end-color: var(--tombo-error); }
+  /* disabled — matches .tombo-btn:disabled */
+  .tombo-field :is(
+    input:not([type]), input[type="text"], input[type="email"], input[type="password"],
+    input[type="number"], input[type="search"], input[type="tel"], input[type="url"],
+    select, textarea
+  ):disabled { opacity: .5; cursor: not-allowed; }
+  /* readonly — recessed to paper, baseline de-emphasized to hairline (select is
+     never readonly, so it is absent from this list) */
+  .tombo-field :is(
+    input:not([type]), input[type="text"], input[type="email"], input[type="password"],
+    input[type="number"], input[type="search"], input[type="tel"], input[type="url"],
+    textarea
+  ):read-only:not(:disabled) {
+    background: var(--tombo-paper);
+    border-block-end-color: var(--tombo-hairline);
+  }
+}
+
+@layer tombo.components {
+  /* select caret — the OS arrow breaks the instrument look, so draw our own.
+     A themeable chevron needs border-color tokens (a data-URI image can't
+     follow the theme), so it lives on a .tombo-select wrapper's ::after. */
+  .tombo-select { position: relative; display: block; }
+  /* scoped under .tombo-field so it matches the base control rule's specificity
+     (0,2,1) and wins on source order — an unscoped `.tombo-select select` (0,1,1)
+     would lose padding-inline-end to the base `padding` shorthand */
+  .tombo-field .tombo-select select { appearance: none; padding-inline-end: var(--tombo-space-32); }
+  .tombo-field .tombo-select::after {
+    content: ""; position: absolute; inset-inline-end: var(--tombo-space-12); inset-block-start: 50%;
+    inline-size: 7px; block-size: 7px;
+    border-inline-end: 1.5px solid var(--tombo-ink-sub);
+    border-block-end: 1.5px solid var(--tombo-ink-sub);
+    transform: translateY(-70%) rotate(45deg); pointer-events: none;
+  }
+  @media (forced-colors: active) {
+    .tombo-field .tombo-select select { appearance: auto; padding-inline-end: var(--tombo-space-12); }
+    .tombo-field .tombo-select::after { display: none; } /* restore the native arrow so it never vanishes */
+  }
+}
+
+@layer tombo.components {
+  /* checkbox / radio — native accent-color (a11y, zero-JS, OS-consistent);
+     green because a selection is not an error or a current position */
+  :where(.tombo-field, .tombo-check, .tombo-fieldset) { accent-color: var(--tombo-green); }
+  .tombo-check { /* the <label> is the row and the whole click target */
+    display: flex; align-items: center; gap: var(--tombo-space-8);
+    min-block-size: 24px; /* WCAG 2.5.8 target size (minimum) */
+    font-size: var(--tombo-text-ui); line-height: var(--tombo-lh-ui);
+  }
+  .tombo-check input { inline-size: 18px; block-size: 18px; }
+  /* fieldset — reset native chrome; min-inline-size:0 defeats the fieldset
+     min-content shrink bug inside flex/grid; radio groups need fieldset+legend */
+  .tombo-fieldset { border: 0; padding: 0; min-inline-size: 0; }
+  .tombo-fieldset > legend {
+    padding: 0; margin-block-end: var(--tombo-space-8);
+    font-family: var(--tombo-font-mono);
+    font-size: var(--tombo-text-label); line-height: var(--tombo-lh-label);
+    font-weight: 500; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--tombo-ink-sub);
+  }
+}
+
+/* ── print ─────────────────────────────────────────────────────────────
+   Unlayered on purpose: these overrides must beat every @layer rule, and
+   being outside all layers wins the cascade without !important. Two halves:
+   (A) hardening — every TOMBO page prints cleanly; (B) opt-in .tombo-trim —
+   real printer's トンボ on the sheet (the system finally does what it is named
+   after). @page is a bare at-rule; it cannot live inside @layer. */
+@page { margin: 16mm; }
+
+@media print {
+  /* (A) hardening — unconditional */
+
+  /* night pages print on white paper: flipping color-scheme re-resolves every
+     light-dark() token to its light value (surfaces near-white, ink near-black),
+     so a hotaru page never prints as a black rectangle. */
+  :root,
+  :root[data-theme="tombo"],
+  :root[data-theme="hotaru"] { color-scheme: light; }
+
+  /* screen-only chrome never prints */
+  .tombo-themes, .tombo-copy { display: none; }
+
+  /* glow + motion off (mirrors the forced-colors guard) */
+  .tombo-glow { background-image: none; box-shadow: none; }
+  .tombo-glow .tombo-display,
+  .tombo-glow.tombo-metric > .v { text-shadow: none; }
+  *, *::before, *::after { transition: none; animation: none; }
+
+  /* the code panel is dark in both themes (a background — not printed by
+     default, which would drop its light text onto white and vanish). Repaint
+     to ink-on-white with a hairline so code stays readable on paper. */
+  .tombo-code, .tombo-code pre {
+    background: #fff; color: var(--tombo-ink);
+    border: 1px solid var(--tombo-hairline);
+  }
+  .tombo-code > figcaption { color: var(--tombo-ink-sub); }
+
+  /* fragmentation: keep instrument blocks whole; don't strand headings */
+  .tombo-metric, .tombo-callout, .tombo-code, figure, tr, .tombo-check { break-inside: avoid; }
+  h1, h2, h3, h4 { break-after: avoid; }
+  p, li { orphans: 2; widows: 2; }
+
+  /* (B) paper トンボ — opt-in via <body class="tombo-trim">.
+     Marks are ink (registration black), drawn as background layers, so the
+     overlay needs print-color-adjust:exact or nothing prints. position:fixed
+     repeats the marks on every page. ::before = 角トンボ (corner crop marks),
+     ::after = センタートンボ (edge-center registration rings). Geometry lives in
+     custom properties so it can be tuned against the print preview. */
+  html:has(> body.tombo-trim)::before,
+  html:has(> body.tombo-trim)::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    background-repeat: no-repeat;
+  }
+
+  /* 角トンボ: a single L hugging each corner of the printable area, arms along
+     the trim edges with a small gap at the vertex (crop-mark convention). */
+  html:has(> body.tombo-trim)::before {
+    --tl: 24px;  /* arm length */
+    --tk: 1px;   /* stroke     */
+    --gp: 7px;   /* gap from the exact corner */
+    background-image:
+      linear-gradient(var(--tombo-ink), var(--tombo-ink)),
+      linear-gradient(var(--tombo-ink), var(--tombo-ink)),
+      linear-gradient(var(--tombo-ink), var(--tombo-ink)),
+      linear-gradient(var(--tombo-ink), var(--tombo-ink)),
+      linear-gradient(var(--tombo-ink), var(--tombo-ink)),
+      linear-gradient(var(--tombo-ink), var(--tombo-ink)),
+      linear-gradient(var(--tombo-ink), var(--tombo-ink)),
+      linear-gradient(var(--tombo-ink), var(--tombo-ink));
+    background-size:
+      var(--tl) var(--tk), var(--tk) var(--tl),   /* TL: horizontal, vertical */
+      var(--tl) var(--tk), var(--tk) var(--tl),   /* TR */
+      var(--tl) var(--tk), var(--tk) var(--tl),   /* BL */
+      var(--tl) var(--tk), var(--tk) var(--tl);   /* BR */
+    background-position:
+      left var(--gp) top 0,     left 0 top var(--gp),
+      right var(--gp) top 0,    right 0 top var(--gp),
+      left var(--gp) bottom 0,  left 0 bottom var(--gp),
+      right var(--gp) bottom 0, right 0 bottom var(--gp);
+  }
+
+  /* センタートンボ: a 1px ink ring + crosshair at each edge midpoint. Every layer
+     is centered on a point --rs in from the edge, so the ring clears the overlay
+     box edge and the crosshair stays concentric with it. */
+  html:has(> body.tombo-trim)::after {
+    --rs: 13px;  /* ring size (outer) */
+    --cl: 26px;  /* crosshair length  */
+    --tk: 1px;
+    --rr: calc(var(--rs) / 2);            /* ring radius */
+    --ring: radial-gradient(circle,
+      transparent calc(var(--rr) - 1px),
+      var(--tombo-ink) calc(var(--rr) - 1px) var(--rr),
+      transparent var(--rr));
+    --hbar: linear-gradient(var(--tombo-ink), var(--tombo-ink));
+    --vbar: linear-gradient(var(--tombo-ink), var(--tombo-ink));
+    background-image:
+      var(--ring), var(--ring), var(--ring), var(--ring),
+      var(--hbar), var(--hbar), var(--hbar), var(--hbar),
+      var(--vbar), var(--vbar), var(--vbar), var(--vbar);
+    background-size:
+      var(--rs) var(--rs), var(--rs) var(--rs), var(--rs) var(--rs), var(--rs) var(--rs),
+      var(--cl) var(--tk), var(--cl) var(--tk), var(--cl) var(--tk), var(--cl) var(--tk),
+      var(--tk) var(--cl), var(--tk) var(--cl), var(--tk) var(--cl), var(--tk) var(--cl);
+    /* each image is centered on the mark point (--rs in from the edge, edge-
+       midpoint along it): the ring's own edge sits at --rr, but the crosshair
+       bars are longer, so they need their own half-size offset — an equal
+       edge-offset across differently-sized layers would not share a center. */
+    background-position:
+      /* rings */
+      top var(--rr) left 50%,  bottom var(--rr) left 50%,  left var(--rr) top 50%,  right var(--rr) top 50%,
+      /* horizontal cross bars */
+      top calc(var(--rs) - var(--tk) / 2) left 50%,  bottom calc(var(--rs) - var(--tk) / 2) left 50%,
+      left calc(var(--rs) - var(--cl) / 2) top 50%,  right calc(var(--rs) - var(--cl) / 2) top 50%,
+      /* vertical cross bars */
+      top calc(var(--rs) - var(--cl) / 2) left 50%,  bottom calc(var(--rs) - var(--cl) / 2) left 50%,
+      left calc(var(--rs) - var(--tk) / 2) top 50%,  right calc(var(--rs) - var(--tk) / 2) top 50%;
+  }
 }
