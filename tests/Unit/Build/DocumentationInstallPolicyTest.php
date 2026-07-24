@@ -4,28 +4,18 @@ declare(strict_types=1);
 
 namespace Studio\Gesso\Tests\Unit\Build;
 
-use const JSON_THROW_ON_ERROR;
-
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 
 use function dirname;
 use function file_get_contents;
-use function json_decode;
 
 final class DocumentationInstallPolicyTest extends TestCase
 {
     #[Test]
-    public function installation_guides_follow_the_configured_release_channel(): void
+    public function installation_guides_keep_the_beta_constraint_until_stable_is_published(): void
     {
         $root = dirname(__DIR__, 3);
-        $configContents = file_get_contents($root . '/release-please-config.json');
-        $this->assertNotFalse($configContents);
-
-        /** @var array<string, mixed> $config */
-        $config = json_decode($configContents, true, flags: JSON_THROW_ON_ERROR);
-        $isPrerelease = $config['prerelease'] ?? null;
-        $this->assertIsBool($isPrerelease);
 
         foreach ([
             'README.md',
@@ -41,70 +31,35 @@ final class DocumentationInstallPolicyTest extends TestCase
             $contents = file_get_contents($root . '/' . $relativePath);
             $this->assertIsString($contents);
 
-            if (!$isPrerelease) {
-                $this->assertStringContainsString(
-                    'studio-design/gesso:^2.0',
-                    $contents,
-                    $relativePath . ' must install the stable Gesso 2 line.',
-                );
-                $this->assertStringNotContainsString(
-                    'studio-design/gesso:^2.0@beta',
-                    $contents,
-                    $relativePath . ' must stop opting in to prereleases during stable promotion.',
-                );
-                $this->assertStringNotContainsString(
-                    'Pre-release evaluation only',
-                    $contents,
-                    $relativePath . ' must remove the prerelease warning during stable promotion.',
-                );
-
-                continue;
-            }
-
             $this->assertStringContainsString(
                 'studio-design/gesso:^2.0@beta',
                 $contents,
-                $relativePath . ' must opt in to the published Gesso 2 beta.',
+                $relativePath . ' must keep using the published beta until v2.0.0 stable is installable.',
             );
             $this->assertStringContainsString(
                 'Pre-release evaluation only',
                 $contents,
-                $relativePath . ' must not present the Gesso 2 beta as a stable recommendation.',
+                $relativePath . ' must retain the prerelease warning until v2.0.0 stable is installable.',
             );
             $this->assertStringNotContainsString(
                 'composer require --dev studio-design/gesso',
                 $contents,
-                $relativePath . ' must not present an unavailable stable release as the current install path.',
+                $relativePath . ' must not present an unpublished stable release as the current install path.',
             );
         }
 
         $homeContents = file_get_contents($root . '/docs/.vitepress/theme/components/TomboHome.vue');
         $this->assertIsString($homeContents);
 
-        if (!$isPrerelease) {
-            $this->assertStringContainsString(
-                'studio-design/gesso:^2.0',
-                $homeContents,
-                'The home page must install the stable Gesso 2 line.',
-            );
-            $this->assertStringNotContainsString(
-                'studio-design/gesso:^2.0@beta',
-                $homeContents,
-                'The home page must stop opting in to prereleases during stable promotion.',
-            );
-
-            return;
-        }
-
         $this->assertStringContainsString(
             'studio-design/gesso:^2.0@beta',
             $homeContents,
-            'The home page must opt in to the published Gesso 2 beta.',
+            'The home page must keep using the published beta until v2.0.0 stable is installable.',
         );
         $this->assertStringNotContainsString(
             'composer require --dev studio-design/gesso',
             $homeContents,
-            'The home page must not present an unavailable stable release as the current install path.',
+            'The home page must not present an unpublished stable release as the current install path.',
         );
     }
 }

@@ -146,26 +146,30 @@ normal stable patch flow from its own release configuration.
 7. To promote the accepted beta, open a normal PR that changes `prerelease` to
    `false`, temporarily sets `release-as: 2.0.0`, restores the stable-only
    `changelog-sections` that keep the promotion commit visible, and updates the
-   corresponding invariant tests. In the same PR, replace the beta installation
-   commands with `studio-design/gesso:^2.0` and remove the pre-release evaluation
-   warnings; the documentation policy follows the configured `prerelease` mode
-   so both the promotion PR and the bot-managed release PR remain green. Keep
+   corresponding release-configuration invariant tests. Keep the beta
+   installation commands and pre-release evaluation warnings until v2.0.0 is
+   published: every push to `main` deploys GitHub Pages, while the stable tag is
+   created only when the bot-managed release PR is merged. Keep
    `versioning: prerelease` so release-please promotes the beta line instead of
    calculating an unrelated bump. After merge, verify that the refreshed release
    PR proposes stable `2.0.0` and repeat the tag, GitHub Release, manifest,
    Packagist, clean-install, and example checks before announcing general
-   availability. Remove `release-as` through a normal PR immediately after the
-   stable release is published.
+   availability. Once the stable package is installable, open a normal follow-up
+   PR that removes `release-as` and the stable-only `changelog-sections`, replaces
+   the beta installation commands with `studio-design/gesso:^2.0`, removes the
+   pre-release warnings, and updates both release and documentation invariant
+   tests.
    If downstream evaluation finds another release-blocking defect before the
    stable release PR is merged, do not merge that release PR. First merge a
    normal PR that restores `prerelease: true`, removes `release-as` and the
-   stable-only `changelog-sections`, restores the `^2.0@beta` installation
-   commands and pre-release evaluation warnings, and updates the invariant
-   tests. Wait for release-please to refresh the proposal to the next beta. For
-   that beta, perform the tag, GitHub Release, manifest, and Packagist checks
-   from step 5, then the published-artifact and downstream validation from
-   step 6. The beta.1-specific `release-as` cleanup in step 5 does not apply
-   because this recovery PR already removed it.
+   stable-only `changelog-sections`, and updates the release-configuration
+   invariant test. The beta installation commands, warnings, and documentation
+   invariant remain unchanged throughout this recovery. Wait for release-please
+   to refresh the proposal to the next beta. For that beta, perform the tag,
+   GitHub Release, manifest, and Packagist checks from step 5, then the
+   published-artifact and downstream validation from step 6. The beta.1-specific
+   `release-as` cleanup in step 5 does not apply because this recovery PR already
+   removed it.
 8. Only after the stable package is installable and verified, mark
    `studio-design/openapi-contract-testing` abandoned on Packagist with
    `studio-design/gesso` as its suggested replacement. Do not delete its tags
