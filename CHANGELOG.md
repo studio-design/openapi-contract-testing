@@ -10,6 +10,19 @@ the README for the full surface contract.
 
 ## Unreleased
 
+## [2.0.0](https://github.com/studio-design/gesso/compare/v2.0.0-beta.5...v2.0.0) (2026-07-24)
+
+
+### Bug Fixes
+
+* **docs:** show beta constraint on home page ([#386](https://github.com/studio-design/gesso/issues/386)) ([c811155](https://github.com/studio-design/gesso/commit/c811155171fddcc1d10cc3381f9926b4495e754e))
+
+
+### Miscellaneous Chores
+
+* **docs:** update Tombo to v0.12.0 ([#389](https://github.com/studio-design/gesso/issues/389)) ([0c91a6e](https://github.com/studio-design/gesso/commit/0c91a6eb8d5f0d1c3d0a7b3471b3060a42759638))
+* **release:** promote v2 stable ([#388](https://github.com/studio-design/gesso/issues/388)) ([3fe6d0f](https://github.com/studio-design/gesso/commit/3fe6d0f667d20c47679b32e738b55433244c9fdf))
+
 ## [2.0.0-beta.5](https://github.com/studio-design/gesso/compare/v2.0.0-beta.4...v2.0.0-beta.5) (2026-07-23)
 
 
