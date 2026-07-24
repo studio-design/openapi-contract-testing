@@ -2,9 +2,18 @@ import { readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
 const docsIndex = await readFile('docs/index.md', 'utf8')
+const documentationStyles = await readFile('docs/.vitepress/theme/style.css', 'utf8')
 
 if (!/^layout: home$/mu.test(docsIndex) || !/^markdownStyles: false$/mu.test(docsIndex)) {
   throw new Error('The documentation homepage must use the home layout without Markdown styles')
+}
+
+if (!documentationStyles.includes(`@media print {
+  html.dark {
+    color-scheme: light;
+  }
+}`)) {
+  throw new Error('Dark-mode documentation must use the light color scheme when printed')
 }
 
 const distDirectory = 'docs/.vitepress/dist'

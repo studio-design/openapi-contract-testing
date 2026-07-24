@@ -37,6 +37,12 @@ html.dark {
   color-scheme: dark;
 }
 
+@media print {
+  html.dark {
+    color-scheme: light;
+  }
+}
+
 body {
   background: var(--tombo-paper);
   color: var(--tombo-ink);
